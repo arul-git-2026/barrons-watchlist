@@ -18,6 +18,24 @@ info()  { echo -e "${CYAN}▶ $*${RESET}"; }
 ok()    { echo -e "${GREEN}✓ $*${RESET}"; }
 warn()  { echo -e "${YELLOW}⚠ $*${RESET}"; }
 
+# ── 0. Swap file (critical for 1 GB RAM — E2.1.Micro) ────────────────────────
+# pip install can OOM-kill on 1 GB without swap
+if [ ! -f /swapfile ]; then
+    info "Creating 2 GB swap file (needed for 1 GB RAM instance)..."
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile  > /dev/null
+    sudo swapon /swapfile
+    # Make swap permanent across reboots
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
+    # Reduce swap aggressiveness (only use swap when really needed)
+    echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf > /dev/null
+    sudo sysctl -p > /dev/null
+    ok "Swap: 2 GB created and enabled"
+else
+    ok "Swap already exists — skipping"
+fi
+
 # ── 1. System update + packages ───────────────────────────────────────────────
 info "Updating system packages..."
 sudo apt-get update -qq
