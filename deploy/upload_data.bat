@@ -6,8 +6,8 @@ REM
 REM  EDIT THE THREE LINES BELOW before first use:
 REM ─────────────────────────────────────────────────────────────────────────────
 
-SET SSH_KEY=C:\Users\vasanthaganesh.arulm\Downloads\ssh-key-streetwise.key
-SET SERVER_IP=REPLACE_WITH_YOUR_ORACLE_IP
+SET SSH_KEY=C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-25.key
+SET SERVER_IP=79.76.99.90
 SET SERVER_USER=ubuntu
 
 REM ─────────────────────────────────────────────────────────────────────────────

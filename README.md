@@ -371,6 +371,61 @@ Cost is calculated and logged after every API call.
 
 ---
 
+## Remote Access — Oracle Cloud (dev_02)
+
+The dashboard can be self-hosted on Oracle Cloud Free Tier so it's reachable from work, home, or holiday with no VPN and no Cloudflare dependency.
+
+### Architecture
+
+```
+Browser (anywhere)
+      │
+      │  http://SERVER_IP:5000/?token=YOUR_SECRET
+      ▼
+Oracle Cloud VM  (Ubuntu 22.04, Always Free)
+      └── systemd → server.py (auto-starts on reboot)
+```
+
+### Quick Deploy
+
+```bash
+# On the Oracle Cloud VM (Ubuntu 22.04) — run once:
+curl -fsSL https://raw.githubusercontent.com/arul-git-2026/barrons-watchlist/dev_02/deploy/setup_oracle.sh -o setup.sh
+bash setup.sh
+```
+
+The script installs Python, clones the repo, creates a venv, opens port 5000, and registers a systemd service.
+
+### Configuration
+
+```bash
+sudo nano /etc/streetwise.env
+```
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
+STREETWISE_TOKEN=your-secret-token
+```
+
+### Data Sync (Windows → Server)
+
+```cmd
+deploy\upload_data.bat    # push local tickers to server
+deploy\download_data.bat  # pull server data back to Windows
+deploy\remote_update.bat  # git pull + restart on server
+```
+
+### Security
+
+- All requests require `?token=YOUR_SECRET` (or header `X-Streetwise-Token`)
+- Token auth is skipped automatically when `STREETWISE_TOKEN` is not set (local dev)
+- Returns `403` for missing/wrong tokens
+
+**Full beginner setup guide:** [ORACLE_SETUP.md](ORACLE_SETUP.md)
+
+---
+
 ## Remote Access (Cloudflare Tunnel)
 
 ```bash

@@ -27,6 +27,13 @@ __pycache__/
 venv/
 env/
 
+# ── SSH keys (never commit private keys) ──────────────────────────────────────
+*.key
+*.pem
+*.ppk
+*.key.pub
+ssh-key-*
+
 # ── OS noise ──────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

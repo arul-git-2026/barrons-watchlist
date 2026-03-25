@@ -78,7 +78,7 @@ Click **Create**. The instance will show **Provisioning** for ~2 minutes, then *
 1. Click on your instance name (`streetwise`)
 2. Under **Instance information** → **Primary VNIC** → **Public IP address**
 3. Copy this IP — you will use it everywhere below
-   > Example: `140.238.211.99`
+   > Example: `140.238.211.99` 79.76.99.90
 
 ---
 
@@ -164,7 +164,7 @@ Fill in:
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=AIza...
-STREETWISE_TOKEN=choose-any-secret-word-here
+STREETWISE_TOKEN=do-dan-WET234#0hgt_dfgrj
 ```
 
 For `STREETWISE_TOKEN` — pick anything memorable but not obvious, e.g. `barrons2026` or `my-dashboard-99`.
@@ -285,4 +285,14 @@ deploy\remote_update.bat
 
 - **Custom domain** — point a domain name at your IP, then enable HTTPS with Let's Encrypt (certbot)
 - **nginx reverse proxy** — run on port 80/443 instead of 5000
+
+
+
+
+
+
+Server	Oracle Cloud, Frankfurt, Always Free
+Auto-starts	Yes — survives reboots automatically
+URL	http://79.76.99.90:5000/?token=barrons2026
+Bookmark this	Add it to Chrome favourites now
 - **Automatic data sync** — set up a cron job to pull data on a schedule

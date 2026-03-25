@@ -13,7 +13,7 @@ Install
   pip install flask flask-cors yfinance
 """
 
-from flask import Flask, jsonify, send_file, request
+from flask import Flask, jsonify, send_file, request, session, make_response
 import yfinance as yf
 import sqlite3
 import json
@@ -76,7 +76,8 @@ log = logging.getLogger(__name__)
 logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 app = Flask(__name__)
-CORS(app)
+app.secret_key = os.environ.get("STREETWISE_TOKEN", "dev-secret-key-local")
+CORS(app, supports_credentials=True)
 
 @app.errorhandler(Exception)
 def _handle_exception(e):
@@ -116,18 +117,33 @@ _AUTH_EXEMPT = {"/favicon.ico"}
 
 @app.before_request
 def _check_token():
-    """Reject requests that don't carry the correct token (when auth is enabled)."""
+    """Reject requests that don't carry the correct token (when auth is enabled).
+
+    Auth passes if ANY of these are true:
+      1. STREETWISE_TOKEN env var is not set  → local dev, no auth
+      2. ?token=<value> matches               → first page load from URL
+      3. X-Streetwise-Token header matches    → programmatic access
+      4. session['auth'] == True              → browser already authenticated
+         (set on first successful token check, persists for the browser session)
+    """
     if not _AUTH_TOKEN:
         return  # auth disabled — local dev mode
     if request.path in _AUTH_EXEMPT:
         return
+    # Already authenticated this browser session via cookie
+    if session.get("auth"):
+        return
+    # Check token in URL or header
     provided = (
         request.args.get("token", "")
         or request.headers.get("X-Streetwise-Token", "")
     )
-    if provided != _AUTH_TOKEN:
-        log.warning(f"  auth: rejected {request.remote_addr} → {request.path}")
-        return jsonify({"ok": False, "error": "Unauthorized — missing or invalid token"}), 403
+    if provided == _AUTH_TOKEN:
+        session["auth"] = True   # set session cookie for all subsequent requests
+        session.permanent = False
+        return
+    log.warning(f"  auth: rejected {request.remote_addr} → {request.path}")
+    return jsonify({"ok": False, "error": "Unauthorized — missing or invalid token"}), 403
 
 
 @app.before_request
