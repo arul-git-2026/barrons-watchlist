@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Barrons → Streetwise</title>
+<style>
+  * { box-sizing:border-box;margin:0;padding:0 }
+  body { width:360px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;background:#0f172a;color:#e2e8f0 }
+
+  .header { padding:12px 16px 10px;border-bottom:1px solid #1e293b }
+  .header h1 { font-size:13px;font-weight:700;color:#f1f5f9;display:flex;align-items:center;gap:8px }
+  .logo { background:#3b82f6;color:#fff;font-size:11px;padding:2px 7px;border-radius:4px;font-weight:700 }
+  .page-info { margin-top:5px;font-size:11px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+
+  .body { padding:12px 16px }
+  .field { margin-bottom:10px }
+  .field label { display:block;font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px }
+  .field input,.field select { width:100%;padding:6px 9px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;outline:none;transition:border-color .15s }
+  .field input:focus,.field select:focus { border-color:#3b82f6 }
+  .field input::placeholder { color:#475569 }
+  .row { display:flex;gap:8px }
+  .row .field { flex:1 }
+
+  .quick-btns { display:flex;gap:4px;margin-top:6px;flex-wrap:wrap }
+  .qb { display:flex;align-items:center;gap:4px;padding:3px 9px;background:#1e293b;border:1px solid #334155;border-radius:12px;color:#94a3b8;font-size:10px;cursor:pointer;transition:all .12s;white-space:nowrap }
+  .qb:hover { border-color:#3b82f6;color:#e2e8f0 }
+  .qb.active { border-color:#3b82f6;background:#1d3d5c;color:#7dd3fc }
+  .qb-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0 }
+  .qb-count { color:#475569;font-size:9px;margin-left:1px }
+
+  #episode-row { display:none;margin-top:6px }
+  #inp-episode { font-size:11px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:5px 8px;width:100%;outline:none }
+  #inp-episode:focus { border-color:#3b82f6 }
+
+  /* ── Model selector ── */
+  .model-row { display:flex;gap:4px;align-items:center;margin-bottom:10px;flex-wrap:wrap }
+  .model-row label { font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-right:2px;white-space:nowrap }
+  .mb { padding:3px 10px;background:#1e293b;border:1px solid #334155;border-radius:12px;color:#94a3b8;font-size:10px;cursor:pointer;transition:all .12s;white-space:nowrap }
+  .mb:hover { border-color:#3b82f6;color:#e2e8f0 }
+  .mb.active-claude { border-color:#3b82f6;background:#1d3d5c;color:#7dd3fc }
+  .mb.active-gemini { border-color:#10b981;background:#052e16;color:#34d399 }
+  .mb-sep { color:#334155;font-size:10px;padding:0 2px }
+
+  /* ── Cost tracker ── */
+  .cost-bar { display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #1e293b;margin-bottom:8px }
+  .cost-label { font-size:10px;color:#475569 }
+  .cost-val { font-size:11px;font-weight:600;color:#60a5fa;font-family:monospace }
+  .cost-reset { font-size:10px;color:#475569;cursor:pointer;text-decoration:underline }
+  .cost-reset:hover { color:#94a3b8 }
+
+  .ep-preview { font-size:10px;color:#475569;margin-bottom:8px;padding:0 1px }
+  #ep-key-preview { color:#60a5fa;font-family:monospace }
+
+  .btn-row { display:flex;gap:6px;margin-top:4px }
+  .btn { flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s }
+  .btn:disabled { opacity:.45;cursor:not-allowed }
+  .btn-send { background:#3b82f6;color:#fff }
+  .btn-send:hover:not(:disabled) { background:#2563eb }
+  .btn-danger { background:#ef4444;color:#fff;flex:0 0 auto;padding:7px 12px;font-size:11px }
+  .btn-danger:hover:not(:disabled) { background:#dc2626 }
+
+  .status { margin-top:10px;padding:9px 12px;border-radius:6px;font-size:12px;line-height:1.5;display:none }
+  .status.info    { background:#0f2d4a;color:#7dd3fc;border:1px solid #1e4976 }
+  .status.success { background:#052e16;color:#86efac;border:1px solid #14532d }
+  .status.error   { background:#2d0f0f;color:#fca5a5;border:1px solid #7f1d1d }
+
+  #progress-log { display:none;margin-top:10px;background:#0a0f1a;border:1px solid #1e293b;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:10.5px;line-height:1.6;color:#94a3b8;max-height:150px;overflow-y:auto }
+  #progress-log .ok   { color:#4ade80 }
+  #progress-log .inf  { color:#7dd3fc }
+  #progress-log .dim  { color:#475569 }
+  #progress-log .err  { color:#f87171 }
+  #progress-log .warn { color:#fbbf24 }
+  #progress-log .srv  { color:#a78bfa }
+  #progress-log .tck  { color:#93c5fd;font-weight:600;margin-right:3px }
+  #progress-log .cost { color:#34d399;font-weight:600 }
+
+  .divider { border:none;border-top:1px solid #1e293b;margin:12px 0 }
+  .section-label { font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px }
+  .del-row { display:flex;gap:6px;align-items:flex-end }
+  .del-row .field { flex:1;margin-bottom:0 }
+  .chk-row { display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:#64748b;cursor:pointer }
+  #del-status { display:none;margin-top:8px;padding:8px 10px;border-radius:5px;font-size:11px }
+  #del-status.ok  { background:#052e16;color:#86efac;border:1px solid #14532d }
+  #del-status.err { background:#2d0f0f;color:#fca5a5;border:1px solid #7f1d1d }
+
+  .server-row { padding:8px 16px;border-top:1px solid #1e293b;display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b }
+  .server-input { flex:1;padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#94a3b8;font-size:11px;outline:none }
+  .dot { width:7px;height:7px;border-radius:50%;background:#475569;flex-shrink:0;transition:background .3s }
+  .dot.ok  { background:#22c55e }
+  .dot.err { background:#ef4444 }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span class="logo">STW</span> Barrons → Streetwise</h1>
+  <div class="page-info" id="page-title">—</div>
+</div>
+
+<div class="body">
+
+  <!-- Date + Year -->
+  <div class="row">
+    <div class="field">
+      <label>Article date</label>
+      <input type="text" id="inp-date" placeholder="e.g. 3/15">
+    </div>
+    <div class="field">
+      <label>Year</label>
+      <input type="text" id="inp-year" placeholder="2026" maxlength="4">
+    </div>
+  </div>
+
+  <!-- Source -->
+  <div class="field">
+    <label>Source</label>
+    <div class="row" style="gap:8px">
+      <input type="text" id="inp-source" placeholder="e.g. Barron's Streetwise" autocomplete="off" style="flex:2">
+      <input type="text" id="inp-prefix" placeholder="stw" maxlength="8" style="flex:1;font-family:monospace;text-transform:lowercase">
+    </div>
+    <div class="quick-btns" id="quick-btns"></div>
+    <div id="episode-row">
+      <select id="inp-episode"><option value="">— New episode —</option></select>
+    </div>
+  </div>
+
+  <!-- Title -->
+  <div class="field">
+    <label>Title / headline</label>
+    <input type="text" id="inp-title" placeholder="e.g. Dividend Stocks Oil Shock">
+  </div>
+
+  <!-- Ep key preview -->
+  <div class="ep-preview">Episode key: <span id="ep-key-preview">stw:2026/M/D</span></div>
+
+  <!-- Model selector -->
+  <div class="model-row">
+    <label>Model</label>
+    <button class="mb active-claude" data-model="claude-haiku" id="mb-claude-haiku">Claude Haiku</button>
+    <button class="mb" data-model="claude-sonnet" id="mb-claude-sonnet">Sonnet</button>
+    <span class="mb-sep">|</span>
+    <button class="mb" data-model="gemini-flash" id="mb-gemini-flash">Gemini Flash</button>
+    <button class="mb" data-model="gemini-pro" id="mb-gemini-pro">Pro</button>
+  </div>
+
+  <!-- Session cost tracker -->
+  <div class="cost-bar">
+    <span class="cost-label">Session cost</span>
+    <span class="cost-val" id="session-cost">$0.0000</span>
+    <span class="cost-reset" id="cost-reset-btn">reset</span>
+  </div>
+
+  <!-- Send -->
+  <div class="btn-row">
+    <button class="btn btn-send" id="send-btn">📨  Send to Streetwise</button>
+  </div>
+
+  <div class="status" id="status-box"></div>
+  <div id="progress-log"></div>
+
+  <!-- Delete episode section -->
+  <hr class="divider">
+  <div class="section-label">🗑 Delete episode from database</div>
+  <div class="del-row">
+    <div class="field">
+      <label>Episode key</label>
+      <input type="text" id="del-ep-key" placeholder="e.g. div:2026/3/15" style="font-family:monospace;font-size:11px">
+    </div>
+    <button class="btn btn-danger" id="del-btn">Delete</button>
+  </div>
+  <label class="chk-row">
+    <input type="checkbox" id="del-rm-empty">
+    Remove tickers with no remaining episodes
+  </label>
+  <div id="del-status"></div>
+
+</div>
+
+<div class="server-row">
+  <span class="dot" id="server-dot"></span>
+  <input class="server-input" id="server-url" value="http://localhost:5000">
+  <span id="server-status-txt" style="white-space:nowrap">—</span>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,2943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Streetwise Terminal</title>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* Google Finance palette */
+  --primary:#fff;         /* sidebar header now white */
+  --accent:#1a73e8;       /* Google blue */
+  --accent-light:#e8f0fe;
+  --bg:#f8f9fa;           /* GF page grey */
+  --up:#137333;           --up-bg:#e6f4ea;
+  --down:#c5221f;         --down-bg:#fce8e6;
+  --neutral:#5f6368;
+  --border:#dadce0;       --card:#fff;
+  --text:#202124;         --muted:#5f6368;
+  --font:'Google Sans',system-ui,sans-serif;
+  --radius:8px;
+}
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap');
+body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:14px}
+.layout{display:grid;grid-template-columns:300px 1fr;height:100vh}
+
+/* ── Sidebar ──────────────────────────────────────────────────────── */
+.sidebar{
+  background:var(--card);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden
+}
+.sidebar-header{
+  padding:14px 16px;background:var(--card);
+  border-bottom:1px solid var(--border);flex-shrink:0
+}
+.sidebar-header h2{
+  font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.3px;
+  display:flex;align-items:center;gap:4px
+}
+.sidebar-header h2 .logo-accent{color:var(--accent)}
+.sub{
+  font-size:11px;margin-top:3px;color:var(--muted);
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap
+}
+.dot{width:7px;height:7px;border-radius:50%;background:#fbbc04;flex-shrink:0;display:inline-block}
+.dot.live{background:#34a853;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* header refresh button — Google Finance style pill */
+.hdr-btn{
+  display:flex;align-items:center;gap:4px;
+  padding:5px 12px;border:1px solid var(--border);border-radius:20px;
+  cursor:pointer;background:var(--card);font-size:11px;color:var(--muted);
+  font-weight:500;transition:all .15s;white-space:nowrap
+}
+.hdr-btn:hover{background:var(--accent-light);border-color:#c5d9fc;color:var(--accent)}
+.hdr-btn.spinning svg{animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hdr-btn svg{
+  width:13px;height:13px;stroke:currentColor;fill:none;
+  stroke-width:2;stroke-linecap:round;stroke-linejoin:round
+}
+
+/* selection banner — GF blue info bar */
+.sel-banner{
+  display:none;padding:5px 12px;
+  background:var(--accent-light);border-bottom:1px solid #c5d9fc;
+  font-size:11px;color:#174ea6;flex-shrink:0;align-items:center;gap:8px;
+  font-weight:500
+}
+.sel-banner.visible{display:flex}
+.sel-clear{cursor:pointer;margin-left:auto;color:var(--accent);font-weight:500}
+.sel-clear:hover{text-decoration:underline}
+
+/* ── Top filter bar — above the chart in workspace ─────────────── */
+.top-filter-bar{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:10px 14px;
+  box-shadow:0 1px 2px rgba(60,64,67,.1);
+  display:flex;flex-direction:column;gap:8px;flex-shrink:0
+}
+.top-filter-search{
+  position:relative;display:flex;align-items:center
+}
+.top-filter-search svg{
+  position:absolute;left:12px;width:14px;height:14px;
+  stroke:var(--muted);fill:none;stroke-width:2;pointer-events:none
+}
+.top-filter-search input{
+  width:100%;padding:7px 12px 7px 34px;
+  border:1px solid var(--border);border-radius:24px;
+  font-size:12px;outline:none;color:var(--text);background:var(--bg);
+  font-family:var(--font);transition:border-color .15s,box-shadow .15s
+}
+.top-filter-search input:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,115,232,.1);
+  background:var(--card)
+}
+.top-filter-row{
+  display:flex;gap:6px;flex-wrap:wrap;align-items:center
+}
+.top-filter-row select{
+  padding:5px 10px;border:1px solid var(--border);border-radius:6px;
+  font-size:11px;outline:none;color:var(--text);background:var(--bg);
+  font-family:var(--font);cursor:pointer;transition:border-color .15s;
+  flex-shrink:0
+}
+.top-filter-row select:focus{border-color:var(--accent)}
+.top-filter-row select.active-filter{
+  border-color:var(--accent);background:var(--accent-light);color:var(--accent);font-weight:600
+}
+
+/* legacy — filter-box kept for any remaining refs */
+.filter-box{display:none}
+.filter-row{display:none}
+
+/* sort bar */
+.sort-bar{
+  display:flex;align-items:center;gap:2px;padding:5px 10px;
+  border-bottom:1px solid var(--border);font-size:11px;flex-shrink:0;
+  flex-wrap:wrap;background:var(--bg)
+}
+.sb{
+  padding:4px 10px;border-radius:4px;cursor:pointer;
+  color:var(--muted);border:none;background:none;font-size:11px;
+  font-family:var(--font);font-weight:500;transition:all .12s
+}
+.sb:hover{background:var(--card);color:var(--text)}
+.sb.on{
+  background:var(--accent-light);color:var(--accent);font-weight:600
+}
+.count-row{
+  padding:3px 12px;font-size:10px;color:var(--muted);
+  border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg)
+}
+
+/* table */
+.table-scroll{flex:1;overflow-y:auto;background:var(--card)}
+table{width:100%;border-collapse:collapse}
+thead th{
+  position:sticky;top:0;background:var(--bg);
+  padding:7px 12px;font-size:10px;font-weight:600;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--border);
+  text-align:left;z-index:10;white-space:nowrap;letter-spacing:.04em
+}
+.row{border-bottom:1px solid #f1f3f4;cursor:pointer;transition:background .1s}
+.row:hover td{background:#f8f9ff}
+.row.active td{background:var(--accent-light)}
+.row.active td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.cell{padding:8px 12px;vertical-align:middle}
+.chip{
+  display:inline-block;background:#202124;color:#fff;
+  padding:3px 7px;border-radius:4px;font-family:'Roboto Mono',monospace;
+  font-weight:700;font-size:11px;margin-right:4px;white-space:nowrap;letter-spacing:.02em
+}
+.co-name{font-size:11px;color:var(--muted);margin-top:1px}
+.price-val{font-size:13px;font-weight:500;text-align:right;white-space:nowrap;color:var(--text)}
+.change-val{font-size:11px;text-align:right;margin-top:2px}
+.pct{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:2px 7px;border-radius:4px;font-weight:600;font-size:11px;
+  min-width:58px;white-space:nowrap
+}
+.up{color:var(--up);background:var(--up-bg)}
+.down{color:var(--down);background:var(--down-bg)}
+.neu{color:var(--neutral);background:var(--bg)}
+input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height:14px}
+
+/* ── Workspace ────────────────────────────────────────────────────── */
+.workspace{padding:16px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;background:var(--bg)}
+.card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 20px;
+  box-shadow:0 1px 2px rgba(60,64,67,.1)
+}
+
+/* ── Chart — Google Finance style ────────────────────────────────── */
+.chart-header{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:0;padding-bottom:10px;
+  border-bottom:1px solid var(--border)
+}
+.chart-header h3{
+  font-size:13px;font-weight:600;color:var(--text);
+  flex:1;white-space:nowrap
+}
+/* range + zoom in one row across the top */
+.chart-controls{display:flex;align-items:center;gap:4px}
+.range-btns{display:flex;gap:1px}
+.rb{
+  padding:4px 10px;border:none;border-radius:20px;
+  cursor:pointer;font-size:12px;background:none;color:var(--muted);
+  font-weight:500;transition:all .12s;font-family:var(--font)
+}
+.rb:hover{background:var(--bg);color:var(--text)}
+.rb.on{background:var(--accent-light);color:var(--accent);font-weight:600}
+/* zoom btns inline with range */
+.zoom-btns{display:flex;gap:1px;margin-left:8px;padding-left:8px;border-left:1px solid var(--border)}
+.zb{
+  padding:4px 9px;border-radius:20px;font-size:12px;font-weight:500;
+  border:none;background:none;
+  color:var(--muted);cursor:pointer;transition:all .12s;line-height:1.4
+}
+.zb:hover{background:var(--bg);color:var(--text)}
+/* legend BELOW chart, GF style */
+.chart-legend{
+  display:flex;flex-wrap:wrap;gap:6px;
+  margin-top:10px;padding-top:10px;
+  border-top:1px solid var(--border)
+}
+.leg-item{
+  display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
+  padding:3px 10px;border-radius:20px;border:1px solid var(--border);
+  background:var(--card);cursor:pointer;transition:all .12s
+}
+.leg-item:hover{border-color:#c5d9fc;background:var(--accent-light);color:var(--accent)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* data source badge */
+.src-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500
+}
+.src-db{background:#dcfce7;color:#15803d}
+.src-yahoo{background:#e0f2fe;color:#0369a1}
+.src-mixed{background:#fef9c3;color:#92400e}
+
+.chart-legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.leg-item{
+  display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
+  padding:3px 8px;border-radius:20px;border:1px solid var(--border);
+  background:var(--card);cursor:pointer;transition:all .12s
+}
+.leg-item:hover{border-color:#c5d9fc;background:var(--accent-light);color:var(--accent)}
+.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* floating hover legend — appears left of cursor */
+#chart-hover-legend{
+  position:absolute;pointer-events:none;
+  background:rgba(15,23,42,.88);border:1px solid rgba(255,255,255,.1);
+  border-radius:7px;padding:8px 11px;font-size:11px;
+  color:#f1f5f9;line-height:1.7;white-space:nowrap;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+  display:none;z-index:100;min-width:120px
+}
+#chart-hover-legend .hl-date{
+  font-size:10px;color:#94a3b8;margin-bottom:4px;
+  border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:4px
+}
+#chart-hover-legend .hl-row{
+  display:flex;align-items:center;gap:6px
+}
+#chart-hover-legend .hl-dot{
+  width:8px;height:8px;border-radius:2px;flex-shrink:0
+}
+#chart-hover-legend .hl-val{margin-left:auto;font-weight:600}
+#chart-hover-legend .hl-price{color:#94a3b8;font-size:10px;margin-left:4px}
+#chart-hover-legend .hl-sep{
+  border:none;border-top:1px solid rgba(255,255,255,.1);margin:5px 0
+}
+#chart-hover-legend .hl-dim{opacity:.22}
+
+/* chart right-click filter menu */
+#chart-ctx-menu{
+  position:fixed;z-index:9000;display:none;
+  background:#1e293b;border:1px solid #334155;border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);min-width:150px;padding:4px 0;
+  font-size:12px;color:#e2e8f0;user-select:none
+}
+#chart-ctx-menu.visible{display:block}
+.cc-header{
+  padding:5px 14px 4px;font-size:10px;font-weight:600;
+  color:#475569;text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid #334155;margin-bottom:2px
+}
+.cc-item{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 14px;cursor:pointer;transition:background .1s
+}
+.cc-item:hover{background:#334155}
+.cc-item.active{color:#60a5fa}
+.cc-item .cc-dot{
+  width:8px;height:8px;border-radius:50%;background:#475569;flex-shrink:0
+}
+.cc-item.active .cc-dot{background:#3b82f6}
+.cc-sep{height:1px;background:#334155;margin:3px 0}
+
+/* detail panel */
+.detail-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.detail-ticker{font-size:26px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:-.5px;color:var(--text)}
+.meta-pills{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;align-items:center}
+.pill{
+  padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;
+  background:var(--bg);border:1px solid var(--border);color:var(--muted)
+}
+.pill-yield{
+  background:#e6f4ea;border-color:#ceead6;color:#137333;font-weight:600
+}
+.summary-text{font-size:13px;line-height:1.75;color:#334155;margin-bottom:16px}
+/* summary sections with source badges */
+.sum-section{margin-bottom:18px}
+.sum-ep-badge{
+  display:inline-flex;align-items:center;
+  padding:3px 10px;border-radius:4px;margin-bottom:8px;
+  font-size:11px;font-weight:600;letter-spacing:.02em
+}
+.ep-stw  {background:#dbeafe;color:#1e40af}
+.ep-ian  {background:#ede9fe;color:#5b21b6}
+.ep-custom{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.ep-plain{}
+
+/* ── Context menu ────────────────────────────────────────────────── */
+#ctx-menu{
+  position:fixed;z-index:9999;display:none;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);
+  min-width:180px;padding:4px 0;font-size:12px
+}
+#ctx-menu.visible{display:block}
+.ctx-header{
+  padding:6px 14px 5px;font-size:10px;font-weight:700;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid var(--border);margin-bottom:2px
+}
+.ctx-item{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 14px;cursor:pointer;color:var(--text);
+  transition:background .1s
+}
+.ctx-item:hover{background:var(--bg)}
+.ctx-item.danger:hover{background:#fef2f2;color:#ef4444}
+.ctx-sep{height:1px;background:var(--border);margin:3px 0}
+.ctx-wl-name{
+  font-size:10px;color:var(--muted);margin-left:auto;
+  max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+
+/* watchlist pills replaced by dropdown */
+
+/* ── Add Ticker panel ───────────────────────────────────────────── */
+#add-ticker-panel{
+  display:none;position:fixed;inset:0;z-index:9998;
+  background:rgba(32,33,36,.5);
+  align-items:center;justify-content:center
+}
+#add-ticker-panel.visible{display:flex}
+.add-ticker-modal{
+  background:var(--card);border-radius:12px;
+  border:1px solid var(--border);
+  box-shadow:0 8px 32px rgba(60,64,67,.25);
+  width:520px;max-width:96vw;max-height:90vh;
+  display:flex;flex-direction:column;overflow:hidden
+}
+.atm-header{
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px
+}
+.atm-header h3{font-size:15px;font-weight:600;color:var(--text);flex:1}
+.atm-close{
+  width:28px;height:28px;border-radius:50%;border:none;
+  background:none;cursor:pointer;font-size:18px;color:var(--muted);
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s
+}
+.atm-close:hover{background:var(--bg)}
+.atm-body{padding:18px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.atm-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.atm-field{display:flex;flex-direction:column;gap:4px}
+.atm-field.full{grid-column:1/-1}
+.atm-field label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.atm-field input,.atm-field select,.atm-field textarea{
+  padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  font-size:12px;color:var(--text);background:var(--bg);
+  outline:none;font-family:var(--font);transition:border-color .15s
+}
+.atm-field input:focus,.atm-field select:focus,.atm-field textarea:focus{
+  border-color:var(--accent);background:var(--card)
+}
+.atm-field textarea{resize:vertical;min-height:90px;line-height:1.6}
+.atm-footer{
+  padding:12px 20px;border-top:1px solid var(--border);
+  display:flex;justify-content:flex-end;gap:8px;background:var(--bg)
+}
+.atm-cancel{
+  padding:8px 18px;border:1px solid var(--border);border-radius:20px;
+  background:var(--card);color:var(--muted);font-size:12px;
+  font-weight:500;cursor:pointer;font-family:var(--font)
+}
+.atm-cancel:hover{background:var(--bg)}
+.atm-save{
+  padding:8px 20px;background:var(--accent);color:#fff;border:none;
+  border-radius:20px;font-size:12px;font-weight:500;
+  cursor:pointer;font-family:var(--font);transition:background .15s
+}
+.atm-save:hover{background:#1557b0}
+.atm-save:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── Zoom controls ──────────────────────────────────────────────── */
+.zoom-btns{display:flex;gap:4px;align-items:center;margin-left:8px}
+.zb{
+  padding:3px 9px;border-radius:20px;font-size:12px;font-weight:500;
+  border:1px solid var(--border);background:var(--card);
+  color:var(--muted);cursor:pointer;transition:all .15s;line-height:1.4
+}
+.zb:hover{background:var(--accent-light);border-color:#c5d9fc;color:var(--accent)}
+
+/* ── Research panel ──────────────────────────────────────────────── */
+.research-panel{
+  margin-top:20px;border:1px solid var(--border);border-radius:var(--radius);
+  overflow:hidden
+}
+.research-header{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 14px;background:var(--bg);border-bottom:1px solid var(--border)
+}
+.research-header h4{font-size:12px;font-weight:600;color:var(--text);margin:0;flex:1}
+.research-model-select{
+  padding:3px 7px;font-size:11px;border:1px solid var(--border);
+  border-radius:5px;background:var(--card);color:var(--text);outline:none
+}
+/* Gemini tier mini-toggle */
+.rmb{
+  padding:3px 8px;font-size:10px;font-weight:600;
+  border:1px solid var(--border);border-radius:4px;
+  background:var(--card);color:var(--muted);cursor:pointer;
+  transition:all .12s;line-height:1.4
+}
+.rmb:hover{border-color:var(--accent);color:var(--accent)}
+.rmb.active{
+  background:var(--accent);border-color:var(--accent);
+  color:#fff
+}
+.research-input-row{
+  display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border)
+}
+.research-input{
+  flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;
+  font-size:12px;outline:none;color:var(--text);background:var(--card)
+}
+.research-input:focus{border-color:var(--accent)}
+.research-go-btn{
+  padding:7px 14px;background:var(--accent);color:#fff;border:none;
+  border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;
+  white-space:nowrap;transition:opacity .15s
+}
+.research-go-btn:disabled{opacity:.5;cursor:not-allowed}
+.research-go-btn.loading{opacity:.7}
+.research-output{
+  padding:14px;min-height:60px;font-size:13px;line-height:1.75;
+  color:#334155;white-space:pre-wrap;word-break:break-word
+}
+.research-output.empty{color:var(--muted);font-style:italic}
+.research-actions{
+  display:none;padding:8px 14px;background:var(--bg);
+  border-top:1px solid var(--border);gap:6px;flex-wrap:wrap
+}
+.research-actions.visible{display:flex}
+.research-save-btn{
+  padding:5px 12px;background:var(--up);color:#fff;border:none;
+  border-radius:5px;font-size:11px;font-weight:600;cursor:pointer
+}
+.research-discard-btn{
+  padding:5px 12px;background:none;color:var(--muted);border:1px solid var(--border);
+  border-radius:5px;font-size:11px;cursor:pointer
+}
+.research-save-btn:hover{opacity:.85}
+.research-discard-btn:hover{background:var(--down-bg);color:var(--down);border-color:var(--down)}
+.research-cursor{
+  display:inline-block;width:2px;height:1em;background:var(--accent);
+  vertical-align:text-bottom;margin-left:1px;
+  animation:blink .7s steps(1) infinite
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.sum-ep-text{font-size:13px;line-height:1.75;color:#334155;margin:0}
+
+/* ── Fields editor (sector, name, type, status) ────────────── */
+.fields-edit-panel{
+  display:none;margin-top:10px;padding:12px 14px;
+  border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);gap:10px;flex-wrap:wrap
+}
+.fields-edit-panel.visible{display:flex}
+.field-group{display:flex;flex-direction:column;gap:3px;min-width:130px}
+.field-group label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.field-group input,.field-group select{
+  padding:5px 8px;border:1px solid var(--border);border-radius:5px;
+  font-size:12px;color:var(--text);background:var(--card);outline:none
+}
+.field-group input:focus,.field-group select:focus{border-color:var(--accent)}
+.fields-edit-actions{display:flex;gap:6px;align-items:flex-end;padding-bottom:1px}
+
+/* ── Ticker editor ─────────────────────────────────────────── */
+.edit-ticker-btn{
+  background:none;border:none;cursor:pointer;padding:2px 5px;
+  color:var(--muted);font-size:13px;line-height:1;border-radius:4px;
+  transition:color .15s,background .15s;vertical-align:middle
+}
+.edit-ticker-btn:hover{color:var(--accent);background:var(--bg)}
+.ticker-edit-row{
+  display:none;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap
+}
+.ticker-edit-row.visible{display:flex}
+.ticker-edit-input{
+  font-family:monospace;font-size:15px;font-weight:700;
+  padding:4px 10px;border:2px solid var(--accent);border-radius:6px;
+  width:120px;outline:none;color:var(--text);background:var(--card);
+  text-transform:uppercase
+}
+.ticker-save-btn{
+  padding:4px 12px;background:var(--accent);color:#fff;border:none;
+  border-radius:5px;font-size:12px;font-weight:600;cursor:pointer
+}
+.ticker-save-btn:hover{opacity:.85}
+.ticker-cancel-btn{
+  padding:4px 10px;background:none;color:var(--muted);
+  border:1px solid var(--border);border-radius:5px;font-size:12px;cursor:pointer
+}
+.ticker-cancel-btn:hover{border-color:var(--down);color:var(--down)}
+.ticker-hint{font-size:11px;color:var(--muted)}
+/* episode-segmented summary */
+.sum-section{
+  margin-bottom:6px;border:1px solid var(--border);
+  border-radius:7px;overflow:hidden
+}
+.sum-section-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 12px;cursor:pointer;user-select:none;
+  background:var(--bg);transition:background .12s;gap:8px
+}
+.sum-section-toggle:hover{background:#e8edf4}
+.sum-ep-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:4px;
+  font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer
+}
+.sum-ep-badge.stw{background:#dbeafe;color:#1e40af}
+.sum-ep-badge.ian{background:#ede9fe;color:#5b21b6}
+.sum-ep-badge.ep-stw{background:#dbeafe;color:#1e40af}
+.sum-ep-badge.ep-ian{background:#ede9fe;color:#5b21b6}
+.sum-ep-badge.ep-custom{background:#f1f5f9;color:#475569}
+.sum-ep-badge.custom{background:#f1f5f9;color:#475569}
+.sum-chevron{
+  font-size:9px;color:var(--muted);transition:transform .2s;flex-shrink:0
+}
+.sum-section.open .sum-chevron{transform:rotate(180deg)}
+.sum-section-body{
+  display:none;padding:12px 14px;
+  border-top:1px solid var(--border);background:var(--card)
+}
+.sum-section.open .sum-section-body{display:block}
+.sum-ep-text{font-size:12.5px;line-height:1.75;color:var(--text);margin:0}
+.sum-bullets{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.sum-bullet{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;line-height:1.6}
+.sum-bullet-dot{flex-shrink:0;margin-top:5px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.sum-bullet strong{color:var(--accent);font-weight:700}
+.ep-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px}
+.ep-tag{
+  padding:2px 8px;border-radius:4px;font-size:11px;
+  background:var(--bg);border:1px solid var(--border);color:var(--muted)
+}
+/* ── Case history entries ─────────────────────────────────────── */
+.case-entry { margin-bottom: 10px }
+.case-entry:last-child { margin-bottom: 0 }
+.case-date {
+  font-size: 9px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em;
+  margin-bottom: 3px; display: flex; align-items: center; gap: 5px;
+}
+.case-date::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.case-body { font-size: 12px; line-height: 1.5; color: var(--text) }
+
+.case-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.case-item{
+  padding:14px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg);transition:border-color .12s
+}
+.case-item:hover{border-color:#c5d9fc}
+.case-label{
+  display:block;text-transform:uppercase;font-size:9px;
+  font-weight:700;letter-spacing:.08em;margin-bottom:7px
+}
+.label-base{color:var(--muted)}
+.label-bear{color:var(--down)}
+.label-bull{color:var(--up)}
+.case-text{font-size:12px;line-height:1.55;color:var(--text)}
+
+/* status badges — GF pill style */
+.st{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;border:1px solid transparent}
+.s-hot  {background:#e6f4ea;color:#137333;border-color:#ceead6}
+.s-rot  {background:#d1fae5;color:#065f46}
+.s-pull {background:#fef9c3;color:#854d0e}
+.s-press{background:#fee2e2;color:#991b1b}
+.s-dip  {background:#dbeafe;color:#1e40af}
+.s-rec  {background:#ede9fe;color:#5b21b6}
+.s-caut {background:#f1f5f9;color:#475569}
+.s-flat {background:#f1f5f9;color:#64748b}
+
+/* toast */
+#toast{
+  position:fixed;bottom:20px;right:20px;
+  background:#1e293b;color:#fff;padding:10px 16px;
+  border-radius:8px;font-size:12px;z-index:1000;
+  opacity:0;transition:opacity .25s;pointer-events:none
+}
+#toast.show{opacity:1}
+
+/* loader overlay */
+#loader{
+  position:fixed;inset:0;background:rgba(15,23,42,.55);
+  display:flex;align-items:center;justify-content:center;z-index:999
+}
+.spinner{
+  width:40px;height:40px;border:4px solid #ffffff30;
+  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite
+}
+
+.empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+.placeholder{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;height:100%;color:var(--muted);gap:10px;font-size:13px
+}
+.placeholder svg{opacity:.25}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+</style>
+</head>
+<body>
+
+<div id="loader"><div class="spinner"></div></div>
+<div id="toast"></div>
+
+<!-- Chart filter right-click menu -->
+<div id="chart-ctx-menu">
+  <div class="cc-header">Show lines</div>
+  <div class="cc-item" data-cf="all">
+    <span class="cc-dot"></span>All tickers
+  </div>
+  <div class="cc-sep"></div>
+  <div class="cc-item" data-cf="positive">
+    <span class="cc-dot"></span>Positive only &nbsp;<span style="color:#4ade80;font-size:11px">＋</span>
+  </div>
+  <div class="cc-item" data-cf="negative">
+    <span class="cc-dot"></span>Negative only &nbsp;<span style="color:#f87171;font-size:11px">－</span>
+  </div>
+</div>
+
+<!-- Add Ticker modal -->
+<div id="add-ticker-panel">
+  <div class="add-ticker-modal">
+    <div class="atm-header">
+      <h3>Add ticker</h3>
+      <button class="atm-close" id="atm-close-btn">✕</button>
+    </div>
+    <div class="atm-body">
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Ticker symbol *</label>
+          <input id="atm-ticker" placeholder="e.g. AAPL" style="font-family:monospace;font-weight:700;text-transform:uppercase">
+        </div>
+        <div class="atm-field">
+          <label>Company name</label>
+          <input id="atm-name" placeholder="e.g. Apple Inc.">
+        </div>
+      </div>
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Sector</label>
+          <input id="atm-sector" placeholder="e.g. Technology">
+        </div>
+        <div class="atm-field">
+          <label>Type</label>
+          <select id="atm-type">
+            <option value="Stock">Stock</option>
+            <option value="ETF">ETF</option>
+            <option value="Fund">Fund</option>
+          </select>
+        </div>
+      </div>
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Status</label>
+          <select id="atm-status">
+            <option value="flat">Neutral</option>
+            <option value="hot">Momentum</option>
+            <option value="rot">Rotating</option>
+            <option value="dip">Dip Buy</option>
+            <option value="pull">Pullback</option>
+            <option value="rec">Recovery</option>
+            <option value="press">Pressure</option>
+            <option value="caut">Caution</option>
+          </select>
+        </div>
+        <div class="atm-field">
+          <label>Ref price</label>
+          <input id="atm-price" placeholder="e.g. ~$146">
+        </div>
+      </div>
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Source name</label>
+          <input id="atm-source" placeholder="e.g. My Research" value="My Research">
+        </div>
+        <div class="atm-field">
+          <label>Tags / label</label>
+          <input id="atm-tags" placeholder="e.g. Earnings play">
+        </div>
+      </div>
+      <div class="atm-field full">
+        <label>Summary / thesis</label>
+        <textarea id="atm-summary" placeholder="Write your thesis here. You can use bullet points:&#10;• **Why I like it:** ...&#10;• **Risk:** ...&#10;• **Catalyst:** ..."></textarea>
+      </div>
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Base case</label>
+          <input id="atm-base" placeholder="Most likely 12-month outcome">
+        </div>
+        <div class="atm-field">
+          <label>Bear case</label>
+          <input id="atm-bear" placeholder="Key downside risk">
+        </div>
+      </div>
+      <div class="atm-field full">
+        <label>Bull case</label>
+        <input id="atm-bull" placeholder="Key upside catalyst">
+      </div>
+    </div>
+    <div class="atm-footer">
+      <button class="atm-cancel" id="atm-cancel-btn">Cancel</button>
+      <button class="atm-save"   id="atm-save-btn">Save ticker</button>
+    </div>
+  </div>
+</div>
+
+<!-- Right-click context menu -->
+<div id="ctx-menu">
+  <div class="ctx-header" id="ctx-ticker-lbl">TICKER</div>
+  <div id="ctx-wl-items"><!-- populated by JS --></div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-new-wl" onclick="ctxNewWatchlist()">
+    <span>＋</span> New watchlist…
+  </div>
+  <div id="ctx-del-wl-items"><!-- delete options populated by JS --></div>
+</div>
+
+<div class="layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────── -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>Barrons<span class="logo-accent">Watchlists</span></h2>
+      <div class="sub">
+        <span class="dot" id="live-dot"></span>
+        <span id="status-txt">Loading…</span>
+        <button class="hdr-btn" id="refresh-btn" onclick="handleRefresh()"
+                title="Refresh selected tickers, or all if none checked">
+          <svg viewBox="0 0 24 24">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+          <span id="refresh-label">Refresh</span>
+        </button>
+        <button class="hdr-btn" id="add-ticker-btn" title="Add a new ticker with your own summary"
+                style="border-color:var(--accent);color:var(--accent)">
+          <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.5"><path d="M12 5v14M5 12h14"/></svg>
+          Add
+        </button>
+
+      </div>
+    </div>
+
+    <!-- Selection banner -->
+    <div class="sel-banner" id="sel-banner">
+      <span id="sel-count-txt"></span>
+      <span class="sel-clear" onclick="clearSelection()">Clear all</span>
+    </div>
+
+    <!-- Hidden filter elements — moved to top-filter-bar in workspace -->
+    <div style="display:none">
+      <input type="text" id="srch" oninput="render()">
+      <select id="f-sector"  onchange="render()"><option value="">All Sectors</option></select>
+      <select id="f-type"    onchange="render()">
+        <option value="">ETF + Stock</option>
+        <option value="ETF">ETF</option>
+        <option value="Stock">Stock</option>
+      </select>
+      <select id="f-status"  onchange="render()">
+        <option value="">All Status</option>
+        <option value="hot">Momentum</option>
+        <option value="rot">Rotating</option>
+        <option value="dip">Dip Buy</option>
+        <option value="rec">Recovery</option>
+        <option value="pull">Pullback</option>
+        <option value="press">Pressure</option>
+        <option value="caut">Caution</option>
+        <option value="flat">Neutral</option>
+      </select>
+      <select id="f-rec"     onchange="render()"><option value="">All Recs</option></select>
+      <select id="f-episode" onchange="render()"><option value="">All Episodes</option></select>
+      <select id="f-move"    onchange="render()">
+        <option value="">All Movers</option>
+        <option value="up">Up today</option>
+        <option value="down">Down today</option>
+      </select>
+      <select id="f-source" onchange="setSrcDropdown(this.value)">
+        <option value="">All Sources</option>
+      </select>
+      <select id="f-watchlist" onchange="setWlFilter(this.value)">
+        <option value="">All Tickers</option>
+      </select>
+    </div>
+
+    <!-- Sort bar -->
+    <div class="sort-bar">
+      <!-- Select-all checkbox replaces the "Sort:" label -->
+      <input type="checkbox" id="select-all-chk"
+        title="Select / deselect all visible tickers"
+        style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;margin-right:4px;flex-shrink:0"
+        onclick="toggleSelectAll(this)">
+      <button class="sb"    id="sb-t"     onclick="setSort('t')">Ticker</button>
+      <button class="sb on" id="sb-pct"   onclick="setSort('pct')">Day %</button>
+      <button class="sb"    id="sb-price" onclick="setSort('price')">Price</button>
+      <button class="sb"    id="sb-ep"    onclick="setSort('ep')">Episodes</button>
+      <button class="sb"    id="sb-name"  onclick="setSort('name')">Name</button>
+      <button class="sb" id="sb-export" onclick="exportCSV()"
+              title="Export visible tickers to CSV" style="margin-left:auto">
+        ↓ CSV
+      </button>
+    </div>
+    <div class="count-row" id="count-row">—</div>
+
+    <!-- Table -->
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th width="32" title="Check to compare on chart"></th>
+          <th>Symbol</th>
+          <th style="text-align:right">Price</th>
+          <th style="text-align:right">Day %</th>
+        </tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+      <div class="empty" id="empty-msg" style="display:none">No matches.</div>
+    </div>
+  </div>
+
+  <!-- ── Workspace ──────────────────────────────────────────────── -->
+  <div class="workspace" id="workspace">
+
+    <!-- ── Top filter bar — GF style above chart ─────────────────── -->
+    <div class="top-filter-bar">
+      <!-- Search row -->
+      <div class="top-filter-search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="srch-top" placeholder="Search ticker or name…"
+               oninput="document.getElementById('srch').value=this.value;render()">
+      </div>
+      <!-- Filter selects row -->
+      <div class="top-filter-row">
+        <select id="tf-sector"  onchange="syncFilter('f-sector',this)"><option value="">Financial Servi</option></select>
+        <select id="tf-type"    onchange="syncFilter('f-type',this)">
+          <option value="">ETF + Stock</option>
+          <option value="ETF">ETF</option>
+          <option value="Stock">Stock</option>
+        </select>
+        <select id="tf-status"  onchange="syncFilter('f-status',this)">
+          <option value="">All Status</option>
+          <option value="hot">Momentum</option>
+          <option value="rot">Rotating</option>
+          <option value="dip">Dip Buy</option>
+          <option value="rec">Recovery</option>
+          <option value="pull">Pullback</option>
+          <option value="press">Pressure</option>
+          <option value="caut">Caution</option>
+          <option value="flat">Neutral</option>
+        </select>
+        <select id="tf-rec"     onchange="syncFilter('f-rec',this)"><option value="">All Recs</option></select>
+        <select id="tf-episode" onchange="syncFilter('f-episode',this)"><option value="">All Episodes</option></select>
+        <select id="tf-move"    onchange="syncFilter('f-move',this)">
+          <option value="">All Movers</option>
+          <option value="up">Up today</option>
+          <option value="down">Down today</option>
+        </select>
+        <select id="tf-source"  onchange="syncSrcFilter(this)"><option value="">All Sources</option></select>
+        <select id="tf-watchlist" onchange="syncWlFilter(this)"><option value="">All Watchlists</option></select>
+        <button id="wl-plot-btn" class="hdr-btn" onclick="plotWatchlist()"
+                title="Plot this watchlist on the chart"
+                style="display:none;padding:5px 10px;font-size:11px;
+                       border-color:var(--accent);color:var(--accent)">
+          📈 Plot
+        </button>
+      </div>
+    </div>
+
+    <!-- Chart card — TradingView widget -->
+    <div class="card" style="padding:12px 16px">
+      <!-- Header: title only -->
+      <div class="chart-header" style="border-bottom:none;padding-bottom:6px">
+        <h3>Performance</h3>
+        <span id="tv-symbol-label" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
+      </div>
+
+      <!-- TradingView container — tall enough for the chart to breathe -->
+      <div id="chart-wrap" style="height:380px;border-radius:6px;overflow:hidden;background:var(--card)">
+        <div id="tv-chart" style="width:100%;height:100%;display:flex;align-items:center;
+             justify-content:center;color:var(--muted);font-size:12px">
+          Check tickers in the sidebar to view chart
+        </div>
+      </div>
+
+      <!-- Range buttons below chart — always visible, full width -->
+      <div style="display:flex;flex-wrap:wrap;gap:1px;
+                  margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <button class="rb"    onclick="setRange('1D',this)">1D</button>
+        <button class="rb"    onclick="setRange('5D',this)">5D</button>
+        <button class="rb"    onclick="setRange('1W',this)">1W</button>
+        <button class="rb on" onclick="setRange('1M',this)">1M</button>
+        <button class="rb"    onclick="setRange('3M',this)">3M</button>
+        <button class="rb"    onclick="setRange('6M',this)">6M</button>
+        <button class="rb"    onclick="setRange('YTD',this)">YTD</button>
+        <button class="rb"    onclick="setRange('1Y',this)">1Y</button>
+        <button class="rb"    onclick="setRange('2Y',this)">2Y</button>
+        <button class="rb"    onclick="setRange('3Y',this)">3Y</button>
+      </div>
+
+      <!-- Ticker legend pills -->
+      <div class="chart-legend" id="chart-legend" style="margin-top:8px">
+        <span style="font-size:11px;color:var(--muted)">
+          Check tickers in the sidebar to compare
+        </span>
+      </div>
+    </div>
+
+    <!-- Detail card (hidden until row is clicked) -->
+    <div class="card" id="detail-card" style="display:none"></div>
+
+    <!-- Placeholder -->
+    <div class="card" id="placeholder-card">
+      <div class="placeholder" style="min-height:160px">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.5">
+          <path d="M3 3h18v18H3zM3 9h18M9 21V9"/>
+        </svg>
+        <span>Click any row to see the full thesis and scenarios</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────
+// 20 visually distinct colors
+const PALETTE = [
+  '#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6',
+  '#06b6d4','#f97316','#ec4899','#14b8a6','#a3e635',
+  '#6366f1','#f43f5e','#84cc16','#0ea5e9','#d946ef',
+  '#fb923c','#10b981','#facc15','#a855f7','#38bdf8'
+];
+
+// Colors are assigned fresh each render in dataset order (index i → PALETTE[i]).
+// The legend always reads ds.borderColor from the final datasets array,
+// so legend and chart lines are guaranteed to match.
+// No persistent map — eliminates all stale-state color mismatches.
+const STATUS_MAP = {
+  hot:'Momentum', rot:'Rotating',  pull:'Pullback', press:'Pressure',
+  dip:'Dip Buy',  rec:'Recovery',  caut:'Caution',  flat:'Neutral'
+};
+
+// Max tickers on the chart — set to 0 for no limit
+// Chart.js handles many lines fine; readability is the only constraint
+const MAX_CHART_TICKERS = 0;   // 0 = no limit on refresh selection
+const MAX_CHART_LINES    = 20;  // chart renders max 20 lines (readability)
+
+// ── State ──────────────────────────────────────────────────────────
+let allData      = [];
+let selectedChk  = new Set();   // tickers checked for chart comparison
+let activeRow    = null;        // ticker of the currently-expanded detail row
+let currentSort  = 'pct';
+let sortAsc      = false;
+let currentRange = '1M';
+let currentSrc   = '';   // active source prefix filter — '' means All Sources
+let perfChart = null; // stub — chart is now TradingView
+let hiddenLines         = new Set();   // tickers hidden via legend click
+let _defaultLegendItems = null;        // end-of-range values, restored on mouse leave
+let _chartFilter        = 'all';       // 'all' | 'positive' | 'negative'  — hover filter
+
+
+// ── Utilities ──────────────────────────────────────────────────────
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function showLoader(v) {
+  document.getElementById('loader').style.display = v ? 'flex' : 'none';
+}
+
+function setStatus(state, extra = '') {
+  const dot = document.getElementById('live-dot');
+  const txt = document.getElementById('status-txt');
+  const cfg = {
+    loading: ['#fbbf24', 'Loading…'],
+    live:    ['#22c55e', `Live · ${allData.length} tickers · ${new Date().toLocaleTimeString()}`],
+    partial: ['#22c55e', `Refreshed ${extra} · ${new Date().toLocaleTimeString()}`],
+    error:   ['#ef4444', 'Error — check console'],
+  };
+  const [color, label] = cfg[state] || cfg.loading;
+  dot.className    = (state === 'live' || state === 'partial') ? 'dot live' : 'dot';
+  dot.style.background = color;
+  txt.textContent  = label;
+}
+
+// ── Initial load — static data only, no Yahoo calls ──────────────────
+async function loadData() {
+  showLoader(true);
+  setStatus('loading');
+  try {
+    const res = await fetch('/api/data');   // no ?tickers param = static
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    allData = await res.json();
+    populateFilters();
+    render();
+    // Show "loaded" but make clear prices need a manual refresh
+    const dot = document.getElementById('live-dot');
+    const txt = document.getElementById('status-txt');
+    dot.className = 'dot';
+    dot.style.background = '#fbbf24';
+    txt.textContent = `${allData.length} tickers loaded — select tickers and press Refresh for live prices`;
+  } catch (e) {
+    console.error(e);
+    setStatus('error');
+  } finally {
+    showLoader(false);
+  }
+}
+
+// ── Selective refresh — only fetches quotes for checked tickers ────────
+async function handleRefresh() {
+  if (selectedChk.size === 0) {
+    toast('Check tickers in the sidebar first, then press Refresh');
+    return;
+  }
+
+  const btn     = document.getElementById('refresh-btn');
+  const label   = document.getElementById('refresh-label');
+  const targets = [...selectedChk];
+  const param   = targets.join(',');
+
+  btn.classList.add('spinning');
+  label.textContent = 'Refreshing…';
+
+  try {
+    // Expire cache for selected tickers only
+    await fetch(`/api/cache/clear?tickers=${param}`, { method: 'POST' });
+
+    // Fetch live quotes for selected tickers only
+    const res = await fetch(`/api/data?tickers=${param}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const fresh = await res.json();
+
+    // Merge back into allData in-place
+    fresh.forEach(u => {
+      const idx = allData.findIndex(d => d.t === u.t);
+      if (idx !== -1) allData[idx] = u;
+      else allData.push(u);
+    });
+
+    setStatus('partial', `${fresh.length} ticker${fresh.length !== 1 ? 's' : ''}`);
+    const refreshed = fresh.map(d => d.t);
+    const summary   = refreshed.length <= 8
+      ? refreshed.join(', ')
+      : refreshed.slice(0, 8).join(', ') + ` + ${refreshed.length - 8} more`;
+    toast(`Live prices updated: ${summary}`);
+    populateFilters();   // re-populate now that sector/rec are available
+    render();
+    fetchChart();
+
+  } catch (e) {
+    console.error(e);
+    setStatus('error');
+    toast('Refresh failed — check console');
+  } finally {
+    btn.classList.remove('spinning');
+    label.textContent = `Refresh (${targets.length})`;
+  }
+}
+
+// Keep the refresh button label and selection banner in sync
+function updateSelectionUI() {
+  const n       = selectedChk.size;
+  const label   = document.getElementById('refresh-label');
+  const banner  = document.getElementById('sel-banner');
+  const ctxt    = document.getElementById('sel-count-txt');
+  label.textContent = n > 0 ? `Refresh (${n})` : 'Refresh';
+  if (n > 0) {
+    banner.classList.add('visible');
+    ctxt.innerHTML =
+      `<strong>${n}</strong> ticker${n !== 1 ? 's' : ''} selected for chart &amp; refresh`;
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
+function clearSelection() {
+  selectedChk.clear();
+  hiddenLines.clear();
+  clearChart();          // synchronous — chart clears instantly
+  updateSelectionUI();
+  syncSelectAllChk();
+  render();
+}
+
+// ── Select / deselect all visible rows ────────────────────────────
+function toggleSelectAll(chk) {
+  // Collect tickers currently visible in the table
+  const rows = document.querySelectorAll('#tb .row');
+  const visible = [...rows].map(r => {
+    const chip = r.querySelector('.chip');
+    return chip ? chip.textContent.trim() : null;
+  }).filter(Boolean);
+
+  if (chk.checked) {
+    // Select all visible — no cap (refresh has no limit)
+    visible.forEach(t => selectedChk.add(t));
+
+  } else {
+    // Deselect all visible tickers from selection
+    visible.forEach(t => {
+      selectedChk.delete(t);
+      hiddenLines.delete(t);
+    });
+  }
+  updateSelectionUI();
+  render();
+  // If nothing selected after this, clear chart immediately (synchronous)
+  // Otherwise fetch updated chart for remaining selected tickers
+  if (selectedChk.size === 0) {
+    clearChart();
+  } else {
+    fetchChart();
+  }
+}
+
+// Keep the select-all checkbox in sync with the current selection state
+function syncSelectAllChk() {
+  const chk = document.getElementById('select-all-chk');
+  if (!chk) return;
+  const rows    = document.querySelectorAll('#tb .row');
+  const visible = [...rows].map(r => {
+    const chip = r.querySelector('.chip');
+    return chip ? chip.textContent.trim() : null;
+  }).filter(Boolean);
+
+  if (!visible.length) {
+    chk.checked       = false;
+    chk.indeterminate = false;
+    return;
+  }
+  const checkedCount = visible.filter(t => selectedChk.has(t)).length;
+  const cap          = visible.length;  // no cap on selection
+  if (checkedCount === 0) {
+    chk.checked       = false;
+    chk.indeterminate = false;
+  } else if (checkedCount >= cap) {
+    chk.checked       = true;
+    chk.indeterminate = false;
+  } else {
+    chk.checked       = false;
+    chk.indeterminate = true;
+  }
+}
+
+// ── Source filter ──────────────────────────────────────────────────
+function setSrcDropdown(val) {
+  if (_mirrorInProgress) return;   // ignore spurious calls during mirror
+  currentSrc = val;
+  populateEpisodesForSource(val);
+  render();
+}
+
+function populateEpisodesForSource(prefixFilter) {
+  // prefixFilter is a raw ep-key prefix e.g. "stw", "ian", "div"
+  // Episode keys: "stw:2026/3/13", "ian:2026/3/6", "div:2026/3/15"
+  let episodes;
+  if (!prefixFilter) {
+    episodes = [...new Set(allData.flatMap(d => d.e || []))].sort();
+  } else {
+    const needle = prefixFilter.toLowerCase() + ':';
+    episodes = [...new Set(
+      allData.flatMap(d =>
+        (d.e || []).filter(ep => ep.toLowerCase().startsWith(needle))
+      )
+    )].sort();
+  }
+  const cur = document.getElementById('f-episode').value;
+  fillSelect('f-episode', episodes, 'All Episodes');
+  if (cur && !episodes.includes(cur))
+    document.getElementById('f-episode').value = '';
+}
+
+// Cache of prefix → label from /api/sources (loaded once on startup)
+let _sourceLabels = {
+  stw: "Barron's Streetwise",
+  ian: "Barron's Ian Salisbury",
+  div: 'Dividends',
+  bl:  'Barrons Live',
+};
+
+async function loadSourceLabels() {
+  try {
+    const res  = await fetch('/api/sources');
+    if (!res.ok) return;
+    const data = await res.json();
+    (data.sources || []).forEach(s => {
+      if (s.prefix && s.label) _sourceLabels[s.prefix] = s.label;
+    });
+  } catch(e) { /* use hardcoded fallback */ }
+}
+
+function populateSourceDropdown() {
+  // Collect all prefixes that appear in episode keys
+  const prefixes = new Set();
+  allData.forEach(d =>
+    (d.e || []).forEach(ep => {
+      const p = ep.split(':')[0].toLowerCase();
+      if (p) prefixes.add(p);
+    })
+  );
+
+  const sel = document.getElementById('f-source');
+  const cur = sel.value;
+
+  sel.innerHTML = '<option value="">All Sources</option>';
+  [...prefixes].sort().forEach(p => {
+    const label = _sourceLabels[p] || p.charAt(0).toUpperCase() + p.slice(1);
+    const opt   = document.createElement('option');
+    opt.value       = p;
+    opt.textContent = label;
+    if (p === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+// ── Filters ────────────────────────────────────────────────────────
+function populateFilters() {
+  // sector: from live quote (d.sector) or stored by updater (d.sector)
+  const sectors  = [...new Set(allData.map(d => d.sector).filter(s => s && s !== 'N/A'))].sort();
+  // rec: from live quote (d.rec) or stored by updater (d.rec_analyst)
+  const recs     = [...new Set(allData.map(d => d.rec && d.rec !== 'N/A' ? d.rec : d.rec_analyst).filter(r => r && r !== 'N/A'))].sort();
+  const episodes = [...new Set(allData.flatMap(d => d.e || []))].sort();
+  fillSelect('f-sector',  sectors,  'All Sectors');
+  fillSelect('f-rec',     recs,     'All Recs');
+  fillSelect('f-episode', episodes, 'All Episodes');
+  // Mirror dynamic options to top filter bar
+  setTimeout(mirrorDynamicFilters, 0);
+  populateSourceDropdown();
+}
+
+function fillSelect(id, values, placeholder) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>` +
+    values.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`).join('');
+}
+
+// ── Sort ───────────────────────────────────────────────────────────
+function setSort(key) {
+  if (currentSort === key) { sortAsc = !sortAsc; }
+  else { currentSort = key; sortAsc = false; }
+  document.querySelectorAll('.sb').forEach(b => b.classList.remove('on'));
+  const btn = document.getElementById('sb-' + key);
+  if (btn) btn.classList.add('on');
+  render();
+}
+
+function sortVal(d, k) {
+  if (k === 'pct')   return d.pct_raw   ?? 0;
+  if (k === 'price') return d.price_raw ?? 0;
+  if (k === 'ep')    return (d.e || []).length;
+  if (k === 't')     return d.t  || '';
+  if (k === 'name')  return d.n  || '';
+  return 0;
+}
+
+// ── Render table ───────────────────────────────────────────────────
+function render() {
+  const q       = document.getElementById('srch').value.toLowerCase();
+  const fSector = document.getElementById('f-sector').value;
+  const fType   = document.getElementById('f-type').value;
+  const fStatus = document.getElementById('f-status').value;
+  const fRec    = document.getElementById('f-rec').value;
+  const fEp     = document.getElementById('f-episode').value;
+  const fMove   = document.getElementById('f-move').value;
+
+  let rows = allData.filter(d => {
+    if (q       && !(`${d.t} ${d.n}`).toLowerCase().includes(q)) return false;
+    if (fSector && d.sector !== fSector)                          return false;
+    if (fType   && d.y      !== fType)                            return false;
+    if (fStatus && d.s      !== fStatus)                          return false;
+    if (fRec    && d.rec !== fRec && d.rec_analyst !== fRec)     return false;
+    // Watchlist filter
+    if (_activeWl && !(_watchlists[_activeWl] || []).includes(d.t)) return false;
+    if (fEp     && !(d.e || []).includes(fEp))                    return false;
+    if (fMove === 'up'   && !d.is_up)  return false;
+    if (fMove === 'down' &&  d.is_up)  return false;
+    // Source filter
+    if (currentSrc && currentSrc !== 'all') {
+      // currentSrc is a prefix e.g. "stw", "ian", "div"
+      // Show ticker only if it has at least one episode with that prefix
+      const needle = currentSrc.toLowerCase() + ':';
+      if (!(d.e || []).some(ep => ep.toLowerCase().startsWith(needle))) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    const av = sortVal(a, currentSort), bv = sortVal(b, currentSort);
+    const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+    return sortAsc ? cmp : -cmp;
+  });
+
+  document.getElementById('count-row').textContent =
+    `Showing ${rows.length} of ${allData.length} securities`;
+
+  const empty = document.getElementById('empty-msg');
+  const tbody = document.getElementById('tb');
+
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = rows.map(d => {
+    const pc  = d.pct_raw > 0 ? 'up' : d.pct_raw < 0 ? 'down' : 'neu';
+    const act = d.t === activeRow ? ' active' : '';
+    const chk = selectedChk.has(d.t)   ? ' checked' : '';
+    const dis = (MAX_CHART_TICKERS > 0 && selectedChk.size >= MAX_CHART_TICKERS && !selectedChk.has(d.t)) ? ' disabled' : '';
+    return `
+    <tr class="row${act}" onclick="selectRow('${d.t}')" oncontextmenu="showCtxMenu(event,'${d.t}')">
+      <td class="cell" style="padding:9px 8px">
+        <input type="checkbox" data-ticker="${d.t}" title="Add to chart"${chk}${dis}
+          onclick="toggleChart('${d.t}', event)">
+      </td>
+      <td class="cell">
+        <span class="chip">${d.t}</span>
+        ${(d.src||[]).includes('ian') ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#ede9fe;color:#6d28d9;font-weight:600;margin-right:3px">Ian</span>' : ''}
+        <div class="co-name">${d.n || ''}</div>
+      </td>
+      <td class="cell" style="text-align:right">
+        <div class="price-val">${d.price_fmt || '—'}</div>
+        <div class="change-val"
+             style="color:${d.is_up ? 'var(--up)' : 'var(--down)'}">
+          ${d.diff_fmt || ''}
+        </div>
+      </td>
+      <td class="cell" style="text-align:right">
+        <span class="pct ${pc}">${d.pct_fmt || '—'}</span>
+      </td>
+    </tr>`;
+  }).join('');
+  syncSelectAllChk();
+}
+
+// ── Summary section parser ─────────────────────────────────────────────
+// Sections are delimited by:  === ep_key | Source · label ===
+// e.g.  === ian:2026/3/6 | Ian Salisbury (Barron's) · 3/6/2026 — Small-Cap Revival ===
+//
+// Each section: { epKey, sourceLabel, label, text }
+// Plain text before the first heading (Streetwise AI-merged summary) gets
+// { epKey: null, text }
+
+function parseSummary(raw) {
+  if (!raw || !raw.trim()) return [];
+
+  // Match lines of the form  === anything ===
+  const HEADING = /===\s*([^=]+?)\s*===/g;
+  const sections = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = HEADING.exec(raw)) !== null) {
+    // Text before this heading
+    const before = raw.slice(lastIndex, match.index).trim();
+    if (before) sections.push({ epKey: null, sourceLabel: null, label: null, text: before });
+
+    // Parse "ep_key | Source · label" from the heading content
+    const inner   = match[1].trim();
+    const pipeIdx = inner.indexOf('|');
+    let epKey = null, sourceLabel = null, label = null;
+    if (pipeIdx !== -1) {
+      epKey = inner.slice(0, pipeIdx).trim();
+      const rest  = inner.slice(pipeIdx + 1).trim();
+      const dotIdx = rest.indexOf('·');
+      if (dotIdx !== -1) {
+        sourceLabel = rest.slice(0, dotIdx).trim();
+        label       = rest.slice(dotIdx + 1).trim();
+      } else {
+        sourceLabel = rest;
+      }
+    } else {
+      sourceLabel = inner;
+    }
+
+    lastIndex = match.index + match[0].length;
+    // Capture text after heading (until next heading or end)
+    const nextMatch = HEADING.exec(raw);
+    const textEnd   = nextMatch ? nextMatch.index : raw.length;
+    HEADING.lastIndex = nextMatch ? nextMatch.index : raw.length;
+    const text = raw.slice(lastIndex, textEnd).trim();
+    lastIndex  = textEnd;
+    HEADING.lastIndex = lastIndex;
+
+    sections.push({ epKey, sourceLabel, label, text });
+  }
+
+  // Any remaining text after the last heading
+  const tail = raw.slice(lastIndex).trim();
+  if (tail) sections.push({ epKey: null, sourceLabel: null, label: null, text: tail });
+
+  // If nothing matched at all, treat the whole string as one plain section
+  if (sections.length === 0 && raw.trim()) {
+    sections.push({ epKey: null, sourceLabel: null, label: null, text: raw.trim() });
+  }
+
+  return sections;
+}
+
+// ── Format summary body — converts bullet points and **bold** to HTML ──
+function formatSummaryBody(text) {
+  if (!text) return '';
+  const lines = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+  const hasBullets = lines.some(function(l){ return l.startsWith('•'); });
+
+  if (hasBullets) {
+    const items = lines
+      .filter(function(l){ return l.startsWith('•'); })
+      .map(function(l) {
+        var content = l.slice(1).trim()
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        return '<li class="sum-bullet">'
+          + '<span class="sum-bullet-dot"></span>'
+          + '<span>' + content + '</span>'
+          + '</li>';
+      }).join('');
+    return '<ul class="sum-bullets">' + items + '</ul>';
+  }
+  // Plain paragraph
+  var rendered = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  return '<p class="sum-ep-text">' + rendered + '</p>';
+}
+
+// Derive badge CSS class from ep_key prefix
+function epBadgeCls(epKey) {
+  if (!epKey) return 'ep-plain';
+  const prefix = epKey.split(':')[0].toLowerCase();
+  if (prefix === 'stw')  return 'ep-stw';
+  if (prefix === 'ian')  return 'ep-ian';
+  return 'ep-custom';
+}
+
+// Render summary: collapsible badge sections.
+// State (open/closed) is persisted per ticker+epKey in sessionStorage.
+function renderSummary(raw, ticker) {
+  if (!raw) return '';
+  const sections = parseSummary(raw);
+  if (!sections.length) return '';
+
+  return sections.map((s, i) => {
+    if (!s.epKey) {
+      // Plain text preamble — always visible
+      return '<div class="summary-text">' + formatSummaryBody(s.text) + '</div>';
+    }
+    const cls        = epBadgeCls(s.epKey);
+    const badgeLabel = s.label
+      ? s.sourceLabel + ' &nbsp;·&nbsp; ' + s.label
+      : (s.sourceLabel || s.epKey);
+
+    // Check sessionStorage for open/closed state
+    const storeKey = 'sum:' + (ticker||'') + ':' + s.epKey;
+    const isOpen   = sessionStorage.getItem(storeKey) !== 'closed';
+    const openCls  = isOpen ? ' open' : '';
+
+    return '<div class="sum-section' + openCls + '" data-sum-key="' + storeKey + '">'
+      + '<div class="sum-section-toggle" onclick="toggleSumSection(this)">'
+      + '<span class="sum-ep-badge ' + cls + '">' + badgeLabel + '</span>'
+      + '<span class="sum-chevron">' + (isOpen ? '▲' : '▼') + '</span>'
+      + '</div>'
+      + '<div class="sum-section-body">'
+      + formatSummaryBody(s.text)
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function toggleSumSection(toggleEl) {
+  const section  = toggleEl.closest('.sum-section');
+  const chevron  = toggleEl.querySelector('.sum-chevron');
+  const isOpen   = section.classList.contains('open');
+  const storeKey = section.dataset.sumKey;
+
+  if (isOpen) {
+    section.classList.remove('open');
+    if (chevron) chevron.textContent = '▼';
+    if (storeKey) sessionStorage.setItem(storeKey, 'closed');
+  } else {
+    section.classList.add('open');
+    if (chevron) chevron.textContent = '▲';
+    if (storeKey) sessionStorage.removeItem(storeKey);
+  }
+}
+
+// ── Detail panel ───────────────────────────────────────────────────
+function selectRow(ticker) {
+  activeRow = ticker;
+  render();
+  const d = allData.find(x => x.t === ticker);
+  if (!d) return;
+
+  document.getElementById('placeholder-card').style.display = 'none';
+  const card = document.getElementById('detail-card');
+  card.style.display = 'block';
+
+  const stCls = `st s-${d.s || 'flat'}`;
+  const stLbl = STATUS_MAP[d.s] || 'Neutral';
+  const eps   = (d.e || []).map(ep => `<span class="ep-tag">${ep}</span>`).join('');
+  const pc    = (d.pct_raw || 0) > 0 ? 'up' : (d.pct_raw || 0) < 0 ? 'down' : 'neu';
+  const w52   = d['52w_high'] && d['52w_low']
+    ? `<span class="pill">52W $${(+d['52w_low']).toFixed(2)} – $${(+d['52w_high']).toFixed(2)}</span>`
+    : '';
+  const pe  = d.pe ? '<span class="pill">P/E ' + (+d.pe).toFixed(1) + '</span>' : '';
+  // Yahoo returns dividendYield already as a % decimal (e.g. 0.92 = 0.92%)
+  const dyVal = (d.div_yield != null && d.div_yield > 0) ? (+d.div_yield).toFixed(2) : '0.00';
+  const dy = '<span class="pill pill-yield">Yield ' + dyVal + '%</span>';
+  const mc  = d.mktcap ? '<span class="pill">Mktcap ' + fmtMktcap(d.mktcap) + '</span>' : '';
+  const recVal = (d.rec && d.rec !== 'N/A') ? d.rec : (d.rec_analyst || '');
+  const rec    = recVal ? `<span class="pill">Analyst: ${recVal}</span>` : '';
+  const ts  = d.fetched_at
+    ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">
+         Updated ${new Date(d.fetched_at).toLocaleTimeString()}
+       </div>`
+    : '';
+
+  card.innerHTML = `
+    <div class="detail-header">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="detail-ticker" id="detail-ticker-label">${d.t}</span>
+          <span style="font-size:14px;color:var(--muted)">${d.n || ''}</span>
+          <button class="edit-ticker-btn" onclick="showTickerEditor('${d.t}')"
+                  title="Edit ticker symbol">✏</button>
+        </div>
+        <!-- Inline ticker editor — hidden until pencil is clicked -->
+        <div class="ticker-edit-row" id="ticker-edit-row">
+          <input class="ticker-edit-input" id="ticker-edit-input"
+                 value="${d.t}" maxlength="12"
+                 oninput="this.value=this.value.toUpperCase()"
+                 onkeydown="if(event.key==='Enter')saveTicker('${d.t}');if(event.key==='Escape')hideTickerEditor()">
+          <button class="ticker-save-btn"   onclick="saveTicker('${d.t}')">Save</button>
+          <button class="ticker-cancel-btn" onclick="hideTickerEditor()">Cancel</button>
+          <span class="ticker-hint">Enter the correct exchange ticker</span>
+        </div>
+        <div class="meta-pills" style="align-items:center">
+          <span class="pill">${d.y || 'Stock'}</span>
+          <span class="pill">${d.sector || 'N/A'}</span>
+          <span class="${stCls}">${stLbl}</span>
+          ${pe}${dy}${mc}${w52}${rec}
+          <button class="edit-ticker-btn" onclick="showFieldsEditor('${d.t}')"
+                  title="Edit sector, name, type, status" style="margin-left:2px">✏</button>
+        </div>
+
+        <!-- Inline fields editor -->
+        <div class="fields-edit-panel" id="fields-edit-panel">
+          <div class="field-group">
+            <label>Sector</label>
+            <input id="fe-sector" value="${d.sector || ''}" placeholder="e.g. Industrials">
+          </div>
+          <div class="field-group">
+            <label>Name</label>
+            <input id="fe-name" value="${d.n || ''}" placeholder="Full company name">
+          </div>
+          <div class="field-group">
+            <label>Type</label>
+            <select id="fe-type">
+              <option value="Stock"${(d.y||'Stock')==='Stock'?' selected':''}>Stock</option>
+              <option value="ETF"${d.y==='ETF'?' selected':''}>ETF</option>
+              <option value="Fund"${d.y==='Fund'?' selected':''}>Fund</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label>Status</label>
+            <select id="fe-status">
+              ${['hot','rot','pull','press','dip','rec','caut','flat'].map(s =>
+                '<option value="' + s + '"' + (d.s === s ? ' selected' : '') + '>' + (STATUS_MAP[s] || s) + '</option>'
+              ).join('')}
+            </select>
+          </div>
+          <div class="field-group">
+            <label>Analyst Rec</label>
+            <input id="fe-rec" value="${d.rec_analyst || ''}" placeholder="e.g. Buy, Hold">
+          </div>
+          <div class="fields-edit-actions">
+            <button class="ticker-save-btn"   onclick="saveFields('${d.t}')">Save</button>
+            <button class="ticker-cancel-btn" onclick="hideFieldsEditor()">Cancel</button>
+          </div>
+        </div>
+
+        <div class="ep-tags" style="margin-top:10px">${eps}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:22px;font-weight:700">${d.price_fmt || '—'}</div>
+        <div style="margin-top:4px">
+          <span class="pct ${pc}">${d.pct_fmt || '—'}</span>
+          <span style="font-size:12px;color:var(--muted);margin-left:6px">
+            ${d.diff_fmt || ''}
+          </span>
+        </div>
+        ${ts}
+      </div>
+    </div>
+
+    ${d.sum ? renderSummary(d.sum, d.t) : ''}
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Scenarios</span>
+      <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+        <select id="regen-provider" onchange="updateRegenModel()"
+                style="padding:3px 6px;font-size:10px;border:1px solid var(--border);
+                       border-radius:4px;background:var(--card);color:var(--text);
+                       outline:none;cursor:pointer;font-family:var(--font)">
+          <option value="claude">Claude</option>
+          <option value="gemini">Gemini</option>
+        </select>
+        <div id="regen-claude-tiers" style="display:flex;gap:2px">
+          <button class="rmb active" data-regen-tier="claude-haiku"
+                  onclick="setRegenTier('claude-haiku')">Haiku</button>
+          <button class="rmb" data-regen-tier="claude-sonnet"
+                  onclick="setRegenTier('claude-sonnet')">Sonnet</button>
+        </div>
+        <div id="regen-gemini-tiers" style="display:none;gap:2px">
+          <button class="rmb" data-regen-tier="gemini"
+                  onclick="setRegenTier('gemini')">Flash</button>
+          <button class="rmb" data-regen-tier="gemini-pro"
+                  onclick="setRegenTier('gemini-pro')">Pro</button>
+        </div>
+        <input type="hidden" id="regen-model" value="claude-haiku">
+        <button class="ticker-save-btn" id="regen-cases-btn"
+                onclick="regenCases('${d.t}','${d.n}')"
+                style="font-size:10px;padding:3px 10px;white-space:nowrap">
+          ✦ Update
+        </button>
+      </div>
+    </div>
+    <div id="cases-loading" style="display:none;font-size:11px;color:var(--muted);padding:8px 0">
+      <span class="research-cursor"></span> Researching ${d.n}…
+    </div>
+    <div class="case-grid" id="case-grid-${d.t}">
+      <div class="case-item">
+        <strong class="case-label label-base">Base case</strong>
+        <div class="case-text" id="case-base-${d.t}">${renderCaseHistory(d.base)}</div>
+      </div>
+      <div class="case-item">
+        <strong class="case-label label-bear">Bear case</strong>
+        <div class="case-text" id="case-bear-${d.t}">${renderCaseHistory(d.bear)}</div>
+      </div>
+      <div class="case-item">
+        <strong class="case-label label-bull">Bull case</strong>
+        <div class="case-text" id="case-bull-${d.t}">${renderCaseHistory(d.bull)}</div>
+      </div>
+    </div>
+
+    <!-- ── Research panel ──────────────────────────────────────────── -->
+    <div class="research-panel">
+      <div class="research-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round" style="color:var(--accent)">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <h4>Live Research</h4>
+        <div style="display:flex;align-items:center;gap:4px">
+          <!-- Provider -->
+          <select class="research-model-select" id="research-provider"
+                  onchange="updateResearchModel()">
+            <option value="claude">Claude</option>
+            <option value="gemini">Gemini</option>
+          </select>
+          <!-- Claude tiers -->
+          <div id="claude-tier-toggle" style="display:flex;gap:2px">
+            <button class="rmb active" id="rmb-haiku" data-tier="claude"
+                    onclick="setResearchTier('claude')">Haiku</button>
+            <button class="rmb" id="rmb-sonnet" data-tier="claude-sonnet"
+                    onclick="setResearchTier('claude-sonnet')">Sonnet</button>
+          </div>
+          <!-- Gemini tiers (hidden until Gemini selected) -->
+          <div id="gemini-tier-toggle" style="display:none;gap:2px">
+            <button class="rmb active" id="rmb-flash" data-tier="gemini"
+                    onclick="setResearchTier('gemini')">Flash</button>
+            <button class="rmb" id="rmb-pro" data-tier="gemini-pro"
+                    onclick="setResearchTier('gemini-pro')">Pro</button>
+          </div>
+          <input type="hidden" id="research-model" value="claude">
+        </div>
+      </div>
+      <div class="research-input-row">
+        <input class="research-input" id="research-q" type="text"
+          placeholder="Ask anything — or: build watchlist with 10 tech stocks…"
+          onkeydown="if(event.key==='Enter')handleResearchEnter('${d.t}','${d.n}')">
+        <button class="research-go-btn" id="research-go"
+          onclick="handleResearchEnter('${d.t}','${d.n}')">Search</button>
+      </div>
+      <!-- Watchlist builder hint — shown when query looks like a watchlist request -->
+      <div id="wl-build-hint" style="display:none;padding:6px 14px;font-size:11px;
+           color:var(--accent);background:var(--bg);border-bottom:1px solid var(--border)">
+        🗂 Looks like a watchlist request —
+        <button class="research-go-btn" style="padding:3px 10px;font-size:11px;margin-left:6px"
+          onclick="buildWatchlistFromQuery()">Build Watchlist</button>
+        <span style="color:var(--muted);margin-left:6px">or Search above for web results</span>
+      </div>
+      <div class="research-output empty" id="research-out">
+        Results will appear here…
+      </div>
+      <div class="research-actions" id="research-actions">
+        <span style="font-size:11px;color:var(--muted);flex:1">
+          Save this research to the ticker summary?
+        </span>
+        <button class="research-save-btn"
+          onclick="saveResearch('${d.t}')">Save to summary</button>
+        <button class="research-discard-btn"
+          onclick="discardResearch()">Discard</button>
+      </div>
+      <!-- Watchlist build result actions -->
+      <div class="research-actions" id="wl-build-actions" style="display:none">
+        <span style="font-size:11px;color:var(--muted);flex:1" id="wl-build-status"></span>
+        <button class="research-save-btn" id="wl-create-btn"
+          onclick="confirmCreateWatchlist()">✓ Create Watchlist</button>
+        <button class="research-discard-btn"
+          onclick="discardWlBuild()">Discard</button>
+      </div>
+    </div>`;
+
+  document.getElementById('workspace').scrollTop = 0;
+}
+
+function fmtMktcap(v) {
+  if (!v)        return '';
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
+  if (v >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`;
+  if (v >= 1e6)  return `$${(v / 1e6).toFixed(1)}M`;
+  return `$${v}`;
+}
+
+// Format raw date/time labels to readable strings per range
+function fmtLabel(raw, range) {
+  if (!raw || raw.length < 5) return raw;
+  try {
+    // 1D / 5D: labels come as "YYYY-MM-DD HH:MM:SS-05:00" (full pandas Timestamp string)
+    // Split on space and take the time part — never use Date() to avoid timezone shift
+    // The synthetic 09:29 anchor point is shown as "open" on the axis
+    if (range === '1D' || range === '5D') {
+      const parts = raw.split(' ');
+      if (parts.length >= 2) {
+        const t = parts[1].substring(0, 5);   // "HH:MM"
+        if (range === '1D') {
+          return t === '09:29' ? 'prev' : t;  // label the anchor as "prev"
+        }
+        return parts[0].substring(5) + ' ' + t;  // "MM-DD HH:MM" for 5D
+      }
+      return raw;
+    }
+    const d = new Date(raw.substring(0, 10) + 'T12:00:00');
+    if (range === '5D')
+      return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    if (['1W', '1M', '3M', '6M', 'YTD'].includes(range))
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
+  } catch { return raw; }
+}
+
+// ── Chart ──────────────────────────────────────────────────────────
+// ── TradingView chart ─────────────────────────────────────────────────────
+
+// Range button → TradingView interval + window
+const TV_INTERVAL = {'1D':'5','5D':'30','1W':'60','1M':'D','3M':'D','6M':'D','YTD':'D','1Y':'W','2Y':'W','3Y':'M'};
+const TV_WINDOW   = {'1D':'1D','5D':'5D','1W':'1W','1M':'1M','3M':'3M','6M':'6M','YTD':'YTD','1Y':'12M','2Y':'24M','3Y':'60M'};
+
+// Known exchange prefixes for common tickers
+const TV_SYMBOLS = {
+  'SPY':'AMEX:SPY','QQQ':'NASDAQ:QQQ','IWM':'AMEX:IWM','DIA':'AMEX:DIA',
+  'GLD':'AMEX:GLD','SLV':'AMEX:SLV','TLT':'NASDAQ:TLT','HYG':'AMEX:HYG',
+  'VIX':'TVC:VIX','DXY':'TVC:DXY','UKOIL':'TVC:UKOIL','GOLD':'TVC:GOLD',
+  'EUFN':'NASDAQ:EUFN','EWY':'AMEX:EWY','KSA':'AMEX:KSA','EZU':'AMEX:EZU',
+  'EIS':'AMEX:EIS','IZRL':'NASDAQ:IZRL','EWG':'AMEX:EWG','EWJ':'AMEX:EWJ',
+  'SCHD':'AMEX:SCHD','VIG':'AMEX:VIG','VYM':'AMEX:VYM','DGRO':'AMEX:DGRO',
+  'SLYV':'AMEX:SLYV','IJS':'AMEX:IJS','VBR':'AMEX:VBR',
+  'XLE':'AMEX:XLE','XLF':'AMEX:XLF','XLK':'AMEX:XLK','XLV':'AMEX:XLV',
+  'KRE':'AMEX:KRE','KBE':'AMEX:KBE',
+  'AAPL':'NASDAQ:AAPL','MSFT':'NASDAQ:MSFT','NVDA':'NASDAQ:NVDA',
+  'GOOGL':'NASDAQ:GOOGL','AMZN':'NASDAQ:AMZN','META':'NASDAQ:META',
+  'TSLA':'NASDAQ:TSLA','AMD':'NASDAQ:AMD','INTC':'NASDAQ:INTC',
+  'JPM':'NYSE:JPM','BAC':'NYSE:BAC','WFC':'NYSE:WFC','GS':'NYSE:GS',
+  'EQNR':'NYSE:EQNR','BP':'NYSE:BP','XOM':'NYSE:XOM','CVX':'NYSE:CVX',
+};
+
+function tvSym(t) { return TV_SYMBOLS[t] || t; }
+
+function buildTVChart() {
+  const container = document.getElementById('tv-chart');
+  if (!container) return;
+  if (selectedChk.size === 0) { clearChart(); return; }
+
+  container.innerHTML = '';  // destroy existing widget
+
+  const tickers  = [...selectedChk];
+  const primary  = tickers[0];
+  const compare  = tickers.slice(1);
+  const interval = TV_INTERVAL[currentRange] || 'D';
+  const rangeVal = TV_WINDOW[currentRange]   || '3M';
+  const isDark   = document.documentElement.getAttribute('data-theme') === 'dark'
+                   || window.matchMedia('(prefers-color-scheme:dark)').matches;
+
+  // Update symbol label in header
+  const lbl = document.getElementById('tv-symbol-label');
+  if (lbl) lbl.textContent = tickers.join(' · ');
+
+  const compareSymbols = compare.slice(0, 9).map(t => ({
+    symbol:   tvSym(t),
+    position: 'SameScale',
+  }));
+
+  try {
+    new TradingView.widget({
+      container_id:      'tv-chart',
+      autosize:          true,
+      symbol:            tvSym(primary),
+      interval:          interval,
+      range:             rangeVal,
+      timezone:          'Etc/UTC',
+      theme:             isDark ? 'dark' : 'light',
+      style:             '2',           // area chart
+      locale:            'en',
+      toolbar_bg:        isDark ? '#1e293b' : '#f8f9fa',
+      enable_publishing: false,
+      hide_top_toolbar:  false,
+      hide_legend:       false,
+      hide_side_toolbar: true,
+      allow_symbol_change: true,
+      save_image:        false,
+      compare_symbols:   compareSymbols,
+    });
+  } catch(e) { console.warn('TV widget error:', e); }
+
+  renderTVLegend(tickers);
+}
+
+function renderTVLegend(tickers) {
+  const el = document.getElementById('chart-legend');
+  if (!el) return;
+  if (!tickers || !tickers.length) {
+    el.innerHTML = '<span style="font-size:11px;color:var(--muted)">Check tickers in the sidebar to compare</span>';
+    return;
+  }
+  el.innerHTML = tickers.map((t, i) => {
+    const c = PALETTE[i % PALETTE.length];
+    return `<div class="leg-item" title="Click to remove" onclick="removeTicker('${t}')">`
+      + `<span class="leg-dot" style="background:${c}"></span>`
+      + `<span style="font-weight:500;color:var(--text)">${t}</span>`
+      + `</div>`;
+  }).join('');
+}
+
+function toggleChart(ticker, event) {
+  event.stopPropagation();
+  if (selectedChk.has(ticker)) {
+    selectedChk.delete(ticker);
+    if (selectedChk.size === 0) clearChart();
+    else buildTVChart();
+  } else {
+    selectedChk.add(ticker);
+    buildTVChart();
+  }
+  updateSelectionUI();
+  render();
+  syncSelectAllChk();
+}
+
+function removeTicker(ticker) {
+  selectedChk.delete(ticker);
+  const chk = document.querySelector(`input[data-ticker="${ticker}"]`);
+  if (chk) chk.checked = false;
+  render();
+  buildTVChart();
+}
+
+function toggleLine(ticker) {
+  // No-op for TradingView — visibility handled by TV widget itself
+}
+
+function clearChart() {
+  const container = document.getElementById('tv-chart');
+  if (container) container.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:center;' +
+    'height:100%;color:var(--muted);font-size:12px">' +
+    'Check tickers in the sidebar to view chart</div>';
+  const el = document.getElementById('chart-legend');
+  if (el) el.innerHTML = '<span style="font-size:11px;color:var(--muted)">Check tickers in the sidebar to compare</span>';
+  const lbl = document.getElementById('tv-symbol-label');
+  if (lbl) lbl.textContent = '';
+}
+
+function setRange(r, btn) {
+  currentRange = r;
+  document.querySelectorAll('.rb').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  if (selectedChk.size > 0) buildTVChart();
+}
+
+// Zoom — TradingView handles internally
+function zoomChart() {}
+function fitYToWindow() {}
+function restoreChartColors() {}
+function renderLegend() {}
+function applyChartFilter() {}
+function showChartCtxMenu(e) { e.preventDefault(); }
+function hideChartCtxMenu() {}
+
+function fetchChart() { buildTVChart(); }
+async function fetchChartAsync() { buildTVChart(); }
+
+// Context menu wire-up (no-op, menu removed)
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {}
+});
+
+
+// ── Ingest-watcher — polls /api/status every 10s, reloads if ticker count changes ──
+// This means after the Chrome extension sends a page, the sidebar updates automatically.
+let _lastTickerCount = 0;
+
+async function checkForNewData() {
+  try {
+    const res  = await fetch('/api/status');
+    if (!res.ok) return;
+    const data = await res.json();
+    const n    = data.tickers_in_json || 0;
+
+    if (_lastTickerCount === 0) {
+      // First check — just record the baseline
+      _lastTickerCount = n;
+      return;
+    }
+    if (n !== _lastTickerCount) {
+      _lastTickerCount = n;
+      // New tickers ingested — silently reload data and refresh UI
+      await loadData();
+      populateFilters();
+      render();
+      // If a ticker detail is open, re-render it with fresh data
+      if (activeRow) {
+        const fresh = allData.find(d => d.t === activeRow);
+        if (fresh) selectRow(activeRow);
+      }
+      toast('↓ ' + n + ' tickers — new data loaded');
+    }
+  } catch (e) { /* server might be busy */ }
+}
+
+setInterval(checkForNewData, 10_000);   // every 10 seconds
+
+// ── Top filter bar sync ───────────────────────────────────────────
+// Mirror a top-filter-bar select change to the hidden sidebar select + re-render
+function syncFilter(hiddenId, topSel) {
+  const hidden = document.getElementById(hiddenId);
+  if (hidden) hidden.value = topSel.value;
+  // Highlight active filter
+  topSel.classList.toggle('active-filter', !!topSel.value);
+  render();
+}
+
+function syncSrcFilter(topSel) {
+  if (_mirrorInProgress) return;   // ignore spurious change during innerHTML copy
+  topSel.classList.toggle('active-filter', !!topSel.value);
+  setSrcDropdown(topSel.value);
+  // Also mirror episode dropdown to top
+  setTimeout(mirrorEpisodesToTop, 50);
+}
+
+function syncWlFilter(topSel) {
+  topSel.classList.toggle('active-filter', !!topSel.value);
+  const hidden = document.getElementById('f-watchlist');
+  if (hidden) hidden.value = topSel.value;
+  setWlFilter(topSel.value);
+  // Show/hide plot button
+  const plotBtn = document.getElementById('wl-plot-btn');
+  if (plotBtn) plotBtn.style.display = topSel.value ? 'flex' : 'none';
+}
+
+// Mirror dynamic options (sector, rec, episode) from hidden selects to top bar
+let _mirrorInProgress = false;  // blocks change events during innerHTML copy
+
+function mirrorDynamicFilters() {
+  _mirrorInProgress = true;
+  const pairs = [
+    ['f-sector',  'tf-sector'],
+    ['f-rec',     'tf-rec'],
+    ['f-episode', 'tf-episode'],
+    ['f-source',  'tf-source'],
+  ];
+  pairs.forEach(([srcId, dstId]) => {
+    const src = document.getElementById(srcId);
+    const dst = document.getElementById(dstId);
+    if (!src || !dst) return;
+    const curVal = dst.value;
+    dst.innerHTML = src.innerHTML;
+    // Restore selection — must happen after innerHTML replace
+    dst.value = curVal;
+    dst.classList.toggle('active-filter', !!dst.value);
+  });
+  _mirrorInProgress = false;
+  // Mirror watchlists
+  mirrorWatchlistsToTop();
+}
+
+function mirrorWatchlistsToTop() {
+  const dst = document.getElementById('tf-watchlist');
+  if (!dst) return;
+  const cur = dst.value;
+  dst.innerHTML = '<option value="">All Watchlists</option>';
+  Object.keys(watchlists).forEach(name => {
+    const o = document.createElement('option');
+    o.value = name; o.textContent = name + ' (' + (watchlists[name]||[]).length + ')';
+    dst.appendChild(o);
+  });
+  dst.value = cur;
+}
+
+function mirrorEpisodesToTop() {
+  const src = document.getElementById('f-episode');
+  const dst = document.getElementById('tf-episode');
+  if (!src || !dst) return;
+  const cur = dst.value;
+  dst.innerHTML = src.innerHTML;
+  dst.value = cur;
+}
+
+// ── Add Ticker modal ──────────────────────────────────────────────
+function openAddTicker() {
+  document.getElementById('add-ticker-panel').classList.add('visible');
+  document.getElementById('atm-ticker').focus();
+}
+
+function closeAddTicker() {
+  document.getElementById('add-ticker-panel').classList.remove('visible');
+}
+
+function clearAddForm() {
+  ['atm-ticker','atm-name','atm-sector','atm-price',
+   'atm-tags','atm-summary','atm-base','atm-bear','atm-bull']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  const src = document.getElementById('atm-source');
+  if (src) src.value = 'My Research';
+  const type = document.getElementById('atm-type');
+  if (type) type.value = 'Stock';
+  const status = document.getElementById('atm-status');
+  if (status) status.value = 'flat';
+}
+
+async function saveAddTicker() {
+  const ticker = (document.getElementById('atm-ticker').value||'').trim().toUpperCase();
+  if (!ticker) { toast('Ticker symbol is required'); return; }
+
+  const btn = document.getElementById('atm-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const res = await fetch('/api/add-ticker', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        ticker,
+        name:       document.getElementById('atm-name').value.trim(),
+        type:       document.getElementById('atm-type').value,
+        sector:     document.getElementById('atm-sector').value.trim(),
+        status:     document.getElementById('atm-status').value,
+        price:      document.getElementById('atm-price').value.trim(),
+        source:     document.getElementById('atm-source').value.trim() || 'My Research',
+        tags:       document.getElementById('atm-tags').value.trim(),
+        summary:    document.getElementById('atm-summary').value.trim(),
+        base:       document.getElementById('atm-base').value.trim(),
+        bear:       document.getElementById('atm-bear').value.trim(),
+        bull:       document.getElementById('atm-bull').value.trim(),
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast((data.action === 'added' ? '✓ Added ' : '✓ Updated ') + ticker);
+      closeAddTicker();
+      clearAddForm();
+      // Reload data so new ticker appears immediately
+      await loadData();
+      populateFilters();
+      render();
+    } else {
+      toast('Error: ' + (data.error || 'unknown'));
+    }
+  } catch(e) {
+    toast('Save failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save ticker';
+  }
+}
+
+// Wire up modal buttons and keyboard shortcut
+document.getElementById('add-ticker-btn').addEventListener('click', openAddTicker);
+document.getElementById('atm-close-btn').addEventListener('click', closeAddTicker);
+document.getElementById('atm-cancel-btn').addEventListener('click', closeAddTicker);
+document.getElementById('atm-save-btn').addEventListener('click', saveAddTicker);
+
+// Close on backdrop click
+document.getElementById('add-ticker-panel').addEventListener('click', function(e) {
+  if (e.target === this) closeAddTicker();
+});
+
+// Uppercase ticker as you type
+document.getElementById('atm-ticker').addEventListener('input', function() {
+  const pos = this.selectionStart;
+  this.value = this.value.toUpperCase();
+  this.setSelectionRange(pos, pos);
+});
+
+// Ctrl+Enter submits
+document.getElementById('atm-summary').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveAddTicker();
+});
+
+// ── Auto-refresh every 5 minutes — only for checked tickers ──────────
+setInterval(async () => {
+  if (!allData.length || selectedChk.size === 0) return;
+  const param = [...selectedChk].join(',');
+  try {
+    await fetch(`/api/cache/clear?tickers=${param}`, { method: 'POST' });
+    const res   = await fetch(`/api/data?tickers=${param}`);
+    const fresh = await res.json();
+    fresh.forEach(u => {
+      const idx = allData.findIndex(d => d.t === u.t);
+      if (idx !== -1) allData[idx] = u;
+    });
+    render();
+    fetchChart();
+  } catch (e) { console.warn('Auto-refresh failed:', e); }
+}, 5 * 60 * 1000);
+
+// ── Case history renderer ─────────────────────────────────────────
+// Case fields store entries separated by "--- YYYY-MM-DD ---" date stamps.
+// Legacy entries (no stamp) are shown as-is with label "Original".
+function renderCaseHistory(raw) {
+  if (!raw || raw === '—') return '<span style="color:var(--muted)">—</span>';
+  // Split on date stamp lines: "--- 2026-03-15 ---"
+  // Match: --- 2026-03-16 --- OR --- 2026-03-16 · model-name ---
+  const parts = raw.split(/---\s*(\d{4}-\d{2}-\d{2}(?:[^-](?:[^-]|-(?!--))*?)?)\s*---/);
+  if (parts.length === 1) {
+    // No history yet — plain legacy entry
+    return '<div class="case-body">' + raw + '</div>';
+  }
+  // parts = [legacy_text, date1, text1, date2, text2, ...]
+  let html = '';
+  const legacy = parts[0].trim();
+  if (legacy) {
+    html += '<div class="case-entry">'
+          + '<div class="case-date">Original</div>'
+          + '<div class="case-body">' + legacy + '</div>'
+          + '</div>';
+  }
+  for (let i = 1; i < parts.length; i += 2) {
+    const date = parts[i];
+    const text = (parts[i+1] || '').trim();
+    if (!text) continue;
+    html += '<div class="case-entry">'
+          + '<div class="case-date">' + date + '</div>'
+          + '<div class="case-body">' + text + '</div>'
+          + '</div>';
+  }
+  return html;
+}
+
+// ── Regenerate bull/bear/base cases ───────────────────────────────
+function updateRegenModel() {
+  const prov  = document.getElementById('regen-provider');
+  const cDiv  = document.getElementById('regen-claude-tiers');
+  const gDiv  = document.getElementById('regen-gemini-tiers');
+  const input = document.getElementById('regen-model');
+  if (!prov) return;
+  if (prov.value === 'gemini') {
+    cDiv.style.display = 'none'; gDiv.style.display = 'flex';
+    const a = gDiv.querySelector('.rmb.active');
+    input.value = a ? a.dataset.regenTier : 'gemini';
+  } else {
+    cDiv.style.display = 'flex'; gDiv.style.display = 'none';
+    const a = cDiv.querySelector('.rmb.active');
+    input.value = a ? a.dataset.regenTier : 'claude-haiku';
+  }
+}
+function setRegenTier(tier) {
+  const prov = document.getElementById('regen-provider');
+  const gId  = (prov && prov.value === 'gemini') ? 'regen-gemini-tiers' : 'regen-claude-tiers';
+  const grp  = document.getElementById(gId);
+  if (grp) grp.querySelectorAll('.rmb').forEach(b => b.classList.remove('active'));
+  const btn  = document.querySelector('[data-regen-tier="' + tier + '"]');
+  if (btn) btn.classList.add('active');
+  const inp  = document.getElementById('regen-model');
+  if (inp) inp.value = tier;
+}
+async function regenCases(ticker, name) {
+  const btn      = document.getElementById('regen-cases-btn');
+  const loadEl   = document.getElementById('cases-loading');
+  if (!btn) return;
+
+  btn.disabled    = true;
+  btn.textContent = '⏳ Researching…';
+  if (loadEl) loadEl.style.display = 'block';
+
+  try {
+    const res  = await fetch('/api/regen-cases', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ticker, name, model: document.getElementById('regen-model')?.value || 'claude-haiku' }),
+    });
+    const data = await res.json();
+    if (!data.ok) { toast('Error: ' + (data.error || 'failed')); return; }
+
+    // Update allData in place
+    const rec = allData.find(d => d.t === ticker);
+    if (rec) {
+      rec.base = data.base;
+      rec.bear = data.bear;
+      rec.bull = data.bull;
+    }
+
+    // Re-render the case cells without re-opening the whole panel
+    const baseEl = document.getElementById('case-base-' + ticker);
+    const bearEl = document.getElementById('case-bear-' + ticker);
+    const bullEl = document.getElementById('case-bull-' + ticker);
+    if (baseEl) baseEl.innerHTML = renderCaseHistory(data.base);
+    if (bearEl) bearEl.innerHTML = renderCaseHistory(data.bear);
+    if (bullEl) bullEl.innerHTML = renderCaseHistory(data.bull);
+
+    toast('Cases updated for ' + ticker + ' (' + data.date + ')');
+    if (loadEl) loadEl.style.display = 'none';
+
+  } catch (e) {
+    toast('Error: ' + e.message);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '✦ Update';
+    if (loadEl) loadEl.style.display = 'none';
+  }
+}
+
+// ── Research panel ────────────────────────────────────────────────
+let _lastResearchTicker  = null;
+let _lastResearchText    = '';
+let _pendingWlTickers    = null;   // tickers returned by watchlist-build
+let _pendingWlReasoning  = '';
+
+// Detect watchlist-building queries
+const WL_KEYWORDS = [
+  'build', 'create', 'make', 'find me', 'suggest', 'pick', 'select',
+  'watchlist', 'watch list', 'portfolio', 'screen', 'filter'
+];
+function isWlQuery(q) {
+  const lower = q.toLowerCase();
+  return WL_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+function handleResearchEnter(ticker, name) {
+  const q = document.getElementById('research-q')?.value?.trim() || '';
+  const hint = document.getElementById('wl-build-hint');
+  if (hint) hint.style.display = (q && isWlQuery(q)) ? 'block' : 'none';
+  runResearch(ticker, name);
+}
+
+async function buildWatchlistFromQuery() {
+  const q       = document.getElementById('research-q')?.value?.trim() || '';
+  const outEl   = document.getElementById('research-out');
+  const goBtn   = document.getElementById('research-go');
+  const actions = document.getElementById('research-actions');
+  const wlActs  = document.getElementById('wl-build-actions');
+  const hint    = document.getElementById('wl-build-hint');
+
+  if (!q) return;
+  if (hint) hint.style.display = 'none';
+
+  outEl.className  = 'research-output';
+  outEl.innerHTML  = '<span style="color:var(--muted);font-style:italic">🗂 Screening database…</span><span class="research-cursor"></span>';
+  goBtn.disabled   = true;
+  if (actions) actions.style.display = 'none';
+  if (wlActs)  wlActs.style.display  = 'none';
+  _pendingWlTickers = null;
+
+  try {
+    const res  = await fetch('/api/watchlist-build', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ query: q, max_results: 15 }),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      outEl.innerHTML = '<span style="color:var(--down)">Error: ' + (data.error || 'failed') + '</span>';
+      return;
+    }
+
+    _pendingWlTickers   = data.tickers || [];
+    _pendingWlReasoning = data.reasoning || '';
+
+    // Show results as clickable ticker chips
+    const chips = _pendingWlTickers.map(t => {
+      const rec = allData.find(d => d.t === t);
+      const name = rec ? rec.n || '' : '';
+      return '<span class="chip" style="cursor:default;margin:2px">' + t + '</span>'
+        + (name ? ' <span style="font-size:11px;color:var(--muted)">' + name + '</span>' : '');
+    }).join('<br>');
+
+    outEl.innerHTML = '<div style="margin-bottom:8px;font-size:12px;color:var(--muted)">'
+      + _pendingWlReasoning + '</div>'
+      + '<div>' + chips + '</div>';
+
+    // Show create watchlist actions
+    if (wlActs) {
+      const statusEl = document.getElementById('wl-build-status');
+      if (statusEl) statusEl.textContent = _pendingWlTickers.length + ' tickers selected — save as watchlist?';
+      wlActs.style.display = 'flex';
+    }
+
+  } catch (e) {
+    outEl.innerHTML = '<span style="color:var(--down)">Error: ' + e.message + '</span>';
+  } finally {
+    goBtn.disabled = false;
+  }
+}
+
+function confirmCreateWatchlist() {
+  if (!_pendingWlTickers || !_pendingWlTickers.length) return;
+  const name = prompt('Watchlist name:', 'AI Selection');
+  if (!name || !name.trim()) return;
+  const n = name.trim();
+  _watchlists[n] = [..._pendingWlTickers];
+  wlSave();
+  renderWatchlistPills();
+  discardWlBuild();
+  toast('Watchlist "' + n + '" created with ' + _pendingWlTickers.length + ' tickers');
+  // Offer to plot it
+  _activeWl = n;
+  document.getElementById('f-watchlist').value = n;
+  renderWatchlistPills();
+  render();
+}
+
+function discardWlBuild() {
+  _pendingWlTickers  = null;
+  _pendingWlReasoning = '';
+  const wlActs = document.getElementById('wl-build-actions');
+  if (wlActs) wlActs.style.display = 'none';
+  const outEl = document.getElementById('research-out');
+  if (outEl) { outEl.innerHTML = 'Results will appear here…'; outEl.className = 'research-output empty'; }
+  const hint = document.getElementById('wl-build-hint');
+  if (hint) hint.style.display = 'none';
+}
+
+function updateResearchModel() {
+  const provider    = document.getElementById('research-provider').value;
+  const claudeDiv   = document.getElementById('claude-tier-toggle');
+  const geminiDiv   = document.getElementById('gemini-tier-toggle');
+  const modelInput  = document.getElementById('research-model');
+
+  if (provider === 'gemini') {
+    claudeDiv.style.display = 'none';
+    geminiDiv.style.display = 'flex';
+    const active = geminiDiv.querySelector('.rmb.active');
+    modelInput.value = active ? active.dataset.tier : 'gemini';
+  } else {
+    claudeDiv.style.display = 'flex';
+    geminiDiv.style.display = 'none';
+    const active = claudeDiv.querySelector('.rmb.active');
+    modelInput.value = active ? active.dataset.tier : 'claude';
+  }
+}
+
+function setResearchTier(tier) {
+  // Only clear active within the currently visible tier group
+  const provider  = document.getElementById('research-provider').value;
+  const groupId   = provider === 'gemini' ? 'gemini-tier-toggle' : 'claude-tier-toggle';
+  const group     = document.getElementById(groupId);
+  if (group) group.querySelectorAll('.rmb').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector('.rmb[data-tier="' + tier + '"]');
+  if (btn) btn.classList.add('active');
+  document.getElementById('research-model').value = tier;
+}
+
+function setGeminiTier(tier) { setResearchTier(tier); }
+
+async function runResearch(ticker, name) {
+  const q       = document.getElementById('research-q')?.value?.trim();
+  const model   = document.getElementById('research-model')?.value || 'claude';
+  const outEl   = document.getElementById('research-out');
+  const goBtn   = document.getElementById('research-go');
+  const actions = document.getElementById('research-actions');
+
+  if (!q) { document.getElementById('research-q')?.focus(); return; }
+  if (!outEl) return;
+
+  // Default query if empty
+  const query = q || `Latest news and developments for ${ticker} (${name})`;
+
+  outEl.className = 'research-output';
+  outEl.innerHTML = '<span style="color:var(--muted);font-style:italic">Searching…</span><span class="research-cursor"></span>';
+  goBtn.disabled  = true;
+  goBtn.classList.add('loading');
+  goBtn.textContent = 'Searching…';
+  actions.classList.remove('visible');
+  _lastResearchTicker = ticker;
+  _lastResearchText   = '';
+  _lastResearchModel  = document.getElementById('research-model')?.value || 'claude';
+
+  try {
+    const res = await fetch('/api/research', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ticker, name, query, model }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    // Stream the response
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();   // keep incomplete line for next chunk
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') break;
+        try {
+          const chunk = JSON.parse(payload);
+          if (chunk.text) {
+            // Clear the "Searching…" placeholder on first real text
+            if (!_lastResearchText) outEl.innerHTML = '';
+            _lastResearchText += chunk.text;
+            // During streaming show plain text — format after completion
+            outEl.innerHTML = _lastResearchText.replace(/\n/g, '<br>')
+              .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+              + '<span class="research-cursor"></span>';
+          }
+          if (chunk.error) throw new Error(chunk.error);
+        } catch (e) {
+          if (e.message !== 'Unexpected end of JSON input') console.warn(e);
+        }
+      }
+    }
+
+    // Final render — use formatSummaryBody for styled bullets + bold
+    const finalText = _lastResearchText.replace(/🔍 Searching the web…\s*/g, '').trim();
+    outEl.innerHTML = finalText
+      ? formatSummaryBody(finalText)
+      : 'No results.';
+    if (_lastResearchText.trim()) actions.classList.add('visible');
+
+  } catch (e) {
+    outEl.innerHTML = `<span style="color:var(--down)">Error: ${e.message}</span>`;
+    console.error('Research error:', e);
+  } finally {
+    goBtn.disabled  = false;
+    goBtn.classList.remove('loading');
+    goBtn.textContent = 'Search';
+  }
+}
+
+async function saveResearch(ticker) {
+  if (!_lastResearchText.trim()) return;
+
+  const today   = new Date();
+  const dateStr = `${today.getMonth()+1}/${today.getDate()}/${today.getFullYear()}`;
+  // Strip the searching indicator line before saving
+  const cleanText = _lastResearchText.replace(/🔍 Searching the web…\s*/g, '').trim();
+  const resModel = _lastResearchModel || document.getElementById('research-model')?.value || 'claude';
+  const section = `=== research:${today.getFullYear()}/${today.getMonth()+1}/${today.getDate()} | Live Research · ${dateStr} · ${resModel} ===\n${cleanText}`;
+
+  try {
+    const res = await fetch('/api/save-research', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ticker, section }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`Research saved to ${ticker}`);
+      // Refresh this ticker's data so the summary re-renders
+      const refreshRes = await fetch(`/api/data?tickers=${ticker}`);
+      const fresh = await refreshRes.json();
+      if (fresh.length) {
+        const idx = allData.findIndex(d => d.t === ticker);
+        if (idx !== -1) allData[idx] = fresh[0];
+        selectRow(ticker);   // re-render detail panel
+      }
+      discardResearch();
+    } else {
+      toast(`Save failed: ${data.error || 'unknown error'}`);
+    }
+  } catch (e) {
+    toast(`Save failed: ${e.message}`);
+  }
+}
+
+function discardResearch() {
+  _lastResearchText = '';
+  _lastResearchTicker = null;
+  const outEl   = document.getElementById('research-out');
+  const actions = document.getElementById('research-actions');
+  const input   = document.getElementById('research-q');
+  if (outEl)   { outEl.innerHTML = 'Results will appear here…'; outEl.className = 'research-output empty'; }
+  if (actions) actions.classList.remove('visible');
+  if (input)   input.value = '';
+}
+
+// ── Fields editor (sector, name, type, status, rec) ───────────────
+function showFieldsEditor(ticker) {
+  const panel = document.getElementById('fields-edit-panel');
+  if (!panel) return;
+  panel.classList.add('visible');
+  document.getElementById('fe-sector')?.focus();
+}
+
+function hideFieldsEditor() {
+  const panel = document.getElementById('fields-edit-panel');
+  if (panel) panel.classList.remove('visible');
+}
+
+async function saveFields(ticker) {
+  const sector = document.getElementById('fe-sector')?.value.trim();
+  const name   = document.getElementById('fe-name')?.value.trim();
+  const type   = document.getElementById('fe-type')?.value;
+  const status = document.getElementById('fe-status')?.value;
+  const rec    = document.getElementById('fe-rec')?.value.trim();
+
+  const fields = {};
+  if (sector !== undefined) fields.sector     = sector || 'N/A';
+  if (name)                 fields.n          = name;
+  if (type)                 fields.y          = type;
+  if (status)               fields.s          = status;
+  if (rec !== undefined)    fields.rec_analyst = rec || '';
+
+  try {
+    const res = await fetch('/api/edit-fields', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ticker, fields }),
+    });
+    const data = await res.json();
+    if (!data.ok) { toast(`Save failed: ${data.error}`); return; }
+
+    // Update allData in-place
+    const rec2 = allData.find(d => d.t === ticker);
+    if (rec2) Object.assign(rec2, fields);
+
+    toast(`Updated ${ticker}`);
+    hideFieldsEditor();
+    populateFilters();   // sector dropdown may need updating
+    render();
+    selectRow(ticker);   // re-render detail panel
+
+  } catch (e) {
+    toast(`Save failed: ${e.message}`);
+  }
+}
+
+// ── Ticker editor ─────────────────────────────────────────────────
+function showTickerEditor(ticker) {
+  const row   = document.getElementById('ticker-edit-row');
+  const input = document.getElementById('ticker-edit-input');
+  if (!row || !input) return;
+  input.value = ticker;
+  row.classList.add('visible');
+  input.focus();
+  input.select();
+}
+
+function hideTickerEditor() {
+  const row = document.getElementById('ticker-edit-row');
+  if (row) row.classList.remove('visible');
+}
+
+async function saveTicker(oldTicker) {
+  const input     = document.getElementById('ticker-edit-input');
+  const newTicker = input ? input.value.trim().toUpperCase() : '';
+
+  if (!newTicker)              { toast('Enter a ticker symbol'); return; }
+  if (newTicker === oldTicker) { hideTickerEditor(); return; }
+
+  // Validate — basic check: 1-12 uppercase alphanumeric chars + dots/dashes
+  if (!/^[A-Z0-9.\-]{1,12}$/.test(newTicker)) {
+    toast('Invalid ticker — use letters, numbers, . or -');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/edit-ticker', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ old_ticker: oldTicker, new_ticker: newTicker }),
+    });
+    const data = await res.json();
+    if (!data.ok) { toast(`Save failed: ${data.error || 'unknown'}`); return; }
+
+    toast(`Ticker updated: ${oldTicker} → ${newTicker}`);
+    hideTickerEditor();
+
+    // Update allData in-place
+    const rec = allData.find(d => d.t === oldTicker);
+    if (rec) {
+      rec.t = newTicker;
+      // Update selection sets
+      if (selectedChk.has(oldTicker)) { selectedChk.delete(oldTicker); selectedChk.add(newTicker); }
+      if (hiddenLines.has(oldTicker)) { hiddenLines.delete(oldTicker); hiddenLines.add(newTicker); }
+      // Update active row
+      if (activeRow === oldTicker) activeRow = newTicker;
+    }
+
+    // Re-render and re-open the detail panel with the new ticker
+    render();
+    selectRow(newTicker);
+    // If ticker was on chart, refresh it
+    if (selectedChk.has(newTicker)) fetchChart();
+
+  } catch (e) {
+    console.error(e);
+    toast(`Save failed: ${e.message}`);
+  }
+}
+
+// ── CSV Export ────────────────────────────────────────────────────
+function exportCSV() {
+  // Determine which tickers to export:
+  // Priority: active watchlist → checked tickers → all visible rows
+  let tickers = [];
+  let filename = 'streetwise-export';
+
+  if (_activeWl && _watchlists[_activeWl]) {
+    // Export active watchlist
+    tickers  = _watchlists[_activeWl].slice();
+    filename = 'watchlist-' + _activeWl.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  } else if (selectedChk.size > 0) {
+    // Export checked tickers
+    tickers  = [...selectedChk];
+    filename = 'selected-tickers';
+  } else {
+    // Export all visible rows in current sort order
+    const rows = document.querySelectorAll('#tb .row');
+    rows.forEach(r => {
+      const chip = r.querySelector('.chip');
+      if (chip) tickers.push(chip.textContent.trim());
+    });
+    filename = 'streetwise-all';
+  }
+
+  if (!tickers.length) { toast('Nothing to export'); return; }
+
+  // Columns to include
+  const COLS = [
+    { key: 't',          header: 'Ticker'      },
+    { key: 'n',          header: 'Name'         },
+    { key: 'y',          header: 'Type'         },
+    { key: 'sector',     header: 'Sector'       },
+    { key: 's',          header: 'Status'       },
+    { key: 'price_fmt',  header: 'Price'        },
+    { key: 'pct_fmt',    header: 'Day %'        },
+    { key: 'rec',        header: 'Analyst Rec'  },
+    { key: 'rec_analyst',header: 'Rec (static)' },
+    { key: 'p',          header: 'Ref Price'    },
+    { key: 'base',       header: 'Base Case'    },
+    { key: 'bear',       header: 'Bear Case'    },
+    { key: 'bull',       header: 'Bull Case'    },
+    { key: 'e',          header: 'Episodes'     },
+    { key: 'src',        header: 'Sources'      },
+  ];
+
+  // Status map for readable labels
+  const ST = { hot:'Momentum', rot:'Rotating', pull:'Pullback', press:'Pressure',
+               dip:'Dip Buy',  rec:'Recovery', caut:'Caution',  flat:'Neutral' };
+
+  // CSV escape: wrap in quotes if value contains comma, quote or newline
+  function esc(v) {
+    if (v == null) return '';
+    const s = String(v).replace(/\n/g, ' ').replace(/\r/g, '');
+    return (s.includes(',') || s.includes('"'))
+      ? '"' + s.replace(/"/g, '""') + '"'
+      : s;
+  }
+
+  // Header row
+  const rows = [COLS.map(c => esc(c.header)).join(',')];
+
+  // Data rows — look up each ticker in allData
+  tickers.forEach(ticker => {
+    const d = allData.find(x => x.t === ticker);
+    if (!d) return;
+    const row = COLS.map(c => {
+      const k = c.key;
+      let v = d[k];
+      if (k === 's')   v = ST[v] || v || '';
+      if (k === 'e')   v = (v || []).join(' | ');
+      if (k === 'src') v = (v || []).join(' | ');
+      return esc(v);
+    });
+    rows.push(row.join(','));
+  });
+
+  const csv     = rows.join('\r\n');
+  const blob    = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url     = URL.createObjectURL(blob);
+  const link    = document.createElement('a');
+  const date    = new Date().toISOString().slice(0, 10);
+  link.href     = url;
+  link.download = `${filename}-${date}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  toast(`Exported ${tickers.length} tickers → ${link.download}`);
+}
+
+// ── Watchlists ────────────────────────────────────────────────────
+// Stored in localStorage as { "My Picks": ["AAPL","SCHD"], ... }
+// Colours cycle through a small palette for the pills
+
+const WL_COLORS = [
+  ['#dbeafe','#1e40af'], ['#dcfce7','#166534'], ['#fef3c7','#92400e'],
+  ['#f3e8ff','#6b21a8'], ['#ffe4e6','#be123c'], ['#cffafe','#155e75'],
+];
+
+let _watchlists    = {};     // { name: [ticker, ...] }
+let _activeWl      = null;   // currently filtered watchlist name
+let _ctxTicker     = null;   // ticker the context menu is open for
+
+function wlLoad() {
+  try { _watchlists = JSON.parse(localStorage.getItem('wl_data') || '{}'); }
+  catch { _watchlists = {}; }
+}
+
+function wlSave() {
+  localStorage.setItem('wl_data', JSON.stringify(_watchlists));
+}
+
+function wlColor(name) {
+  const names = Object.keys(_watchlists);
+  return WL_COLORS[names.indexOf(name) % WL_COLORS.length] || WL_COLORS[0];
+}
+
+// ── Context menu ────────────────────────────────────────────────────
+function showCtxMenu(event, ticker) {
+  event.preventDefault();
+  event.stopPropagation();
+  hideChartCtxMenu();
+  _ctxTicker = ticker;
+
+  const menu  = document.getElementById('ctx-menu');
+  const lbl   = document.getElementById('ctx-ticker-lbl');
+  const items = document.getElementById('ctx-wl-items');
+  lbl.textContent = ticker;
+
+  // Build watchlist entries
+  const names = Object.keys(_watchlists);
+  if (!names.length) {
+    items.innerHTML = '<div class="ctx-item" style="color:var(--muted);cursor:default">No watchlists yet</div>';
+  } else {
+    items.innerHTML = names.map(n => {
+      const has = (_watchlists[n] || []).includes(ticker);
+      const [bg, fg] = wlColor(n);
+      return '<div class="ctx-item" onclick="ctxToggleWl(' + JSON.stringify(n) + ')">'
+        + '<span style="width:10px;height:10px;border-radius:2px;background:' + fg + ';flex-shrink:0"></span>'
+        + '<span>' + (has ? '✓ ' : '') + n + '</span>'
+        + (has ? '<span class="ctx-wl-name">Remove</span>' : '<span class="ctx-wl-name">Add</span>')
+        + '</div>';
+    }).join('');
+  }
+
+  // Position near cursor, clamp to viewport
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = event.clientX, y = event.clientY;
+  menu.style.display = 'block';
+  const mw = menu.offsetWidth || 190, mh = menu.offsetHeight || 120;
+  menu.style.display = '';
+  if (x + mw > vw - 8) x = vw - mw - 8;
+  if (y + mh > vh - 8) y = vh - mh - 8;
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  // Populate delete watchlist options if any watchlists exist
+  const delEl = document.getElementById('ctx-del-wl-items');
+  if (delEl) {
+    const names = Object.keys(_watchlists);
+    delEl.innerHTML = names.length
+      ? '<div class="ctx-sep"></div>'
+        + names.map(n =>
+            '<div class="ctx-item danger" onclick="deleteWl(event,' + JSON.stringify(n) + ')">'
+            + '<span>🗑</span> Delete "' + n + '"'
+            + '</div>'
+          ).join('')
+      : '';
+  }
+
+  menu.classList.add('visible');
+}
+
+function hideCtxMenu() {
+  document.getElementById('ctx-menu').classList.remove('visible');
+  _ctxTicker = null;
+}
+
+function ctxToggleWl(name) {
+  if (!_ctxTicker) return;
+  const list = _watchlists[name] || [];
+  const idx  = list.indexOf(_ctxTicker);
+  if (idx === -1) list.push(_ctxTicker);
+  else            list.splice(idx, 1);
+  _watchlists[name] = list;
+  wlSave();
+  renderWatchlistPills();
+  hideCtxMenu();
+  toast(idx === -1 ? _ctxTicker + ' added to ' + name : _ctxTicker + ' removed from ' + name);
+}
+
+function ctxNewWatchlist() {
+  const name = prompt('Watchlist name:');
+  if (!name || !name.trim()) return;
+  const n = name.trim();
+  if (_watchlists[n]) { toast('Watchlist already exists'); return; }
+  _watchlists[n] = _ctxTicker ? [_ctxTicker] : [];
+  wlSave();
+  renderWatchlistPills();
+  hideCtxMenu();
+  toast('Created watchlist: ' + n + (_ctxTicker ? ' with ' + _ctxTicker : ''));
+}
+
+// ── Watchlist dropdown ──────────────────────────────────────────────
+function renderWatchlistPills() {
+  // Rebuild the dropdown options
+  const sel     = document.getElementById('f-watchlist');
+  const plotBtn = document.getElementById('wl-plot-btn');
+  const row     = document.getElementById('watchlist-row');
+  if (!sel) return;
+
+  const names   = Object.keys(_watchlists);
+  const current = _activeWl || '';
+
+  // Keep "All Tickers" + one option per watchlist
+  sel.innerHTML = '<option value="">All Tickers</option>'
+    + names.map(n => {
+        const count = (_watchlists[n] || []).length;
+        return '<option value="' + n + '"' + (n === current ? ' selected' : '') + '>'
+          + n + ' (' + count + ')</option>';
+      }).join('');
+
+  // Show/hide the row and plot button
+  if (row) row.style.display = names.length ? 'flex' : 'none';
+  if (plotBtn) plotBtn.style.display = _activeWl ? 'block' : 'none';
+}
+
+function setWlFilter(name) {
+  _activeWl = name || null;
+  renderWatchlistPills();
+  render();
+}
+
+async function plotWatchlist() {
+  if (!_activeWl) return;
+  const tickers = _watchlists[_activeWl] || [];
+  if (!tickers.length) { toast('Watchlist is empty'); return; }
+
+  // Select exactly the watchlist tickers on the chart
+  // Clear existing selection first
+  selectedChk.clear();
+  hiddenLines.clear();
+  tickers.forEach(t => selectedChk.add(t));
+  updateSelectionUI();
+  syncSelectAllChk();
+  render();
+
+  toast('Plotting ' + tickers.length + ' tickers from "' + _activeWl + '"');
+  await fetchChart();
+}
+
+function deleteWl(event, name) {
+  event.stopPropagation();
+  if (!confirm('Delete watchlist "' + name + '"?')) return;
+  delete _watchlists[name];
+  if (_activeWl === name) _activeWl = null;
+  wlSave();
+  renderWatchlistPills();
+  render();
+  toast('Deleted watchlist: ' + name);
+}
+
+// ── Boot ───────────────────────────────────────────────────────────
+loadSourceLabels().then(() => loadData());
+wlLoad();
+renderWatchlistPills();
+
+// Close context menu on any click outside it
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('ctx-menu').contains(e.target)) hideCtxMenu();
+});
+
+// Legend item click — remove ticker from chart
+document.addEventListener('click', (e) => {
+  const item = e.target.closest('.leg-item[data-ticker]');
+  if (item) removeTicker(item.dataset.ticker);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideCtxMenu();
+});
+</script>
+</body>
+</html>

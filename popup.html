@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Barrons → Streetwise</title>
+<style>
+  body { font-family: Arial, sans-serif; width: 340px; padding: 12px; margin: 0; background: #1a1a2e; color: #e0e0e0; }
+  h2   { margin: 0 0 10px; font-size: 14px; color: #8ab4f8; }
+  label { display: block; font-size: 11px; color: #aaa; margin: 6px 0 2px; }
+  select, input[type=text] {
+    width: 100%; box-sizing: border-box; background: #2a2a3e; color: #e0e0e0;
+    border: 1px solid #444; border-radius: 4px; padding: 5px 7px; font-size: 12px;
+  }
+  .row   { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button {
+    margin-top: 10px; width: 100%; padding: 8px; background: #1a73e8;
+    color: #fff; border: none; border-radius: 4px; font-size: 13px; cursor: pointer;
+  }
+  button:hover  { background: #1558b0; }
+  button:disabled { background: #555; cursor: default; }
+  #status { margin-top: 8px; font-size: 11px; min-height: 16px; color: #8ab4f8; white-space: pre-wrap; }
+  #log    { margin-top: 6px; font-size: 10px; color: #888; max-height: 120px; overflow-y: auto; white-space: pre-wrap; }
+  .hint   { font-size: 10px; color: #666; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h2>Barrons → Streetwise</h2>
+
+<label>Source</label>
+<select id="source">
+  <option value="ian|Barron's Ian Salisbury">Barron's Ian Salisbury</option>
+  <option value="stw|Barron's Streetwise">Barron's Streetwise</option>
+  <option value="bl|Barrons Live">Barrons Live</option>
+  <option value="div|Dividends">Dividends</option>
+</select>
+
+<div class="row">
+  <div>
+    <label>Date (M/D)</label>
+    <input id="date" type="text" placeholder="3/18">
+  </div>
+  <div>
+    <label>Year</label>
+    <input id="year" type="text" placeholder="2026">
+  </div>
+</div>
+
+<label>Model</label>
+<select id="model">
+  <option value="claude-haiku">Claude Haiku (fast)</option>
+  <option value="claude-sonnet">Claude Sonnet</option>
+  <option value="gemini-flash">Gemini Flash</option>
+  <option value="gemini-pro">Gemini Pro</option>
+</select>
+
+<label>Server</label>
+<input id="server" type="text" value="http://localhost:5000">
+
+<button id="btn">Send Article</button>
+<div id="status"></div>
+<div id="log"></div>
+
+<script>
+// Prefill date/year from today
+const now = new Date();
+document.getElementById("date").value = `${now.getMonth()+1}/${now.getDate()}`;
+document.getElementById("year").value = now.getFullYear();
+
+// Restore saved prefs
+chrome.storage.local.get(["server","model","source"], s => {
+  if (s.server) document.getElementById("server").value = s.server;
+  if (s.model)  document.getElementById("model").value  = s.model;
+  if (s.source) document.getElementById("source").value = s.source;
+});
+
+document.getElementById("btn").addEventListener("click", async () => {
+  const btn    = document.getElementById("btn");
+  const status = document.getElementById("status");
+  const logEl  = document.getElementById("log");
+  btn.disabled = true;
+  status.textContent = "Extracting article…";
+  logEl.textContent  = "";
+
+  const server = document.getElementById("server").value.trim().replace(/\/$/, "");
+  const model  = document.getElementById("model").value;
+  const srcVal = document.getElementById("source").value;   // "prefix|Label"
+  const [prefix, sourceLabel] = srcVal.split("|");
+  const date   = document.getElementById("date").value.trim();
+  const year   = document.getElementById("year").value.trim();
+
+  // Save prefs
+  chrome.storage.local.set({ server, model, source: srcVal });
+
+  try {
+    // Run in the active tab to extract text + anchors
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        // ── Grab article container ─────────────────────────────────────────
+        const articleEl =
+          document.querySelector('article') ||
+          document.querySelector('[class*="article-body"]') ||
+          document.querySelector('[class*="ArticleBody"]') ||
+          document.querySelector('main') ||
+          document.body;
+
+        // ── Plain text ─────────────────────────────────────────────────────
+        const text = articleEl.innerText || articleEl.textContent || "";
+
+        // ── Anchors: blue underlined company/stock links ───────────────────
+        // Collect all <a> tags that look like stock or company references.
+        // Barron's links stocks as: /market-data/stocks/AAPL or /quote/AAPL
+        // We also capture ANY anchor whose text is reasonably short (likely a name, not a nav item).
+        const anchors = [];
+        const seen    = new Set();
+        articleEl.querySelectorAll("a[href]").forEach(a => {
+          const href = a.href || "";
+          const text = (a.innerText || a.textContent || "").trim();
+          // Skip empty, very long (nav menus), or duplicate entries
+          if (!text || text.length > 60 || seen.has(text.toLowerCase())) return;
+          // Skip pure navigation / subscription links
+          if (/subscribe|sign.?in|log.?in|barrons\.com\/?$|barrons\.com\/(?:video|podcasts|news)\//i.test(href)) return;
+          // Include if URL path looks like a stock/quote link, OR the text looks like a company name
+          const isStockUrl = /\/(?:stocks?|quote|symbol|market-data)\/[A-Z]/i.test(href);
+          const isCompanyName = /^[A-Z][a-zA-Z0-9&\.\, ]{2,50}$/.test(text) && !/^(The|And|But|For|With|From|This|That|These|Those|Read|More|Also|Here|View|See)$/i.test(text);
+          if (isStockUrl || isCompanyName) {
+            seen.add(text.toLowerCase());
+            anchors.push({ text, href });
+          }
+        });
+
+        return {
+          text,
+          title: document.title || "",
+          anchors
+        };
+      }
+    });
+
+    if (!result || !result.result) throw new Error("Could not extract article content.");
+    const { text, title, anchors } = result.result;
+    if (!text || text.trim().length < 100) throw new Error("Article text too short — is this a Barron's article page?");
+
+    status.textContent = `Sending (${(text.length/1000).toFixed(1)}k chars, ${anchors.length} company links)…`;
+
+    const resp = await fetch(`${server}/api/ingest-page`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, title, date, year, source: sourceLabel, prefix, model, anchors })
+    });
+
+    const data = await resp.json();
+
+    if (data.ok) {
+      status.textContent = `Done: +${data.added} added, ~${data.updated} updated (${data.tickers?.join(", ") || ""})`;
+    } else {
+      status.textContent = `Error: ${data.error}`;
+    }
+
+    if (data.log && data.log.length) {
+      logEl.textContent = data.log.join("\n");
+    }
+
+  } catch (err) {
+    status.textContent = `Failed: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

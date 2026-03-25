@@ -1,0 +1,33 @@
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+key.txt
+*.env
+.env*
+secrets.*
+
+# ── Large binaries ────────────────────────────────────────────────────────────
+*.exe
+cloudflared*
+
+# ── Personal / generated data ─────────────────────────────────────────────────
+streetwise_data.json
+streetwise_data.json.*
+price_history.db
+
+# ── Backups ───────────────────────────────────────────────────────────────────
+*.bak
+*.bak.*
+*.enc_bak
+server.py.bak
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# ── OS noise ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

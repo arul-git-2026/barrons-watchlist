@@ -1,0 +1,2061 @@
+"""
+Streetwise Terminal — server.py
+──────────────────────────────────────────────────────────────────────────────
+Data sources
+  Live quotes  →  Yahoo Finance via yfinance (cached in memory, TTL 5 min)
+  Price history→  price_history.db (SQLite) — built by history_manager.py
+                  Falls back to Yahoo Finance when DB rows are missing,
+                  then saves the new rows to DB for next time.
+  Static data  →  streetwise_data.json
+
+Install
+-------
+  pip install flask flask-cors yfinance
+"""
+
+from flask import Flask, jsonify, send_file, request
+import yfinance as yf
+import sqlite3
+import json
+import os
+import time
+import logging
+from datetime import datetime, date, timedelta
+from flask_cors import CORS
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+import sys
+
+class _ColourFormatter(logging.Formatter):
+    """Coloured, timestamped terminal output."""
+    RESET  = "\033[0m"
+    BOLD   = "\033[1m"
+    DIM    = "\033[2m"
+    CYAN   = "\033[36m"
+    GREEN  = "\033[32m"
+    YELLOW = "\033[33m"
+    RED    = "\033[31m"
+    BLUE   = "\033[34m"
+    MAGENTA= "\033[35m"
+
+    LEVEL_COLOURS = {
+        "DEBUG":    "\033[2m",          # dim
+        "INFO":     "\033[36m",          # cyan
+        "WARNING":  "\033[33m",          # yellow
+        "ERROR":    "\033[31m",          # red
+        "CRITICAL": "\033[1m\033[31m",  # bold red
+    }
+    LEVEL_ICONS = {
+        "DEBUG":    "·",
+        "INFO":     "●",
+        "WARNING":  "⚠",
+        "ERROR":    "✗",
+        "CRITICAL": "✗✗",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        ts      = self.formatTime(record, "%H:%M:%S")
+        level   = record.levelname
+        colour  = self.LEVEL_COLOURS.get(level, "")
+        icon    = self.LEVEL_ICONS.get(level, "·")
+        msg     = record.getMessage()
+
+        # Dim timestamp, coloured icon+level, normal message
+        return (
+            f"{self.DIM}{ts}{self.RESET}  "
+            f"{colour}{icon} {level:<8}{self.RESET} "
+            f"{msg}"
+        )
+
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(_ColourFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
+log = logging.getLogger(__name__)
+
+# Silence Flask's noisy default request logger — we print our own
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
+app = Flask(__name__)
+CORS(app)
+
+@app.errorhandler(Exception)
+def _handle_exception(e):
+    import traceback
+    log.error(f"Unhandled {type(e).__name__}: {e} | {traceback.format_exc()[:400]}")
+    return jsonify({"ok": False, "error": str(e), "type": type(e).__name__}), 500
+
+@app.errorhandler(404)
+def _handle_404(e):
+    return jsonify({"ok": False, "error": "Not found"}), 404
+
+# ── Token pricing (per million tokens, March 2026) ────────────────────────────
+_TOKEN_PRICES = {
+    "claude-haiku-4-5-20251001": {"input": 0.80,  "output": 4.00},
+    "claude-haiku-4-5":          {"input": 0.80,  "output": 4.00},
+    "claude-sonnet-4-5":         {"input": 3.00,  "output": 15.00},
+    "claude-opus-4-5":           {"input": 15.00, "output": 75.00},
+}
+
+def calc_cost(response) -> tuple[int, int, float]:
+    """Return (input_tokens, output_tokens, cost_usd) from an API response."""
+    usage  = getattr(response, "usage", None)
+    inp    = getattr(usage, "input_tokens",  0) if usage else 0
+    out    = getattr(usage, "output_tokens", 0) if usage else 0
+    model  = getattr(response, "model", "claude-haiku-4-5-20251001")
+    prices = _TOKEN_PRICES.get(model, _TOKEN_PRICES["claude-haiku-4-5-20251001"])
+    cost   = (inp * prices["input"] + out * prices["output"]) / 1_000_000
+    return inp, out, cost
+
+@app.before_request
+def _log_request():
+    """Print every incoming request to the terminal."""
+    import flask
+    flask.g._req_start = time.time()
+    # Don't clutter the terminal with the auto-refresh polling
+    if request.path not in ("/api/data",) or request.args.get("tickers"):
+        log.info(f"→ {request.method} {request.full_path.rstrip('?')}")
+
+@app.after_request
+def _log_response(response):
+    """Print response status + elapsed time."""
+    import flask
+    elapsed = (time.time() - getattr(flask.g, "_req_start", time.time())) * 1000
+    path    = request.path
+    # Skip noisy silent auto-refreshes
+    if path == "/api/data" and not request.args.get("tickers"):
+        return response
+    status  = response.status_code
+    colour  = "\033[32m" if status < 300 else "\033[33m" if status < 400 else "\033[31m"
+    reset   = "\033[0m"
+    log.info(f"← {colour}{status}{reset}  {path}  {elapsed:.0f}ms")
+    return response
+
+# ── Config ────────────────────────────────────────────────────────────────────
+DATA_FILE = "streetwise_data.json"
+SOURCES_FILE = "sources.json"
+DB_FILE   = "price_history.db"
+CACHE_TTL = 300     # seconds before a cached live quote is considered stale
+
+# All supported history ranges
+# key → (days_back_for_db_query, yf_period, yf_interval)
+# days_back=None means YTD (Jan 1 of current year)
+# 1D and 5D use intraday intervals — never stored in DB, always live from Yahoo
+RANGES = {
+    "1D":  (1,    "1d",   "5m"),
+    "5D":  (5,    "5d",   "1h"),
+    "1W":  (7,    "5d",   "1d"),
+    "1M":  (30,   "1mo",  "1d"),
+    "3M":  (90,   "3mo",  "1d"),
+    "6M":  (180,  "6mo",  "1d"),
+    "YTD": (None, "ytd",  "1d"),
+    "1Y":  (365,  "1y",   "1d"),
+    "2Y":  (730,  "2y",   "1wk"),
+    "3Y":  (1095, "3y",   "1wk"),
+}
+
+# Minimum DB rows expected per range before trusting the DB
+# 1D and 5D are always fetched live from Yahoo (intraday)
+MIN_ROWS = {
+    "1D":  0, "5D":  0,
+    "1W":  3, "1M":  15,
+    "3M":  45, "6M": 90,
+    "YTD": 5, "1Y":  200,
+    "2Y":  400, "3Y": 600,
+}
+
+# Tickers whose Yahoo Finance symbol differs from the stored key
+YAHOO_MAP = {
+    "WALMEX":  "WALMEX.MX",
+    "000660":  "000660.KS",
+    "SSNLF":   "005930.KS",
+    "2282.HK": "2282.HK",
+    "FRFHF":   "FRFHF",
+}
+
+# ── In-memory live quote cache ────────────────────────────────────────────────
+# { "AAPL": { ...quote fields..., "_ts": epoch_float } }
+_cache: dict = {}
+
+def cache_get(ticker: str) -> dict | None:
+    entry = _cache.get(ticker)
+    if entry and (time.time() - entry.get("_ts", 0)) < CACHE_TTL:
+        return {k: v for k, v in entry.items() if k != "_ts"}
+    return None
+
+def cache_set(ticker: str, data: dict):
+    _cache[ticker] = {**data, "_ts": time.time()}
+
+def cache_expire(tickers: list[str]):
+    """Set _ts to 0 so the next fetch goes to Yahoo Finance."""
+    for t in tickers:
+        if t in _cache:
+            _cache[t]["_ts"] = 0
+    log.info(f"Cache expired: {tickers}")
+
+# ── Static data ───────────────────────────────────────────────────────────────
+
+def load_data_raw() -> list[dict]:
+    """Load ALL records including __meta__ entries."""
+    if not os.path.exists(DATA_FILE):
+        log.warning(f"{DATA_FILE} not found")
+        return []
+    try:
+        with open(DATA_FILE, encoding="utf-8", errors="replace") as f:
+            return json.load(f)
+    except Exception as e:
+        log.error(f"Failed to load {DATA_FILE}: {e}")
+        return []
+
+
+def load_data() -> list[dict]:
+    """Load ticker records only — skips __meta__ entries."""
+    return [r for r in load_data_raw() if not r.get("__meta__")]
+
+
+def load_sources() -> dict:
+    """Read __sources__ meta-record from streetwise_data.json."""
+    for rec in load_data_raw():
+        if rec.get("t") == "__sources__":
+            return rec.get("sources") or {}
+    return {}
+
+
+def save_sources(registry: dict):
+    """Write __sources__ meta-record back into streetwise_data.json atomically."""
+    db    = load_data_raw()
+    found = False
+    for rec in db:
+        if rec.get("t") == "__sources__":
+            rec["sources"] = registry
+            found = True
+            break
+    if not found:
+        db.insert(0, {"t": "__sources__", "__meta__": True, "sources": registry})
+    tmp = DATA_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, DATA_FILE)
+
+
+def save_tickers(ticker_records: list):
+    """Atomically save ticker records, preserving __sources__ meta-record."""
+    raw   = load_data_raw()
+    meta  = [r for r in raw if r.get("__meta__")]
+    tmap  = {r["t"]: r for r in ticker_records if r.get("t")}
+    final = meta + list(tmap.values())
+    tmp   = DATA_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(final, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, DATA_FILE)
+
+
+def load_data_compat() -> list[dict]:
+    """Alias kept for any code that still calls load_data() expecting raw list."""
+    return load_data()
+
+# ── SQLite helpers ────────────────────────────────────────────────────────────
+
+def get_db() -> sqlite3.Connection | None:
+    if not os.path.exists(DB_FILE):
+        return None
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def db_get_history(ticker: str, start: str, end: str) -> list[tuple]:
+    """
+    Read (date, close) rows from the DB for a date range.
+    Returns list sorted ascending, or [] if DB is missing / no rows found.
+    """
+    conn = get_db()
+    if not conn:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT date, close FROM prices "
+            "WHERE ticker = ? AND date >= ? AND date <= ? "
+            "ORDER BY date ASC",
+            (ticker.upper(), start, end)
+        ).fetchall()
+        return [(r["date"], r["close"]) for r in rows]
+    except Exception as e:
+        log.warning(f"DB read failed for {ticker}: {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def db_upsert(ticker: str, rows: list[tuple]):
+    """Write (date, close) rows to the DB, creating the table if needed."""
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS prices (
+            ticker TEXT NOT NULL,
+            date   TEXT NOT NULL,
+            close  REAL NOT NULL,
+            PRIMARY KEY (ticker, date)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ticker_date ON prices (ticker, date)"
+    )
+    data = [(ticker.upper(), d, c) for d, c in rows if d and c and c > 0]
+    if data:
+        conn.executemany(
+            "INSERT OR REPLACE INTO prices (ticker, date, close) VALUES (?,?,?)",
+            data
+        )
+        conn.commit()
+    conn.close()
+
+# ── Yahoo Finance helpers ─────────────────────────────────────────────────────
+
+def currency_symbol(cur: str) -> str:
+    return {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "KRW": "₩"}.get(cur, cur + " ")
+
+
+# Yahoo Finance quoteType codes that are NOT meaningful sector names
+_QUOTE_TYPE_NOISE = {
+    "ECNQQUOTE", "EQUITY", "ETF", "MUTUALFUND", "INDEX",
+    "CURRENCY", "CRYPTOCURRENCY", "FUTURE", "OPTION",
+}
+
+def _clean_sector(info: dict) -> str:
+    """
+    Return a clean sector string from a Yahoo Finance info dict.
+    Yahoo returns sector=None for many international stocks and falls back
+    to quoteType which contains internal codes like ECNQQUOTE, EQUITY etc.
+    We only use quoteType if it looks like a real sector name.
+    """
+    sector = info.get("sector", "") or ""
+    if sector and sector.upper() not in _QUOTE_TYPE_NOISE:
+        return sector
+
+    # No real sector — try quoteType but only keep human-readable values
+    qt = (info.get("quoteType") or "").upper()
+    if qt in _QUOTE_TYPE_NOISE:
+        return "N/A"
+
+    # quoteType has a real label (rare but possible)
+    return qt.title() if qt else "N/A"
+
+
+def fetch_quote(ticker: str) -> dict:
+    """Return live quote for one ticker. Uses in-memory cache first."""
+    hit = cache_get(ticker)
+    if hit:
+        log.debug(f"  cache hit: {ticker}")
+        return hit
+    log.info(f"  fetching live quote: {ticker}")
+
+    y_sym = YAHOO_MAP.get(ticker, ticker)
+    try:
+        info  = yf.Ticker(y_sym).info
+        cur   = info.get("currency", "USD")
+        price = info.get("currentPrice") or info.get("regularMarketPrice") or 0
+        prev  = info.get("regularMarketPreviousClose") or price
+        diff  = price - prev
+        pct   = (diff / prev * 100) if prev else 0
+        rec_r = (info.get("recommendationKey") or "n/a").lower()
+        rec   = rec_r.replace("_", " ").title() if rec_r != "n/a" else "N/A"
+        data  = {
+            "price_fmt":  f"{currency_symbol(cur)}{price:,.2f}",
+            "price_raw":  price,
+            "diff_fmt":   f"{'+' if diff >= 0 else ''}{diff:,.2f}",
+            "pct_fmt":    f"{'+' if pct >= 0 else ''}{pct:.2f}%",
+            "pct_raw":    round(pct, 3),
+            "is_up":      diff >= 0,
+            "sector":     _clean_sector(info),
+            "rec":        rec,
+            "mktcap":     info.get("marketCap"),
+            "pe":         info.get("trailingPE") or info.get("forwardPE"),
+            "div_yield":  info.get("dividendYield"),   # Yahoo returns e.g. 0.92 meaning 0.92%
+            "52w_high":   info.get("fiftyTwoWeekHigh"),
+            "52w_low":    info.get("fiftyTwoWeekLow"),
+            "fetched_at": datetime.utcnow().isoformat() + "Z",
+        }
+    except Exception as e:
+        log.warning(f"Quote failed for {y_sym}: {e}")
+        data = {
+            "price_fmt": "N/A", "price_raw": 0,
+            "diff_fmt":  "—",   "pct_fmt":  "—",
+            "pct_raw":   0,     "is_up":    True,
+            "sector":    "N/A", "rec":      "N/A",
+            "fetched_at": None,
+        }
+    cache_set(ticker, data)
+    return data
+
+
+def fetch_yf_history(ticker: str, range_key: str) -> list[tuple] | None:
+    """
+    Fetch history from Yahoo Finance and save daily rows to DB.
+    Returns [(date_str, close), ...] or None on failure.
+
+    For 1D: prepends the previous close as the first data point so the
+    chart baseline matches Google/Yahoo Finance (% change from prev close).
+    """
+    _, period, interval = RANGES[range_key]
+    y_sym = YAHOO_MAP.get(ticker, ticker)
+    try:
+        tk   = yf.Ticker(y_sym)
+        hist = tk.history(period=period, interval=interval, auto_adjust=True)
+        closes = hist["Close"].dropna()
+        if closes.empty:
+            return None
+
+        # For intraday (1D/5D) keep the full timestamp so the widget can show HH:MM
+        # For daily/weekly use date-only strings (what the DB stores)
+        if interval in ("1d", "1wk"):
+            rows = [(str(d.date()), round(float(v), 4)) for d, v in zip(closes.index, closes)]
+            db_upsert(ticker, rows)
+            log.info(f"Saved {len(rows)} rows to DB for {ticker} ({range_key})")
+        else:
+            rows = [(str(d), round(float(v), 4)) for d, v in zip(closes.index, closes)]
+
+        # ── 1D baseline fix ───────────────────────────────────────────────────
+        # build_series() normalises everything relative to rows[0].
+        # For 1D we want rows[0] = previous close so % change matches
+        # Google Finance / Yahoo Finance exactly.
+        if range_key == "1D":
+            try:
+                info       = tk.info
+                prev_close = (
+                    info.get("regularMarketPreviousClose") or
+                    info.get("previousClose")
+                )
+                if prev_close and prev_close > 0:
+                    # Synthesise a label just before market open (09:29)
+                    # using the date of the first real bar
+                    first_ts   = rows[0][0] if rows else ""
+                    date_part  = first_ts.split(" ")[0] if " " in first_ts else first_ts[:10]
+                    anchor_lbl = f"{date_part} 09:29:00-05:00"
+                    rows.insert(0, (anchor_lbl, round(float(prev_close), 4)))
+                    log.info(f"1D baseline for {ticker}: prev_close={prev_close}")
+            except Exception as be:
+                log.warning(f"Could not fetch prev_close for {ticker}: {be}")
+
+        return rows
+    except Exception as e:
+        log.warning(f"YF history failed for {y_sym} ({range_key}): {e}")
+        return None
+
+# ── Series builder ────────────────────────────────────────────────────────────
+
+def date_range_for(range_key: str) -> tuple[str, str]:
+    today = date.today()
+    if range_key == "YTD":
+        start = date(today.year, 1, 1)
+    else:
+        days  = RANGES[range_key][0] or 365
+        start = today - timedelta(days=days)
+    return start.isoformat(), today.isoformat()
+
+
+def build_series(rows: list[tuple]) -> dict:
+    """
+    Normalise a [(date_str, close), ...] list into a % return series.
+    Returns {"labels", "values", "abs_values"} or {} if invalid.
+    """
+    if not rows or rows[0][1] == 0:
+        return {}
+    base = rows[0][1]
+    return {
+        "labels":     [r[0] for r in rows],
+        "values":     [round((r[1] / base - 1) * 100, 3) for r in rows],
+        "abs_values": [r[1] for r in rows],
+    }
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.route("/sender")
+def sender():
+    """Standalone sender page — works from any browser, no extension needed."""
+    resp = send_file("sender.html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+
+@app.route("/")
+def home():
+    resp = send_file("widget.html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"]        = "no-cache"
+    resp.headers["Expires"]       = "0"
+    return resp
+
+
+@app.route("/api/data")
+def get_all_data():
+    """
+    Returns ticker data with optional live quotes.
+
+    ?tickers=AAPL,MSFT  — fetch live quotes for those tickers only (refresh)
+    no params           — return static data immediately, no Yahoo calls
+                          (used on page load so the table appears instantly)
+
+    The widget calls this once on load (no params) to paint the table fast,
+    then the user manually refreshes selected tickers to get live prices.
+    """
+    raw = load_data()
+    if not raw:
+        return jsonify([])
+
+    subset = request.args.get("tickers", "")
+    if subset:
+        # Selective refresh — only fetch quotes for the requested tickers
+        wanted = {t.strip().upper() for t in subset.split(",") if t.strip()}
+        log.info(f"  quote refresh: {sorted(wanted)}")
+        t0 = time.time()
+        changed = False
+        for item in raw:
+            if item.get("t", "").upper() in wanted:
+                q = fetch_quote(item["t"])
+                item.update(q)
+                # Persist sector, rec, div_yield back to JSON so they survive restarts
+                if q.get("sector") and q["sector"] != "N/A":
+                    item["sector"] = q["sector"]
+                    changed = True
+                if q.get("rec") and q["rec"] != "N/A":
+                    item["rec"] = q["rec"]
+                    changed = True
+                if q.get("div_yield") is not None:
+                    item["div_yield"] = q["div_yield"]
+                    changed = True
+        elapsed = time.time() - t0
+        log.info(f"  quotes done ({len(wanted)} tickers · {elapsed:.1f}s)")
+        # Write sector/rec updates back to JSON so they appear on next startup
+        if changed:
+            try:
+                save_tickers(raw)
+                log.info("  persisted sector/rec/yield to JSON")
+            except Exception as e:
+                log.warning(f"  could not persist fields: {e}")
+    else:
+        # Startup load — serve static data immediately, no Yahoo calls
+        # Return any cached quotes we already have from previous refreshes
+        log.info(f"  startup load: {len(raw)} tickers (static, no Yahoo calls)")
+        for item in raw:
+            cached = cache_get(item["t"])
+            if cached:
+                item.update(cached)
+
+    raw.sort(key=lambda x: abs(x.get("pct_raw", 0)), reverse=True)
+    return jsonify(raw)
+
+
+@app.route("/api/history")
+def get_history():
+    """
+    Normalised % return series for charting.
+
+    Query params
+      tickers  comma-separated, e.g. SCHD,EUFN,EWY
+      range    1D | 5D | 1W | 1M | 3M | 6M | YTD | 1Y | 2Y | 3Y  (default 1M)
+
+    Strategy
+      1D (5-min)   always Yahoo Finance — intraday, not stored in DB
+      5D (hourly)  always Yahoo Finance — intraday, not stored in DB
+      everything else:
+        1. Check DB has MIN_ROWS and data is fresh (<= 5 days old)
+        2. If sufficient  → serve from DB (zero cost)
+        3. If not         → fetch from Yahoo, save to DB for next time
+    """
+    raw_tickers = request.args.get("tickers", "")
+    range_key   = request.args.get("range", "1M").upper()
+
+    if not raw_tickers:
+        return jsonify({"error": "tickers param required"}), 400
+    if range_key not in RANGES:
+        return jsonify({"error": f"unknown range. valid: {list(RANGES.keys())}"}), 400
+
+    tickers = [t.strip().upper() for t in raw_tickers.split(",") if t.strip()]
+    results: dict = {}
+
+    for ticker in tickers:
+
+        # ── Intraday (1D, 5D): always Yahoo — never stored in DB ──────────────
+        if range_key in ("1D", "5D"):
+            rows = fetch_yf_history(ticker, range_key)
+            if rows:
+                s = build_series(rows)
+                if s:
+                    s["source"] = "yahoo"
+                    results[ticker] = s
+            else:
+                log.warning(f"No intraday history for {ticker} ({range_key})")
+            continue
+
+        # ── Daily / weekly ranges: DB first, Yahoo as fallback ────────────────
+        start, end = date_range_for(range_key)
+        db_rows    = db_get_history(ticker, start, end)
+        min_needed = MIN_ROWS.get(range_key, 3)
+
+        # Freshness check: latest DB row must be within 5 calendar days
+        db_fresh = False
+        if len(db_rows) >= min_needed and db_rows:
+            days_old = (date.today() - date.fromisoformat(db_rows[-1][0])).days
+            db_fresh = days_old <= 5
+            if not db_fresh:
+                log.info(f"{ticker} ({range_key}): DB stale by {days_old} days — refreshing")
+
+        if db_fresh:
+            s = build_series(db_rows)
+            if s:
+                s["source"] = "db"
+                results[ticker] = s
+                log.info(f"History {ticker} ({range_key}): DB ({len(db_rows)} rows)")
+            continue
+
+        # DB insufficient or stale → fetch from Yahoo and save
+        log.info(f"History {ticker} ({range_key}): DB insufficient ({len(db_rows)}/{min_needed}) — Yahoo")
+        rows = fetch_yf_history(ticker, range_key)
+        if rows:
+            s = build_series(rows)
+            if s:
+                s["source"] = "yahoo"
+                results[ticker] = s
+        else:
+            log.warning(f"No history for {ticker} ({range_key})")
+
+    sources = {t: results[t].get("source","?") for t in results}
+    log.info(f"  history done  range={range_key}  {sources}")
+    return jsonify(results)
+
+
+@app.route("/api/episodes")
+def get_episodes():
+    """
+    Returns all known episodes in order.
+    Reads streetwise_episodes.json if it exists, otherwise derives
+    episode tags from streetwise_data.json (e key values).
+
+    Response: { "episodes": [{"key": "2/27", "label": "2/27 — Anything-But-AI Rally"}, ...],
+                "latest": {"key": "2/27", "label": "..."} }
+    """
+    EPISODES_FILE = "streetwise_episodes.json"
+
+    if os.path.exists(EPISODES_FILE):
+        try:
+            with open(EPISODES_FILE) as f:
+                registry = json.load(f)
+            # registry is { "2/27": "2/27 — Anything-But-AI Rally", ... }
+            episodes = [
+                {"key": k, "label": v}
+                for k, v in registry.items()
+            ]
+        except Exception as e:
+            log.warning(f"Failed to read {EPISODES_FILE}: {e}")
+            episodes = []
+    else:
+        # Derive from streetwise_data.json episode tags
+        data = load_data()
+        seen = {}
+        for d in data:
+            for ep in d.get("e", []):
+                if ep not in seen:
+                    seen[ep] = ep   # key = label when no registry
+        episodes = [{"key": k, "label": k} for k in seen]
+
+    # Sort chronologically.
+    # Streetwise key format: "2026/2/27"
+    # Ian key format:        "ian:2026/3/6"
+    def ep_sort_key(e):
+        k = e["key"]
+        is_ian = k.startswith("ian:")
+        bare   = k[4:] if is_ian else k      # strip "ian:" prefix
+        try:
+            parts = bare.split("/")
+            if len(parts) == 3:
+                # year/month/day
+                year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+            elif len(parts) == 2:
+                # legacy month/day (no year)
+                year, month, day = 0, int(parts[0]), int(parts[1])
+            else:
+                return (is_ian, 0, 0, 0)
+            return (is_ian, year, month, day)
+        except Exception:
+            return (is_ian, 0, 0, 0)
+
+    episodes.sort(key=ep_sort_key)
+    latest = episodes[-1] if episodes else None
+
+    return jsonify({"episodes": episodes, "latest": latest})
+
+
+@app.route("/api/cache/clear", methods=["POST"])
+def clear_cache():
+    """
+    Expire the live quote cache.
+    ?tickers=AAPL,MSFT  →  expire only those tickers  (selective refresh)
+    No param            →  expire everything
+    """
+    param = request.args.get("tickers", "")
+    if param:
+        tickers = [t.strip().upper() for t in param.split(",") if t.strip()]
+        cache_expire(tickers)
+        return jsonify({"ok": True, "expired": tickers})
+    _cache.clear()
+    log.info("  cache cleared — all tickers will refresh from Yahoo Finance")
+    return jsonify({"ok": True, "expired": "all"})
+
+
+@app.route("/api/db/status")
+def db_status():
+    """Summary of what's in the price history database."""
+    conn = get_db()
+    if not conn:
+        return jsonify({
+            "ok":    False,
+            "error": f"{DB_FILE} not found — run: python history_manager.py --init"
+        })
+    try:
+        total   = conn.execute("SELECT COUNT(*) AS n FROM prices").fetchone()["n"]
+        tickers = conn.execute(
+            "SELECT ticker, COUNT(*) AS rows, MIN(date) AS first, MAX(date) AS last "
+            "FROM prices GROUP BY ticker ORDER BY ticker"
+        ).fetchall()
+        return jsonify({
+            "ok":         True,
+            "total_rows": total,
+            "tickers":    [dict(r) for r in tickers],
+        })
+    finally:
+        conn.close()
+
+
+@app.route("/api/status")
+def status():
+    """General health check."""
+    raw  = load_data()
+    live = sum(1 for v in _cache.values() if (time.time() - v.get("_ts", 0)) < CACHE_TTL)
+    return jsonify({
+        "status":            "ok",
+        "tickers_in_json":   len(raw),
+        "cache_live_entries": live,
+        "cache_ttl_seconds": CACHE_TTL,
+        "db_found":          os.path.exists(DB_FILE),
+        "server_time_utc":   datetime.utcnow().isoformat() + "Z",
+        "supported_ranges":  list(RANGES.keys()),
+    })
+
+
+@app.route("/api/research", methods=["POST"])
+def research():
+    """
+    Research a ticker using Claude (with web search) or Gemini.
+    Falls back to Claude without web search if the tool is unavailable.
+    Body: { ticker, name, query, model }
+    Returns SSE stream: data: {"text":"..."} ... data: [DONE]
+    """
+    import anthropic as _anthropic
+
+    body   = request.get_json(force=True)
+    ticker = body.get("ticker", "").upper().strip()
+    name   = body.get("name", "")
+    query  = body.get("query", "").strip()
+    model  = body.get("model", "claude")
+
+    if not ticker:
+        return jsonify({"error": "ticker required"}), 400
+
+    if not query:
+        query = f"What is the latest news, earnings, and analyst views on {ticker} ({name})?"
+
+    system_prompt = (
+        f"You are a financial research assistant. "
+        f"The user is researching {ticker} ({name}). "
+        f"Format your response as 6-10 bullet points using this exact format — "
+        f"each bullet on its own line:\n"
+        f"• **Label:** one concise sentence\n\n"
+        f"Labels to use (pick the most relevant): Recent news, Earnings, "
+        f"Analyst rating, Price target, EPS forecast, Catalyst, Risk, "
+        f"Valuation, Macro tailwind, Sector context, Key development.\n\n"
+        f"Rules: bold (**) every label before the colon; one sentence per bullet; "
+        f"include specific numbers and dates where available; cite sources inline e.g. (Goldman, Reuters)."
+    )
+
+    log.info(f"  research: model={model} ticker={ticker} query={query[:80]}")
+
+    def generate():
+        # Send an immediate keepalive so the browser knows the stream is open
+        # This prevents the "No results" flash while waiting for Claude
+        yield ": keepalive\n\n"
+
+        try:
+            # ── Gemini ────────────────────────────────────────────────────────
+            if model == "gemini":
+                import urllib.request, urllib.error as _ue
+                gemini_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+                if not gemini_key:
+                    yield "data: " + json.dumps({"error": "GEMINI_API_KEY not set. Run: set GEMINI_API_KEY=your-key"}) + "\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+                log.info(f"  research: Gemini key len={len(gemini_key)}")
+
+                # Select model tier from request
+                model_id = "gemini-2.5-pro" if model == "gemini-pro" else "gemini-2.5-flash"
+                url = (
+                    "https://generativelanguage.googleapis.com/v1beta/"
+                    f"models/{model_id}:generateContent?key={gemini_key}"
+                )
+                payload = json.dumps({
+                    "contents": [{"parts": [{"text": f"{system_prompt}\n\n{query}"}]}],
+                    "tools":    [{"google_search": {}}],
+                    "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2048},
+                }).encode()
+                req = urllib.request.Request(url, data=payload,
+                        headers={"Content-Type": "application/json"})
+                for _attempt in range(2):
+                    try:
+                        resp_raw = urllib.request.urlopen(req, timeout=60)
+                        break
+                    except _ue.HTTPError as he:
+                        err_body = he.read().decode("utf-8", errors="replace")
+                        log.error(f"  research: Gemini HTTP {he.code} — {err_body[:300]}")
+                        if he.code == 429 and _attempt == 0:
+                            log.warning("  research: Gemini 429 — retrying in 3s")
+                            yield ": retrying\n\n"
+                            import time as _t; _t.sleep(3)
+                        else:
+                            yield "data: " + json.dumps({"error": f"Gemini API error {he.code}: {err_body[:200]}"}) + "\n\n"
+                            yield "data: [DONE]\n\n"
+                            return
+                data     = json.loads(resp_raw.read())
+                # Extract text — may be spread across multiple parts
+                parts    = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+                text     = "".join(p.get("text", "") for p in parts).strip()
+                if not text:
+                    text = "Gemini returned no text — check your API key has billing enabled and grounding/search is available in your region."
+                log.info(f"  research: Gemini {model_id} done {len(text)} chars")
+                chunk_size = 40
+                for i in range(0, len(text), chunk_size):
+                    yield "data: " + json.dumps({"text": text[i:i+chunk_size]}) + "\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # ── Claude ────────────────────────────────────────────────────────
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+            if not api_key:
+                yield "data: " + json.dumps({"error": "ANTHROPIC_API_KEY not set. Run: set ANTHROPIC_API_KEY=sk-ant-..."}) + "\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # Log masked key so you can verify which key the server is using
+            masked = api_key[:12] + "…" + api_key[-6:] if len(api_key) > 20 else "too short"
+            log.info(f"  research: using key {masked} (len={len(api_key)})")
+
+            # Strip any accidental quotes or whitespace that Windows set/setx can add
+            api_key = api_key.strip('"').strip("'").strip()
+
+            client = _anthropic.Anthropic(api_key=api_key)
+
+            # Map model value to actual model ID
+            _claude_model_map = {
+                "claude":        "claude-haiku-4-5-20251001",
+                "claude-haiku":  "claude-haiku-4-5-20251001",
+                "claude-sonnet": "claude-sonnet-4-6",
+            }
+            claude_model_id = _claude_model_map.get(model, "claude-haiku-4-5-20251001")
+            # Call Claude with web_search tool
+            log.info(f"  research: calling {claude_model_id} + web_search…")
+            yield "data: " + json.dumps({"text": "🔍 Searching the web…\n\n"}) + "\n\n"
+            resp = client.messages.create(
+                model      = claude_model_id,
+                max_tokens = 2000,
+                system     = system_prompt,
+                tools      = [{"type": "web_search_20250305", "name": "web_search"}],
+                messages   = [{"role": "user", "content": query}],
+            )
+            inp, out, cost = calc_cost(resp)
+
+            # Collect text from all blocks — web_search responses come back as
+            # multiple separate text blocks (one per sentence/paragraph)
+            parts = []
+            for blk in resp.content:
+                if getattr(blk, "text", ""):
+                    parts.append(blk.text)
+
+            full_text = "".join(parts).strip()
+
+            # Single clean cost summary line
+            log.info(
+                f"  ✓ research done  {ticker}  "
+                f"{len(full_text):,} chars  "
+                f"in={inp:,} out={out:,}  "
+                f"\033[32mcost=${cost:.4f}\033[0m"
+            )
+
+            if not full_text:
+                full_text = "No text returned by Claude. Check terminal for block details."
+
+            # Yield each chunk directly — no nested generator
+            chunk_size = 40
+            for i in range(0, len(full_text), chunk_size):
+                yield "data: " + json.dumps({"text": full_text[i:i+chunk_size]}) + "\n\n"
+
+            yield "data: [DONE]\n\n"
+            return
+
+        except Exception as e:
+            log.error(f"  research: error — {type(e).__name__}: {e}", exc_info=True)
+            yield "data: " + json.dumps({"error": f"{type(e).__name__}: {e}"}) + "\n\n"
+            yield "data: [DONE]\n\n"
+
+    from flask import stream_with_context, Response
+
+    def flushing_generate():
+        """Encode every SSE chunk to bytes so Werkzeug is happy."""
+        for chunk in generate():
+            yield chunk.encode("utf-8") if isinstance(chunk, str) else chunk
+
+    return Response(
+        stream_with_context(flushing_generate()),
+        mimetype = "text/event-stream",
+        headers  = {
+            "X-Accel-Buffering": "no",
+            "Cache-Control":     "no-cache",
+            "Connection":        "keep-alive",
+        },
+    )
+
+
+@app.route("/api/ingest-page", methods=["POST"])
+def ingest_page():
+    """
+    Receive article text from Chrome extension, extract tickers via Claude or Gemini.
+    Body: { text, date, year, source, prefix, title, model? }
+    model: "claude-haiku" | "claude-sonnet" | "gemini-flash" | "gemini-pro"
+    Returns: { ok, added, updated, tickers, cost, model, log }
+    """
+    body       = request.get_json(force=True)
+    text       = body.get("text", "").strip()
+    date       = body.get("date", "").strip()
+    year       = str(body.get("year", datetime.now().year)).strip()
+    source     = body.get("source", "ian").strip().lower()
+    title      = body.get("title", "").strip()
+    prefix_arg = body.get("prefix", "").strip().lower()
+    model_req  = body.get("model", "claude-haiku").strip().lower()
+    # anchors: [{text, href}] from blue-underlined company links in the article
+    anchors    = body.get("anchors", [])
+
+    if not text:
+        return jsonify({"ok": False, "error": "no text provided"}), 400
+    if not date:
+        return jsonify({"ok": False, "error": "date required"}), 400
+
+    # ── Resolve model ─────────────────────────────────────────────────────────
+    use_gemini   = model_req.startswith("gemini")
+    _claude_map  = {"claude-haiku": "claude-haiku-4-5-20251001",
+                    "claude-sonnet": "claude-sonnet-4-6",
+                    "claude": "claude-haiku-4-5-20251001"}
+    claude_model = _claude_map.get(model_req, "claude-haiku-4-5-20251001")
+    gemini_model = "gemini-2.5-pro" if model_req == "gemini-pro" else "gemini-2.5-flash"
+
+    if use_gemini:
+        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+        if not gemini_key:
+            return jsonify({"ok": False, "error": "GEMINI_API_KEY not set in environment"}), 400
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")
+        if not api_key:
+            return jsonify({"ok": False, "error": "ANTHROPIC_API_KEY not set in environment"}), 400
+
+    # ── Source metadata ───────────────────────────────────────────────────────
+    # prefix comes explicitly from extension — never derive from source name
+    # source is the free-text display label sent by the extension
+    prefix = prefix_arg if prefix_arg else "src"
+
+    # Use the raw source string as the label (it's already the display name)
+    # Fall back to built-in labels only if source looks like a prefix
+    builtin_labels = {
+        "stw": "Barron's Streetwise",
+        "ian": "Barron's Ian Salisbury",
+        "div": "Dividends",
+        "bl":  "Barrons Live",
+    }
+    source_label = builtin_labels.get(prefix, body.get("source", source).strip())
+    if not source_label:
+        source_label = prefix.upper()
+    is_ian_style = prefix != "stw"
+
+    label  = f"{date}/{year}"
+    if title:
+        label = f"{label} — {title}"
+    ep_key = f"{prefix}:{year}/{date}"
+
+    srv_log = []   # collect log lines to return to extension
+    def ilog(msg, level="info"):
+        getattr(log, level)(f"  ingest-page: {msg}")
+        srv_log.append(msg)
+
+    ilog(f"source={source_label}  prefix={prefix}  ep={ep_key}  chars={len(text):,}")
+
+    # ── Parse tickers / company names from anchors ────────────────────────────
+    # Barron's links companies like /market-data/stocks/AAPL or /quote/AAPL
+    import re as _re
+    anchor_tickers = {}   # ticker -> company_name (from URL)
+    anchor_names   = []   # company names without a resolvable ticker
+    for a in (anchors or []):
+        href = (a.get("href") or "").strip()
+        name = (a.get("text") or "").strip()
+        if not name:
+            continue
+        # Try to pull ticker from URL path segment
+        m = _re.search(r'/(?:stocks?|quote|symbol)/([A-Z0-9\.\-]{1,10})(?:[/?]|$)', href, _re.I)
+        if m:
+            sym = m.group(1).upper()
+            anchor_tickers[sym] = name
+        else:
+            anchor_names.append(name)
+
+    # Build hint block for the AI prompt
+    hints_block = ""
+    if anchor_tickers or anchor_names:
+        lines = []
+        if anchor_tickers:
+            lines.append("The following company names and their tickers were found as hyperlinks in the article:")
+            for sym, nm in anchor_tickers.items():
+                lines.append(f"  {nm} → {sym}")
+        if anchor_names:
+            lines.append("The following company names were hyperlinked but their ticker could not be determined from the URL — please resolve them:")
+            for nm in anchor_names:
+                lines.append(f"  {nm}")
+        hints_block = "\n\nCOMPANY HINTS (from article hyperlinks):\n" + "\n".join(lines)
+
+    ilog(f"anchors: {len(anchor_tickers)} with ticker, {len(anchor_names)} name-only")
+
+    # ── Extract tickers via Claude ─────────────────────────────────────────────
+    extract_prompt = f"""You are a financial research assistant reading content from {source_label}.
+Content label: {label}
+
+Extract EVERY stock, ETF, or mutual fund mentioned — including brief references,
+comparisons, and cautionary examples.
+
+IMPORTANT: Articles often mention companies by name only, without a ticker symbol.
+You MUST still include those companies and supply the correct US exchange ticker yourself.
+Examples: "Exxon Mobil" → XOM, "Chevron" → CVX, "ConocoPhillips" → COP,
+"Devon Energy" → DVN, "Diamondback Energy" → FANG, "Permian Resources" → PR,
+"Occidental Petroleum" → OXY, "Ovintiv" → OVV, "California Resources" → CRC.
+Never skip a company just because no ticker was printed in the article.{hints_block}
+
+For EACH one return a JSON object with exactly these fields:
+{{
+  "ticker":   "BKU",
+  "name":     "BankUnited",
+  "type":     "Stock",
+  "sector":   "Financial Services",
+  "rec":      "Buy",
+  "price":    "~$46",
+  "status":   "rot",
+  "summary":  "6-8 bullet points, each on its own line, format: \'• **Label:** explanation\'. Cover: why mentioned, analyst thesis, key metrics, valuation, price targets/EPS, risks, macro tailwind. Bold (**) the label before each colon.",
+  "base":     "one sentence base-case outcome",
+  "bear":     "one sentence bear-case risk",
+  "bull":     "one sentence bull-case upside"
+}}
+
+status = hot | rot | pull | press | dip | rec | caut | flat
+sector = GICS sector e.g. "Financial Services", "Technology", "N/A" if unknown
+rec    = analyst consensus if mentioned: "Strong Buy", "Buy", "Hold", "Sell", "N/A"
+
+Return ONLY a valid JSON array. No markdown, no prose, no backticks.
+
+CONTENT:
+{text[:15000]}
+"""
+
+    ilog(f"model={gemini_model if use_gemini else claude_model}")
+    cost       = 0.0
+    model_used = gemini_model if use_gemini else claude_model
+
+    try:
+        if use_gemini:
+            import urllib.request, urllib.error as _ue
+            max_tokens = 16000 if gemini_model == "gemini-2.5-pro" else 8192
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/"
+                f"models/{gemini_model}:generateContent?key={gemini_key}"
+            )
+            payload = json.dumps({
+                "contents": [{"parts": [{"text": extract_prompt}]}],
+                "generationConfig": {
+                    "temperature":     0.2,
+                    "maxOutputTokens": max_tokens,
+                    "responseMimeType": "application/json",
+                },
+            }).encode()
+            req = urllib.request.Request(url, data=payload,
+                    headers={"Content-Type": "application/json"})
+            for _attempt in range(2):
+                try:
+                    resp_raw = urllib.request.urlopen(req, timeout=120)
+                    break
+                except _ue.HTTPError as he:
+                    err_body = he.read().decode("utf-8", errors="replace")
+                    if he.code == 429 and _attempt == 0:
+                        import time as _t; _t.sleep(3)
+                    else:
+                        ilog(f"Gemini HTTP {he.code}: {err_body[:200]}", "error")
+                        return jsonify({"ok": False, "error": f"Gemini {he.code}: {err_body[:200]}",
+                                        "log": srv_log}), 500
+            gdata  = json.loads(resp_raw.read())
+            finish = (gdata.get("candidates") or [{}])[0].get("finishReason", "")
+            if finish == "MAX_TOKENS":
+                thoughts = (gdata.get("usageMetadata") or {}).get("thoughtsTokenCount", 0)
+                ilog(f"Gemini hit MAX_TOKENS (thinking={thoughts})", "error")
+                return jsonify({"ok": False,
+                                "error": f"Gemini hit token limit (thinking={thoughts}). Try Flash.",
+                                "log": srv_log}), 500
+            raw = ""
+            for cand in (gdata.get("candidates") or []):
+                for part in (cand.get("content", {}).get("parts") or []):
+                    t = part.get("text", "")
+                    if t and not part.get("thought"):
+                        raw += t
+            raw = raw.strip()
+            usage  = gdata.get("usageMetadata", {})
+            inp    = usage.get("promptTokenCount", 0)
+            out    = usage.get("candidatesTokenCount", 0)
+            rates  = {"gemini-2.5-flash": (0.30, 2.50), "gemini-2.5-pro": (1.25, 10.0)}
+            r_in, r_out = rates.get(gemini_model, (0.30, 2.50))
+            cost   = (inp * r_in + out * r_out) / 1_000_000
+            model_used = gemini_model
+            ilog(f"extraction done  in={inp:,} out={out:,} cost=${cost:.4f}")
+        else:
+            import anthropic as _anthropic
+            client = _anthropic.Anthropic(api_key=api_key)
+            msg    = client.messages.create(
+                model      = claude_model,
+                max_tokens = 8000,
+                messages   = [{"role": "user", "content": extract_prompt}],
+            )
+            inp, out, cost = calc_cost(msg)
+            raw        = msg.content[0].text.strip()
+            model_used = claude_model
+            ilog(f"extraction done  in={inp:,} out={out:,} cost=${cost:.4f}")
+
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            raw   = parts[1].lstrip("json").strip() if len(parts) > 1 else raw
+
+        entries = json.loads(raw)
+        ilog(f"extracted {len(entries)} entries")
+
+    except json.JSONDecodeError as e:
+        log.error(f"  ingest-page JSON error: {e}"); ilog(f"JSON parse error: {e}", "error")
+        return jsonify({"ok": False, "error": "Model returned invalid JSON", "log": srv_log}), 500
+    except Exception as e:
+        log.error(f"  ingest-page extraction error: {e}"); ilog(f"extraction error: {e}", "error")
+        return jsonify({"ok": False, "error": str(e), "log": srv_log}), 500
+
+    # ── Merge into database ────────────────────────────────────────────────────
+    db     = load_data()
+    lookup = {d["t"].upper(): d for d in db}
+    added = updated = 0
+    tickers_touched = []
+
+    _NOISE = {"ECNQQUOTE","EQUITY","ETF","MUTUALFUND","INDEX","CURRENCY","CRYPTOCURRENCY"}
+
+    for e in entries:
+        ticker = e.get("ticker", "").strip().upper()
+        if not ticker or ticker == "N/A":
+            continue
+
+        new_sum = e.get("summary", "")
+        tickers_touched.append(ticker)
+
+        # Clean sector
+        raw_sector = e.get("sector", "") or ""
+        sector = raw_sector if raw_sector and raw_sector.upper() not in _NOISE else "N/A"
+
+        if ticker in lookup:
+            rec = lookup[ticker]
+            # Episode tag
+            ep_tags = rec.get("e", [])
+            if ep_key not in ep_tags:
+                rec["e"] = ep_tags + [ep_key]
+            # Source
+            rec.setdefault("src", [source])
+            if source not in rec["src"]:
+                rec["src"].append(source)
+            # Summary
+            if is_ian_style:
+                heading  = f"=== {ep_key} | {source_label} · {label} ==="
+                existing = rec.get("sum", "")
+                if heading in existing:
+                    before = existing.split(heading)[0].rstrip()
+                    rec["sum"] = f"{before}\n\n{heading}\n{new_sum}" if before else f"{heading}\n{new_sum}"
+                else:
+                    rec["sum"] = f"{existing.rstrip()}\n\n{heading}\n{new_sum}" if existing.strip() else f"{heading}\n{new_sum}"
+            else:
+                rec["sum"] = (rec.get("sum", "") + "\n\n" + new_sum).strip()
+            # Fields
+            rec["s"] = e.get("status", rec.get("s", "flat"))
+            if e.get("price", "N/A") != "N/A":
+                rec["p"] = e["price"]
+            if sector != "N/A":
+                rec["sector"] = sector
+            if e.get("rec") and e["rec"] != "N/A":
+                rec["rec_analyst"] = e["rec"]
+            updated += 1
+        else:
+            summary = f"=== {ep_key} | {source_label} · {label} ===\n{new_sum}" if is_ian_style else new_sum
+            new_rec = {
+                "t": ticker, "n": e.get("name", ticker),
+                "y": e.get("type", "Stock"), "e": [ep_key],
+                "p": e.get("price", "N/A"), "s": e.get("status", "flat"),
+                "src": [source], "sum": summary,
+                "base": e.get("base", ""), "bear": e.get("bear", ""),
+                "bull": e.get("bull", ""),
+            }
+            if sector != "N/A":       new_rec["sector"]     = sector
+            if e.get("rec") and e["rec"] != "N/A": new_rec["rec_analyst"] = e["rec"]
+            lookup[ticker] = new_rec
+            added += 1
+
+    merged = list(lookup.values())
+    try:
+        # Atomic write to DB
+        save_tickers(merged)
+
+        # Register episode in sources.json
+        sources_reg = load_sources()
+        if prefix not in sources_reg:
+            sources_reg[prefix] = {
+                "label":    source_label,
+                "color":    "#64748b",
+                "episodes": {}
+            }
+        ep_entry = sources_reg[prefix]["episodes"].setdefault(ep_key, {})
+        if not ep_entry.get("title") and title:
+            # Parse title from label: "M/D/YYYY — Title" → "Title"
+            ep_title = title if title else label.split(" — ", 1)[-1] if " — " in label else label
+            _dp = date.split("/") if "/" in date else [date]
+            if len(_dp) == 2:
+                ep_entry["date"] = f"{year}-{int(_dp[0]):02d}-{int(_dp[1]):02d}"
+            else:
+                ep_entry["date"] = f"{year}-{date}"
+            ep_entry["title"] = ep_title
+            save_sources(sources_reg)
+            ilog(f"registered episode {ep_key} in sources.json")
+
+        ilog(f"saved {added} new · {updated} updated")
+        return jsonify({"ok": True, "added": added, "updated": updated,
+                        "tickers": tickers_touched, "cost": f"{cost:.4f}",
+                        "model": model_used, "log": srv_log})
+    except Exception as e:
+        log.error(f"  ingest-page save error: {e}"); srv_log.append(f"save error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/regen-cases", methods=["POST"])
+def regen_cases():
+    """
+    Regenerate bull/bear/base cases for a ticker using web search.
+    Supports both Claude (Anthropic) and Gemini (Google) models.
+    Appends with a date stamp so history is preserved.
+
+    Body: { ticker, name, model }
+      model: "claude" (default) | "gemini-flash" | "gemini-pro"
+    Returns: { ok, ticker, base, bear, bull, date, model_used }
+    """
+
+    body   = request.get_json(force=True)
+    ticker = body.get("ticker", "").strip().upper()
+    name   = body.get("name", ticker).strip()
+    model_raw = body.get("model", "claude-haiku").strip().lower()
+    _model_map = {
+        "claude-haiku":  "claude-haiku",  "claude-sonnet": "claude-sonnet",
+        "claude":        "claude-haiku",  "gemini":        "gemini",
+        "gemini-flash":  "gemini",        "gemini-pro":    "gemini-pro",
+    }
+    model = _model_map.get(model_raw, "claude-haiku")
+
+    if not ticker:
+        return jsonify({"ok": False, "error": "ticker required"}), 400
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    prompt = f"""You are an equity research analyst. Research {ticker} ({name}) using current market data.
+
+Write three concise investment scenario sentences for today ({today}):
+
+1. BASE CASE (1 sentence): The most likely 12-month outcome given current fundamentals, valuation, and macro backdrop.
+2. BEAR CASE (1 sentence): The key downside risk that could cause meaningful underperformance.
+3. BULL CASE (1 sentence): The key catalyst or upside scenario that could drive outperformance.
+
+Each sentence should be specific — mention actual metrics, price targets, or catalysts if available.
+
+Respond ONLY in this exact JSON format, nothing else:
+{{
+  "base": "one sentence base case",
+  "bear": "one sentence bear case",
+  "bull": "one sentence bull case"
+}}"""
+
+    raw = ""
+    model_used = model
+
+    try:
+        # ── Gemini path — raw HTTP, no SDK ────────────────────────────────────
+        # IMPORTANT: 2.5 Pro/Flash are thinking models — they burn tokens on
+        # internal reasoning before outputting text.  maxOutputTokens must cover
+        # both the thinking budget AND the actual response, so we set it high.
+        # We also skip google_search: it triggers multi-turn which makes the
+        # response structure unpredictable. The prompt has all the context needed.
+        if model.startswith("gemini"):
+            import urllib.request, urllib.error as _ue
+
+            gemini_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+            if not gemini_key:
+                return jsonify({"ok": False, "error": "GEMINI_API_KEY not set"}), 400
+
+            model_id   = "gemini-2.5-pro" if model == "gemini-pro" else "gemini-2.5-flash"
+            model_used = model_id
+
+            # Token budgets — thinking models need much more headroom
+            max_tokens = 16000 if model_id == "gemini-2.5-pro" else 4000
+
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/"
+                f"models/{model_id}:generateContent?key={gemini_key}"
+            )
+            payload = json.dumps({
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature":      0.3,
+                    "maxOutputTokens":  max_tokens,
+                    "responseMimeType": "application/json",
+                },
+            }).encode()
+            req = urllib.request.Request(
+                url, data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            for _attempt in range(2):
+                try:
+                    resp_raw = urllib.request.urlopen(req, timeout=120)
+                    break
+                except _ue.HTTPError as he:
+                    err_body = he.read().decode("utf-8", errors="replace")
+                    if he.code == 429 and _attempt == 0:
+                        import time as _t; _t.sleep(4)
+                    else:
+                        return jsonify({"ok": False,
+                                        "error": f"Gemini {he.code}: {err_body[:300]}"}), 500
+
+            gdata  = json.loads(resp_raw.read())
+            finish = (gdata.get("candidates") or [{}])[0].get("finishReason", "")
+
+            if finish == "MAX_TOKENS":
+                thoughts = (gdata.get("usageMetadata") or {}).get("thoughtsTokenCount", 0)
+                return jsonify({"ok": False,
+                                "error": f"Gemini hit token limit (thinking used {thoughts} tokens). "
+                                         f"Try Gemini Flash instead."}), 500
+
+            # Extract text — skip thought parts (role='model' with no text key)
+            raw = ""
+            for cand in (gdata.get("candidates") or []):
+                for part in (cand.get("content", {}).get("parts") or []):
+                    t = part.get("text", "")
+                    if t and not part.get("thought"):   # skip internal thought blocks
+                        raw += t
+            raw = raw.strip()
+
+            if not raw:
+                log.error(f"  regen-cases Gemini empty: finish={finish} "
+                          f"resp={json.dumps(gdata)[:400]}")
+                return jsonify({"ok": False,
+                                "error": f"Gemini returned no text (finishReason={finish})"}), 500
+
+            usage  = gdata.get("usageMetadata", {})
+            inp    = usage.get("promptTokenCount", 0)
+            out    = usage.get("candidatesTokenCount", 0)
+            rates  = {"gemini-2.5-flash": (0.30, 2.50), "gemini-2.5-pro": (1.25, 10.0)}
+            r_in, r_out = rates.get(model_id, (0.30, 2.50))
+            cost   = (inp * r_in + out * r_out) / 1_000_000
+            log.info(f"  regen-cases ({model_id}): {ticker} in={inp:,} out={out:,} "
+                     f"thinking={usage.get('thoughtsTokenCount',0):,} cost=${cost:.4f}")
+
+        # ── Claude path ────────────────────────────────────────────────────────
+        else:
+            import anthropic as _anthropic
+
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")
+            if not api_key:
+                return jsonify({"ok": False, "error": "ANTHROPIC_API_KEY not set"}), 400
+
+            client    = _anthropic.Anthropic(api_key=api_key)
+            tools     = [{"type": "web_search_20250305", "name": "web_search"}]
+            messages  = [{"role": "user", "content": prompt}]
+            total_inp = total_out = 0
+            _claude_id_map = {"claude-haiku":"claude-haiku-4-5-20251001","claude-sonnet":"claude-sonnet-4-6"}
+            model_used = _claude_id_map.get(model, "claude-haiku-4-5-20251001")
+
+            for turn in range(6):
+                resp = client.messages.create(
+                    model      = model_used,
+                    max_tokens = 1500,
+                    tools      = tools,
+                    messages   = messages,
+                )
+                i, o, _ = calc_cost(resp)
+                total_inp += i; total_out += o
+
+                for block in resp.content:
+                    if hasattr(block, "text") and block.text.strip():
+                        raw = block.text.strip()
+
+                if resp.stop_reason != "tool_use":
+                    break
+
+                tool_results = []
+                for block in resp.content:
+                    if block.type == "tool_use":
+                        tool_results.append({
+                            "type":        "tool_result",
+                            "tool_use_id": block.id,
+                            "content":     block.input.get("query", "") if hasattr(block, "input") else "",
+                        })
+                if not tool_results:
+                    break
+                messages.append({"role": "assistant", "content": resp.content})
+                messages.append({"role": "user",      "content": tool_results})
+
+            cost = (total_inp * 0.80 + total_out * 4.00) / 1_000_000
+            log.info(f"  regen-cases (claude): {ticker} turns={turn+1} in={total_inp:,} out={total_out:,} cost=${cost:.4f}")
+
+        # ── Parse JSON — extract first complete { } object ─────────────────────
+        if not raw:
+            raise ValueError("No text in response")
+        if raw.startswith("```"):
+            raw = raw.split("```")[1].lstrip("json").strip()
+        # Find the first { and its matching }
+        j = raw.find("{")
+        if j < 0:
+            raise ValueError("No JSON object found in response")
+        raw = raw[j:]
+        # Walk to find the matching closing brace
+        depth, in_str, esc = 0, False, False
+        end = -1
+        BS = "\\"
+        for i, ch in enumerate(raw):
+            if esc:               esc = False;          continue
+            if ch == BS and in_str: esc = True;         continue
+            if ch == '"':         in_str = not in_str;  continue
+            if in_str:            continue
+            if ch == "{":         depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:    end = i + 1;          break
+        if end < 0:
+            raise ValueError("Incomplete JSON object in response")
+        cases = json.loads(raw[:end])
+
+    except Exception as e:
+        log.error(f"  regen-cases error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    # Load existing record and append with date stamp
+    db     = load_data()
+    stamp  = f"--- {today} · {model_used} ---"
+    updated = False
+
+    for rec in db:
+        if rec.get("t", "").upper() == ticker:
+            for field in ("base", "bear", "bull"):
+                new_val  = cases.get(field, "")
+                existing = rec.get(field, "")
+                if existing and existing != "—":
+                    rec[field] = existing.rstrip() + "\n" + stamp + "\n" + new_val
+                else:
+                    rec[field] = stamp + "\n" + new_val
+            updated = True
+            log.info(f"  regen-cases: {ticker} updated OK")
+            break
+
+    if not updated:
+        return jsonify({"ok": False, "error": f"{ticker} not found in DB"}), 404
+
+    try:
+        save_tickers(db)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    # Return the full updated field values for the ticker
+    rec_out = next((r for r in db if r.get("t","").upper() == ticker), {})
+    return jsonify({
+        "ok":     True,
+        "ticker": ticker,
+        "date":   today,
+        "base":   rec_out.get("base", ""),
+        "bear":   rec_out.get("bear", ""),
+        "bull":   rec_out.get("bull", ""),
+    })
+
+
+@app.route("/api/sources")
+def get_sources():
+    """
+    Return all sources and their episodes from sources.json registry.
+    Falls back to scanning ep keys in the DB if registry is missing.
+    Response: { sources: [ { prefix, label, color, count, episodes:[{key,date,title}] } ] }
+    """
+    registry = load_sources()
+
+    if registry:
+        # Use the registry as source of truth
+        result = []
+        for prefix, info in registry.items():
+            episodes = [
+                {"key": k, "date": v.get("date",""), "title": v.get("title","")}
+                for k, v in (info.get("episodes") or {}).items()
+            ]
+            result.append({
+                "prefix":   prefix,
+                "label":    info.get("label", prefix.upper()),
+                "color":    info.get("color", "#64748b"),
+                "count":    len(episodes),
+                "episodes": episodes,
+            })
+        return jsonify({"sources": result})
+
+    # Fallback: derive from DB ep keys (no registry file)
+    db = load_data()
+    prefix_tickers = {}
+    for rec in db:
+        seen = set()
+        for ep in (rec.get("e") or []):
+            if ":" not in ep: continue
+            pfx = ep.split(":")[0].strip().lower()
+            if pfx not in seen:
+                prefix_tickers[pfx] = prefix_tickers.get(pfx, 0) + 1
+                seen.add(pfx)
+
+    builtin_labels = {
+        "ian": "Barron's Ian Salisbury",
+        "stw": "Barron's Streetwise",
+        "div": "Dividends",
+        "bl":  "Barrons Live",
+    }
+    result = []
+    for prefix in sorted(prefix_tickers.keys()):
+        result.append({
+            "prefix": prefix,
+            "label":  builtin_labels.get(prefix, prefix.upper()),
+            "color":  "#64748b",
+            "count":  prefix_tickers[prefix],
+            "episodes": [],
+        })
+    return jsonify({"sources": result})
+
+@app.route("/api/delete-episode", methods=["POST"])
+def delete_episode():
+    """
+    Remove all traces of one episode from streetwise_data.json and
+    streetwise_episodes.json.
+
+    Body: { ep_key }  e.g. { "ep_key": "div:2026/3/15" }
+
+    For each ticker:
+      - Remove ep_key from the e[] array
+      - Remove the === ep_key | ... === summary section
+      - If e[] becomes empty, optionally remove the ticker entirely
+        (controlled by body.remove_empty, default false)
+    """
+    import re as _re
+
+    body      = request.get_json(force=True)
+    ep_key    = body.get("ep_key", "").strip()
+    rm_empty  = bool(body.get("remove_empty", False))
+
+    if not ep_key:
+        return jsonify({"ok": False, "error": "ep_key required"}), 400
+
+    db      = load_data()
+    touched = 0
+    removed_tickers = []
+    kept    = []
+
+    for rec in db:
+        e_list = rec.get("e", [])
+        if ep_key not in e_list:
+            kept.append(rec)
+            continue
+
+        # Remove episode tag
+        rec["e"] = [t for t in e_list if t != ep_key]
+
+        # Remove the === ep_key | ... === section from summary
+        old_sum = rec.get("sum", "")
+        if old_sum:
+            # Match the heading line and everything after it until the next === or end
+            pattern = "===\\s*" + _re.escape(ep_key) + "\\s*\\|[^=]*===\\n?"
+            m = _re.search(pattern, old_sum)
+            if m:
+                before   = old_sum[:m.start()].rstrip()
+                after    = old_sum[m.end():]
+                # Drop after content until the next heading
+                next_hdg = _re.search(r"===", after)
+                after    = after[next_hdg.start():] if next_hdg else ""
+                new_sum  = (before + "\n\n" + after).strip() if after else before
+                rec["sum"] = new_sum
+
+        # Remove src tag if no more episodes from this source
+        prefix = ep_key.split(":")[0]
+        has_prefix = any(t.startswith(prefix + ":") for t in rec.get("e", []))
+        if not has_prefix and prefix in rec.get("src", []):
+            rec["src"] = [s for s in rec["src"] if s != prefix]
+
+        touched += 1
+
+        if rm_empty and not rec.get("e"):
+            removed_tickers.append(rec["t"])
+        else:
+            kept.append(rec)
+
+    # Save updated data
+    try:
+        save_tickers(kept)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    # Remove from episode registry
+    ep_file  = "streetwise_episodes.json"
+    registry = {}
+    if os.path.exists(ep_file):
+        try:
+            with open(ep_file) as f:
+                registry = json.load(f)
+        except Exception:
+            pass
+    if ep_key in registry:
+        del registry[ep_key]
+        with open(ep_file, "w") as f:
+            json.dump(registry, f, indent=2)
+
+    log.info(f"  delete-episode: {ep_key}  touched={touched}  removed_tickers={len(removed_tickers)}")
+    return jsonify({
+        "ok":              True,
+        "ep_key":          ep_key,
+        "tickers_touched": touched,
+        "tickers_removed": removed_tickers,
+    })
+
+
+@app.route("/api/watchlist-build", methods=["POST"])
+def watchlist_build():
+    """
+    Ask Claude to select tickers from the database matching a natural-language query.
+    Body: { query, max_results }
+    Returns: { ok, tickers: ["AAPL",...], reasoning: "..." }
+
+    Claude receives the full ticker database as context and returns
+    a JSON selection — no web search needed since the data is local.
+    """
+    import anthropic as _anthropic
+
+    body        = request.get_json(force=True)
+    query       = body.get("query", "").strip()
+    max_results = int(body.get("max_results", 10))
+
+    if not query:
+        return jsonify({"ok": False, "error": "query required"}), 400
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")
+    if not api_key:
+        return jsonify({"ok": False, "error": "ANTHROPIC_API_KEY not set"}), 400
+
+    # Build a compact summary of the database for Claude
+    db = load_data()
+    ticker_list = []
+    for rec in db:
+        t       = rec.get("t", "")
+        name    = rec.get("n", "")
+        sector  = rec.get("sector", "N/A")
+        status  = rec.get("s", "flat")
+        ytype   = rec.get("y", "Stock")
+        rec_a   = rec.get("rec_analyst") or rec.get("rec", "")
+        episodes = len(rec.get("e", []))
+        # Include a short snippet of the summary for context
+        summ    = (rec.get("sum", "") or "")[:300].replace("\n", " ")
+        ticker_list.append(
+            f"{t} | {name} | {ytype} | {sector} | status={status} | "
+            f"rec={rec_a} | episodes={episodes} | summary={summ}"
+        )
+
+    db_context = "\n".join(ticker_list)
+
+    prompt = f"""You are a portfolio screening assistant. The user wants to build a watchlist.
+
+USER REQUEST: {query}
+
+DATABASE (pipe-separated: ticker | name | type | sector | status | rec | episodes | summary):
+{db_context}
+
+Instructions:
+- Select up to {max_results} tickers from the database that best match the user's request
+- Base your selection ONLY on the data provided — do not invent tickers not in the list
+- Return ONLY valid JSON in this exact format, nothing else:
+{{
+  "tickers": ["TICK1", "TICK2", ...],
+  "reasoning": "One sentence explaining the selection criteria and why these tickers match"
+}}
+"""
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp   = client.messages.create(
+            model      = "claude-haiku-4-5-20251001",
+            max_tokens = 1000,
+            messages   = [{"role": "user", "content": prompt}],
+        )
+        inp, out, cost = calc_cost(resp)
+        log.info(f"  watchlist-build: in={inp:,} out={out:,} cost=${cost:.4f}")
+
+        raw = resp.content[0].text.strip()
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1].lstrip("json").strip()
+
+        data = json.loads(raw)
+        tickers = [t.strip().upper() for t in data.get("tickers", [])]
+        # Validate — only return tickers that actually exist in db
+        valid_tickers = {r["t"].upper() for r in db}
+        tickers = [t for t in tickers if t in valid_tickers]
+
+        log.info(f"  watchlist-build: selected {len(tickers)} tickers")
+        return jsonify({
+            "ok":        True,
+            "tickers":   tickers,
+            "reasoning": data.get("reasoning", ""),
+        })
+
+    except json.JSONDecodeError as e:
+        log.error(f"  watchlist-build JSON error: {e} — raw: {raw[:200]}")
+        return jsonify({"ok": False, "error": "Claude returned invalid JSON"}), 500
+    except Exception as e:
+        log.error(f"  watchlist-build error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/enrich-yields", methods=["POST"])
+def enrich_yields():
+    """
+    Bulk-fetch dividend yield from Yahoo Finance for all tickers in the DB
+    and persist the value into streetwise_data.json.
+
+    Body (optional): { "tickers": ["SCHD","VYM"] }  — omit to run all
+    Returns: { ok, updated, skipped, errors, results: [{ticker, yield}] }
+    """
+    body    = request.get_json(force=True) or {}
+    targets = [t.upper() for t in body.get("tickers", [])]
+
+    db      = load_data()
+    lookup  = {r["t"].upper(): r for r in db}
+    to_run  = [t for t in lookup] if not targets else [t for t in targets if t in lookup]
+
+    updated = 0
+    skipped = 0
+    errors  = []
+    results = []
+
+    for ticker in to_run:
+        y_sym = YAHOO_MAP.get(ticker, ticker)
+        try:
+            info  = yf.Ticker(y_sym).info
+            raw   = info.get("dividendYield")   # float like 0.0312
+            if raw is not None and raw > 0:
+                lookup[ticker]["div_yield"] = round(float(raw), 6)
+                updated += 1
+                results.append({"ticker": ticker, "yield": round(raw * 100, 2)})
+                log.info(f"  enrich-yields: {ticker} = {raw*100:.2f}%")
+            else:
+                # Explicitly store None so we don't keep re-querying no-dividend stocks
+                lookup[ticker]["div_yield"] = None
+                skipped += 1
+        except Exception as e:
+            log.warning(f"  enrich-yields: {ticker} failed — {e}")
+            errors.append({"ticker": ticker, "error": str(e)})
+
+    # Save
+    merged = list(lookup.values())
+    try:
+        save_tickers(merged)
+        log.info(f"  enrich-yields: {updated} updated, {skipped} no-dividend, {len(errors)} errors")
+        return jsonify({
+            "ok": True, "updated": updated,
+            "skipped": skipped, "errors": errors,
+            "results": sorted(results, key=lambda x: -x["yield"])
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/add-ticker", methods=["POST"])
+def add_ticker():
+    """
+    Add a new ticker (or update an existing one) with a custom summary.
+    Body: {
+      ticker, name, type, sector, status, rec_analyst,
+      price, base, bear, bull, summary, source, tags
+    }
+    If ticker already exists, merges the summary as a new section.
+    """
+    body   = request.get_json(force=True)
+    ticker = body.get("ticker", "").strip().upper()
+    if not ticker:
+        return jsonify({"ok": False, "error": "ticker required"}), 400
+
+    today    = datetime.now().strftime("%Y-%m-%d")
+    source   = body.get("source", "custom").strip() or "custom"
+    prefix   = source[:3].lower()
+    ep_key   = f"{prefix}:{datetime.now().strftime('%Y/%-m/%-d')}"
+    label    = body.get("tags", "").strip() or today
+    heading  = f"=== {ep_key} | {source} · {label} ==="
+    raw_sum  = (body.get("summary", "") or "").strip()
+    new_sum  = (heading + "\n" + raw_sum) if raw_sum else ""
+
+    ALLOWED_STATUS = {"hot","rot","pull","press","dip","rec","caut","flat"}
+
+    db     = load_data()
+    lookup = {r["t"].upper(): r for r in db}
+
+    if ticker in lookup:
+        # Update existing — merge summary, update fields if provided
+        rec = lookup[ticker]
+        if new_sum:
+            existing = rec.get("sum", "") or ""
+            rec["sum"] = (existing.rstrip() + "\n\n" + new_sum).strip()
+        for field, key in [
+            ("name","n"), ("type","y"), ("sector","sector"),
+            ("status","s"), ("rec_analyst","rec_analyst"),
+            ("price","p"), ("base","base"), ("bear","bear"), ("bull","bull")
+        ]:
+            val = body.get(field, "")
+            if val:
+                rec[key] = val
+        # Add ep_key and source tag
+        if ep_key and ep_key not in rec.get("e", []):
+            rec.setdefault("e", []).append(ep_key)
+        if source not in rec.get("src", []):
+            rec.setdefault("src", []).append(source)
+        action = "updated"
+    else:
+        # Brand new ticker
+        new_rec = {
+            "t":   ticker,
+            "n":   body.get("name", ticker),
+            "y":   body.get("type", "Stock"),
+            "s":   body.get("status", "flat") if body.get("status","") in ALLOWED_STATUS else "flat",
+            "p":   body.get("price", ""),
+            "e":   [ep_key] if ep_key else [],
+            "src": [source],
+            "sum": new_sum,
+            "base": body.get("base", ""),
+            "bear": body.get("bear", ""),
+            "bull": body.get("bull", ""),
+        }
+        if body.get("sector"):   new_rec["sector"]     = body["sector"]
+        if body.get("rec_analyst"): new_rec["rec_analyst"] = body["rec_analyst"]
+        lookup[ticker] = new_rec
+        action = "added"
+
+    merged = list(lookup.values())
+    try:
+        save_tickers(merged)
+        log.info(f"  add-ticker: {action} {ticker}")
+        return jsonify({"ok": True, "action": action, "ticker": ticker})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/edit-ticker", methods=["POST"])
+def edit_ticker():
+    """
+    Rename a ticker symbol in streetwise_data.json.
+    Also updates the in-memory quote cache key.
+    Body: { old_ticker, new_ticker }
+    """
+    body       = request.get_json(force=True)
+    old_ticker = body.get("old_ticker", "").strip().upper()
+    new_ticker = body.get("new_ticker", "").strip().upper()
+
+    if not old_ticker or not new_ticker:
+        return jsonify({"ok": False, "error": "old_ticker and new_ticker required"}), 400
+    if old_ticker == new_ticker:
+        return jsonify({"ok": True, "message": "no change"})
+
+    data  = load_data()
+    found = False
+    for rec in data:
+        if rec.get("t", "").upper() == old_ticker:
+            rec["t"] = new_ticker
+            found    = True
+            log.info(f"  ticker renamed: {old_ticker} → {new_ticker}")
+            break
+
+    if not found:
+        return jsonify({"ok": False, "error": f"{old_ticker} not found in database"}), 404
+
+    try:
+        save_tickers(data)
+        # Move cache entry to new key
+        if old_ticker in _cache:
+            _cache[new_ticker] = _cache.pop(old_ticker)
+        return jsonify({"ok": True, "old": old_ticker, "new": new_ticker})
+    except Exception as e:
+        log.error(f"edit-ticker save failed: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/edit-fields", methods=["POST"])
+def edit_fields():
+    """
+    Update any static fields on a ticker record in streetwise_data.json.
+    Body: { ticker, fields: { sector, n, y, s, rec_analyst, ... } }
+    Only the fields present in the body are updated — others are unchanged.
+    """
+    body    = request.get_json(force=True)
+    ticker  = body.get("ticker", "").strip().upper()
+    fields  = body.get("fields", {})
+
+    if not ticker:
+        return jsonify({"ok": False, "error": "ticker required"}), 400
+    if not fields:
+        return jsonify({"ok": True, "message": "nothing to update"})
+
+    # Only allow safe, known fields — prevent overwriting structural keys
+    ALLOWED = {"sector", "n", "y", "s", "rec_analyst", "p", "base", "bear", "bull"}
+    updates = {k: v for k, v in fields.items() if k in ALLOWED}
+    if not updates:
+        return jsonify({"ok": False, "error": "no valid fields to update"}), 400
+
+    data  = load_data()
+    found = False
+    for rec in data:
+        if rec.get("t", "").upper() == ticker:
+            rec.update(updates)
+            found = True
+            log.info(f"  fields updated: {ticker}  {updates}")
+            break
+
+    if not found:
+        return jsonify({"ok": False, "error": f"{ticker} not found"}), 404
+
+    try:
+        save_tickers(data)
+        return jsonify({"ok": True, "ticker": ticker, "updated": updates})
+    except Exception as e:
+        log.error(f"edit-fields save failed: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/save-research", methods=["POST"])
+def save_research():
+    """
+    Append a research section to a ticker's summary in streetwise_data.json.
+    Body: { ticker, section }
+    section is a pre-formatted === ... === block ready to insert.
+    """
+    body    = request.get_json(force=True)
+    ticker  = body.get("ticker", "").upper().strip()
+    section = body.get("section", "").strip()
+
+    if not ticker or not section:
+        return jsonify({"ok": False, "error": "ticker and section required"}), 400
+
+    data = load_data()
+    found = False
+    for rec in data:
+        if rec.get("t", "").upper() == ticker:
+            existing = rec.get("sum", "")
+            rec["sum"] = (existing.rstrip() + "\n\n" + section) if existing.strip() else section
+            found = True
+            break
+
+    if not found:
+        return jsonify({"ok": False, "error": f"{ticker} not found in database"}), 404
+
+    try:
+        save_tickers(data)
+        # Also update allData cache-busting by clearing quote cache for this ticker
+        cache_expire([ticker])
+        log.info(f"Research saved for {ticker}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        log.error(f"Save research failed: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+if __name__ == "__main__":
+    sep = "─" * 54
+    print(f"\n\033[1m\033[36m{sep}\033[0m")
+    print(f"\033[1m  BARRONS WATCHLISTS  —  server.py\033[0m")
+    print(f"\033[36m{sep}\033[0m")
+
+    # Data files check
+    db_ok   = os.path.exists(DB_FILE)
+    data_ok = os.path.exists(DATA_FILE)
+    data    = []
+    if data_ok:
+        try:
+            with open(DATA_FILE, encoding="utf-8", errors="replace") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+
+    print(f"  \033[2m{'streetwise_data.json':<26}\033[0m  ", end="")
+    if data_ok:
+        print(f"\033[32m✓  {len(data)} tickers\033[0m")
+    else:
+        print(f"\033[33m⚠  not found\033[0m")
+
+    print(f"  \033[2m{'price_history.db':<26}\033[0m  ", end="")
+    if db_ok:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            rows = conn.execute("SELECT COUNT(*) FROM prices").fetchone()[0]
+            tkrs = conn.execute("SELECT COUNT(DISTINCT ticker) FROM prices").fetchone()[0]
+            print(f"\033[32m✓  {rows:,} rows · {tkrs} tickers\033[0m")
+        except Exception:
+            print(f"\033[33m⚠  db error\033[0m")
+        finally:
+            conn.close()
+    else:
+        print(f"\033[33m⚠  not found — run: python history_manager.py --init\033[0m")
+
+    # API key status
+    def _key_status(label, val, hint):
+        if val:
+            masked = val[:10] + "…" + val[-4:] if len(val) > 16 else val
+            print(f"  \033[2m{label:<26}\033[0m  \033[32m✓  {masked}\033[0m")
+        else:
+            print(f"  \033[2m{label:<26}\033[0m  \033[33m⚠  not set  ({hint})\033[0m")
+
+    _key_status("Anthropic API key",   os.environ.get("ANTHROPIC_API_KEY",""),  "Claude + Live Research")
+    _key_status("Gemini API key",      os.environ.get("GEMINI_API_KEY",""),     "optional — Gemini search")
+
+    # Cache TTL
+    print(f"  \033[2m{'Quote cache TTL':<26}\033[0m  \033[36m{CACHE_TTL}s\033[0m")
+
+    # Supported ranges
+    ranges_str = "  ".join(RANGES.keys())
+    print(f"  \033[2m{'History ranges':<26}\033[0m  \033[36m{ranges_str}\033[0m")
+
+    print(f"\033[36m{sep}\033[0m")
+    print(f"  \033[1m\033[32mListening on  http://localhost:5000\033[0m")
+    print(f"\033[36m{sep}\033[0m\n")
+
+    import socket as _socket
+    try:
+        lan_ip = _socket.gethostbyname(_socket.gethostname())
+    except Exception:
+        lan_ip = "unknown"
+    print(f"  LAN/Tailscale:  http://{lan_ip}:5000")
+    print(f"[36m{sep}[0m\n")
+
+    app.run(debug=False, host="0.0.0.0", port=5000, use_reloader=False)

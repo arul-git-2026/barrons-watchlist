@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Streetwise — Extracting…</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       background:#0f172a;color:#e2e8f0;font-size:13px;padding:20px;min-height:100vh}
+
+  .header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .logo{background:#3b82f6;color:#fff;font-size:11px;padding:3px 9px;border-radius:4px;font-weight:700;flex-shrink:0}
+  .title{font-size:14px;font-weight:600;color:#f1f5f9;flex:1}
+  .status-dot{width:9px;height:9px;border-radius:50%;background:#fbbf24;flex-shrink:0}
+  .status-dot.running{background:#3b82f6;animation:pulse .8s infinite}
+  .status-dot.done{background:#22c55e;animation:none}
+  .status-dot.error{background:#ef4444;animation:none}
+  .status-dot.stopped{background:#f59e0b;animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* meta row */
+  .meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;font-size:11px;color:#64748b}
+  .meta span{display:flex;align-items:center;gap:4px}
+  .meta b{color:#94a3b8}
+
+  /* progress log */
+  #log{background:#060d1a;border:1px solid #1e293b;border-radius:8px;
+       padding:12px 14px;font-family:monospace;font-size:11px;line-height:1.7;
+       color:#94a3b8;height:280px;overflow-y:auto;margin-bottom:14px}
+  #log .ok  {color:#4ade80}
+  #log .inf {color:#7dd3fc}
+  #log .dim {color:#475569}
+  #log .err {color:#f87171}
+  #log .srv {color:#a78bfa}
+  #log .cost{color:#34d399;font-weight:600}
+  #log .tck {color:#93c5fd;font-weight:600;margin-right:3px}
+
+  /* tickers chips */
+  #ticker-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px;min-height:0}
+  .chip{padding:3px 9px;border-radius:4px;font-family:monospace;font-size:11px;
+        font-weight:700;background:#1e3a5f;color:#93c5fd;border:1px solid #1e4976}
+  .chip.new{background:#052e16;color:#86efac;border-color:#14532d}
+  .chip.upd{background:#1e293b;color:#7dd3fc;border-color:#334155}
+
+  /* summary bar */
+  .summary-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+  .stat{background:#1e293b;border:1px solid #334155;border-radius:7px;
+        padding:10px 12px;text-align:center}
+  .stat-val{font-size:20px;font-weight:700;color:#f1f5f9;font-family:monospace}
+  .stat-lbl{font-size:10px;color:#475569;text-transform:uppercase;
+             letter-spacing:.05em;margin-top:3px}
+  .stat.green .stat-val{color:#4ade80}
+  .stat.blue  .stat-val{color:#60a5fa}
+  .stat.amber .stat-val{color:#fbbf24}
+
+  /* action buttons */
+  .actions{display:flex;gap:8px}
+  .btn{padding:8px 20px;border:none;border-radius:7px;font-size:12px;
+       font-weight:600;cursor:pointer;transition:all .15s;flex:1}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-stop  {background:#374151;color:#9ca3af}
+  .btn-stop:hover:not(:disabled){background:#4b5563;color:#e2e8f0}
+  .btn-retry {background:#1d4ed8;color:#fff}
+  .btn-retry:hover:not(:disabled){background:#2563eb}
+  .btn-close {background:#1e293b;color:#94a3b8;border:1px solid #334155}
+  .btn-close:hover{background:#334155;color:#e2e8f0}
+  .btn-dashboard{background:#059669;color:#fff}
+  .btn-dashboard:hover{background:#10b981}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="logo">STW</span>
+  <span class="title" id="win-title">Extracting article…</span>
+  <span class="status-dot running" id="status-dot"></span>
+</div>
+
+<div class="meta">
+  <span><b>Source:</b> <span id="meta-source">—</span></span>
+  <span><b>Episode:</b> <span id="meta-ep" style="font-family:monospace;color:#60a5fa">—</span></span>
+  <span><b>Model:</b> <span id="meta-model">—</span></span>
+  <span><b>Chars:</b> <span id="meta-chars">—</span></span>
+</div>
+
+<div id="log"></div>
+
+<div id="ticker-chips"></div>
+
+<div class="summary-bar">
+  <div class="stat green"><div class="stat-val" id="s-new">—</div><div class="stat-lbl">New</div></div>
+  <div class="stat blue" ><div class="stat-val" id="s-upd">—</div><div class="stat-lbl">Updated</div></div>
+  <div class="stat"      ><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Total</div></div>
+  <div class="stat amber"><div class="stat-val" id="s-cost">—</div><div class="stat-lbl">Cost</div></div>
+</div>
+
+<div class="actions">
+  <button class="btn btn-stop"      id="btn-stop">Stop</button>
+  <button class="btn btn-retry"     id="btn-retry" disabled>Retry</button>
+  <button class="btn btn-dashboard" id="btn-dash"  disabled>Open Dashboard</button>
+  <button class="btn btn-close"     id="btn-close">Close</button>
+</div>
+
+<script src="progress.js"></script>
+</body>
+</html>
