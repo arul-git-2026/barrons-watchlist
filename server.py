@@ -106,6 +106,30 @@ def calc_cost(response) -> tuple[int, int, float]:
     cost   = (inp * prices["input"] + out * prices["output"]) / 1_000_000
     return inp, out, cost
 
+# ── Token auth (Oracle Cloud deployment) ─────────────────────────────────────
+# Set STREETWISE_TOKEN in /etc/streetwise.env on the server.
+# When set, every request must include ?token=<value> or header X-Streetwise-Token.
+# When not set (local dev), auth is skipped entirely.
+_AUTH_TOKEN: str = os.environ.get("STREETWISE_TOKEN", "").strip()
+
+_AUTH_EXEMPT = {"/favicon.ico"}
+
+@app.before_request
+def _check_token():
+    """Reject requests that don't carry the correct token (when auth is enabled)."""
+    if not _AUTH_TOKEN:
+        return  # auth disabled — local dev mode
+    if request.path in _AUTH_EXEMPT:
+        return
+    provided = (
+        request.args.get("token", "")
+        or request.headers.get("X-Streetwise-Token", "")
+    )
+    if provided != _AUTH_TOKEN:
+        log.warning(f"  auth: rejected {request.remote_addr} → {request.path}")
+        return jsonify({"ok": False, "error": "Unauthorized — missing or invalid token"}), 403
+
+
 @app.before_request
 def _log_request():
     """Print every incoming request to the terminal."""

@@ -1,0 +1,24 @@
+[Unit]
+Description=Streetwise Stock Dashboard
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/streetwise
+EnvironmentFile=/etc/streetwise.env
+ExecStart=/opt/streetwise/.venv/bin/python server.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=streetwise
+
+# Safety limits
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
