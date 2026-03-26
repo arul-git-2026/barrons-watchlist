@@ -47,49 +47,53 @@ Oracle Cloud VM  (Ubuntu 22.04, Always Free)
 |---|---|
 | **Name** | `streetwise` |
 | **Compartment** | `(root)` (default) |
-| **Availability domain** | any (leave default) |
+| **Availability domain** | Try all three (AD-1, AD-2, AD-3) if Ampere is unavailable |
 
-**Image and shape** — this is the most important part:
+**Image and shape — preferred (Ampere ARM):**
 
-1. Under **Image and shape**, click **Edit**
-2. Click **Change image** → select **Ubuntu** → **22.04** → confirm
-3. Click **Change shape**
-   - Select **Ampere** (ARM processor)
-   - Select **VM.Standard.A1.Flex**
-   - Set **OCPUs: 2** and **Memory: 12 GB** (well within the Always Free 4 OCPU / 24 GB allowance)
-   - Click **Select shape**
+1. Click **Change image** → select **Ubuntu** → **22.04** → confirm
+2. Click **Change shape** → select **Ampere** → `VM.Standard.A1.Flex`
+3. Set OCPUs: 2, Memory: 12 GB → click **Select shape**
 
-**Networking** — leave defaults (a VCN and subnet will be created automatically)
+**If Ampere is not available (all 3 ADs):**
 
-**SSH keys** — you need these to connect:
+- Click **Change shape** → **Specialty and previous generation** → `VM.Standard.E2.1.Micro`
+- This is 1 OCPU / 1 GB RAM — sufficient for Streetwise (Flask is lightweight)
+- The setup script adds a 2 GB swap file automatically to prevent memory issues
+
+> ⚠️ Do NOT use `VM.Standard.E3.Flex` — it is a **paid** shape
+
+**SSH keys:**
 
 1. Select **Generate a key pair for me**
-2. Click **Save private key** — this downloads `ssh-key-XXXX.key`
-3. Store this file safely — you cannot get it again
+2. Click **Save private key** → file downloads as `ssh-key-XXXX.key`
+3. Store safely — you cannot retrieve it again
 
 ### 2c. Launch
 
-Click **Create**. The instance will show **Provisioning** for ~2 minutes, then **Running**.
+Click **Create**. Wait ~2 minutes for status to show **Running**.
 
 ---
 
 ## Part 3 — Note Your Public IP Address
 
-1. Click on your instance name (`streetwise`)
-2. Under **Instance information** → **Primary VNIC** → **Public IP address**
-3. Copy this IP — you will use it everywhere below
-   > Example: `140.238.211.99` 79.76.99.90
+1. Click your instance name (`streetwise`)
+2. Under **Primary VNIC** → **Public IP address** → copy it
+   > Your IP: `79.76.99.90`
 
 ---
 
 ## Part 4 — Open Port 5000 in Oracle's Firewall
 
-Oracle blocks all ports except 22 (SSH) by default. You need to open port 5000.
+> ⚠️ Oracle has TWO separate firewalls: the OCI Security List AND Ubuntu's iptables.
+> Both must allow port 5000. The setup script handles iptables. You handle the Security List here.
 
-1. On your instance page, scroll to **Primary VNIC** → click the **subnet** link
-2. Click **Default Security List for ...**
-3. Click **Add Ingress Rules**
-4. Fill in:
+**Finding the correct Security List — navigate from the instance (not from the VCN list):**
+
+1. Go to **Compute → Instances → streetwise**
+2. Scroll to **Primary VNIC** → click the **Subnet** link (blue text)
+3. Left sidebar → **Security Lists** → **Default Security List for...**
+4. Click **Add Ingress Rules**
 
 | Field | Value |
 |---|---|
@@ -104,57 +108,56 @@ Oracle blocks all ports except 22 (SSH) by default. You need to open port 5000.
 
 ## Part 5 — Connect to Your Server
 
-### On Windows — use PuTTY or Windows Terminal
+### On Windows — PowerShell (recommended)
 
-**Option A: Windows Terminal / PowerShell (recommended)**
-
+**Step 1 — Fix key file permissions:**
 ```powershell
-# First, fix the key file permissions (Windows SSH requires this)
-icacls "C:\path\to\ssh-key-XXXX.key" /inheritance:r /grant:r "%username%:(R)"
+icacls "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-25.key" /inheritance:r
+icacls "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-25.key" /grant:r "vasanthaganesh.arulm:(R)"
+```
+> If `%username%` fails (German Windows), use your literal username as above.
 
-# Connect
-ssh -i "C:\path\to\ssh-key-XXXX.key" ubuntu@YOUR_SERVER_IP
+**Step 2 — Connect:**
+```powershell
+ssh -i "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-25.key" ubuntu@79.76.99.90
 ```
 
-**Option B: PuTTY**
+You should see: `ubuntu@streetwise:~$`
+
+### On Windows — PuTTY (alternative)
 
 1. Download PuTTY from https://putty.org
 2. Open PuTTYgen → Load your `.key` file → Save private key as `.ppk`
-3. Open PuTTY → Host: `YOUR_SERVER_IP` → Port: `22`
+3. Open PuTTY → Host: `79.76.99.90` → Port: `22`
 4. Go to Connection → SSH → Auth → browse to your `.ppk` file
 5. Click Open
-
-You should see: `ubuntu@streetwise:~$`
 
 ---
 
 ## Part 6 — Run the Setup Script
 
-Once connected via SSH, run these two commands:
+Once connected via SSH:
 
 ```bash
-# Download the setup script from your GitHub repo
-curl -fsSL https://raw.githubusercontent.com/arul-git-2026/barrons-watchlist/dev_02/deploy/setup_oracle.sh -o setup_oracle.sh
-
-# Run it
-bash setup_oracle.sh
+curl -fsSL https://raw.githubusercontent.com/arul-git-2026/barrons-watchlist/dev_02/deploy/setup_oracle.sh -o setup.sh && bash setup.sh
 ```
 
-The script will:
-- Install Python 3, pip, git
-- Clone your repo into `/opt/streetwise`
-- Install all Python dependencies
-- Open port 5000 in Ubuntu's firewall (`ufw`)
-- Create a systemd service so the server starts automatically on reboot
-- Prompt you to enter your API keys
+> ⚠️ If the repo is private, this returns 404. Fix: GitHub → Settings → Danger Zone → Make public.
 
-**It takes about 3–5 minutes.**
+The script will:
+- Create a 2 GB swap file (critical for 1 GB RAM machines)
+- Install Python 3, pip, git, ufw
+- Clone the repo into `/opt/streetwise`
+- Install Python dependencies in a virtual environment
+- Open port 5000 in Ubuntu's firewall (ufw)
+- Open port 5000 in iptables (Oracle's OS-level firewall)
+- Install and enable the systemd service
+
+**Takes about 3–5 minutes.**
 
 ---
 
 ## Part 7 — Enter Your API Keys on the Server
-
-The setup script creates `/etc/streetwise.env`. Edit it:
 
 ```bash
 sudo nano /etc/streetwise.env
@@ -164,14 +167,14 @@ Fill in:
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=AIza...
-STREETWISE_TOKEN=do-dan-WET234#0hgt_dfgrj
+STREETWISE_TOKEN=your-secret-token-here
 ```
 
-For `STREETWISE_TOKEN` — pick anything memorable but not obvious, e.g. `barrons2026` or `my-dashboard-99`.
+> ⚠️ Token rules: letters, numbers, hyphens ONLY. No `#`, `+`, `&`, `%`, `?` — these break URLs.
+> Good: `sw-ABC123-xyz`   Bad: `token#1`, `pass+word`
 
 Save: `Ctrl+O` → Enter → `Ctrl+X`
 
-Then restart the server:
 ```bash
 sudo systemctl restart streetwise
 ```
@@ -180,15 +183,13 @@ sudo systemctl restart streetwise
 
 ## Part 8 — Upload Your Data to the Server
 
-Back on your **Windows PC**, open a terminal and run:
+On your **Windows PC**, double-click:
 
-```cmd
+```
 deploy\upload_data.bat
 ```
 
-This copies `streetwise_data.json` (your tickers) to the server via SCP.
-
-You will be prompted for the path to your SSH key and server IP the first time. After that, edit `deploy\upload_data.bat` directly to hardcode them.
+This copies `streetwise_data.json` (your tickers) and `price_history.db` to the server via SCP.
 
 ---
 
@@ -197,27 +198,23 @@ You will be prompted for the path to your SSH key and server IP the first time. 
 Open in any browser, from anywhere:
 
 ```
-http://YOUR_SERVER_IP:5000/?token=YOUR_SECRET_TOKEN
+http://79.76.99.90:5000/?token=YOUR_TOKEN
 ```
 
 Bookmark this URL.
 
-**Chrome extension** — update the server URL in the extension popup to point to your Oracle Cloud IP instead of localhost.
+**Chrome extension** — open the extension popup:
+- Server URL field: `http://79.76.99.90:5000`
+- Token field: your token
+- Both are saved automatically to Chrome storage
 
 ---
 
 ## Part 10 — Check the Server is Running
 
-From your SSH session:
-
 ```bash
-# Check service status
 sudo systemctl status streetwise
-
-# Watch live logs
 sudo journalctl -u streetwise -f
-
-# Restart if needed
 sudo systemctl restart streetwise
 ```
 
@@ -225,32 +222,22 @@ sudo systemctl restart streetwise
 
 ## Keeping Your Data in Sync
 
-Whenever you add new tickers on your local machine and want to push them to the server:
-
 ```cmd
-deploy\upload_data.bat
-```
-
-To pull data FROM the server to your local machine (e.g. if you added articles while away):
-
-```cmd
-deploy\download_data.bat
+deploy\upload_data.bat     ← push local tickers to server
+deploy\download_data.bat   ← pull server data back locally
 ```
 
 ---
 
 ## Updating the Server Code
 
-When you push changes to GitHub and want the server to pick them up:
-
 ```bash
-# On the server (via SSH):
+# On the server:
 bash /opt/streetwise/deploy/update.sh
 ```
 
-Or from your Windows PC:
-
 ```cmd
+REM From Windows:
 deploy\remote_update.bat
 ```
 
@@ -260,21 +247,25 @@ deploy\remote_update.bat
 
 | Problem | Fix |
 |---|---|
-| Can't connect via SSH | Check your key file path; check the VM is Running in OCI console |
-| Port 5000 not reachable | Re-check Part 4 (OCI Security List) AND `sudo ufw status` on server |
-| Server not starting | `sudo journalctl -u streetwise -n 50` to see the last 50 log lines |
-| API key errors | `sudo nano /etc/streetwise.env` → check for spaces or quotes around keys |
-| Data not showing | Run `deploy\upload_data.bat` to push your local data |
-| Token rejected (403) | Check `STREETWISE_TOKEN` matches in `/etc/streetwise.env` |
+| Can't connect via SSH | Check key file path; VM must show Running in OCI console |
+| Port 5000 timeout | Check OCI Security List (navigate from instance, not VCN list) |
+| Port 5000 blocked after Security List is correct | Run: `sudo iptables -I INPUT 5 -p tcp --dport 5000 -j ACCEPT && sudo netfilter-persistent save` |
+| Server not starting | `sudo journalctl -u streetwise -n 50` |
+| API key errors | `sudo nano /etc/streetwise.env` — no spaces or quotes around values |
+| Data not showing | Run `deploy\upload_data.bat` |
+| Token rejected (403) | Check `STREETWISE_TOKEN` in `/etc/streetwise.env`; restart after any change |
+| Dashboard loads but shows Error | Token has special chars (`#` `+`); use only letters-numbers-hyphens |
+| Old token still works | Browser has session cookie — test in incognito to verify new token |
+| Both tokens work | Session cookie from old login persists; open incognito to test cleanly |
 
 ---
 
 ## Security Notes
 
-- Your dashboard URL includes a secret token — anyone who knows the full URL can access it
+- Your dashboard URL includes a secret token — anyone with the full URL can access it
 - Do not share the URL publicly
-- Port 22 (SSH) is open — your SSH key is your only protection; keep the `.key` file safe
-- Oracle Cloud Free Tier VMs are real internet-connected machines — keep the OS updated:
+- Port 22 (SSH) is open — your SSH key is the only protection; keep the `.key` file safe
+- Keep the OS updated periodically:
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```
@@ -285,14 +276,111 @@ deploy\remote_update.bat
 
 - **Custom domain** — point a domain name at your IP, then enable HTTPS with Let's Encrypt (certbot)
 - **nginx reverse proxy** — run on port 80/443 instead of 5000
-
-
-
-
-
-
-Server	Oracle Cloud, Frankfurt, Always Free
-Auto-starts	Yes — survives reboots automatically
-URL	http://79.76.99.90:5000/?token=barrons2026
-Bookmark this	Add it to Chrome favourites now
 - **Automatic data sync** — set up a cron job to pull data on a schedule
+- **Migrate to Ampere A1** — when free slots appear in Frankfurt, run `setup_oracle.sh` on the new VM and delete the E2.1.Micro (10-minute migration)
+
+---
+
+## Session Summary — dev_02 Setup (2026-03-25)
+
+### What Was Built
+
+| Item | Detail |
+|---|---|
+| Oracle Cloud VM | VM.Standard.E2.1.Micro, Ubuntu 22.04, Frankfurt (`eu-frankfurt-1`) |
+| Public IP | `79.76.99.90` |
+| Dashboard URL | `http://79.76.99.90:5000/?token=<your-token>` |
+| Auto-start | systemd service — survives reboots |
+| Token auth | `STREETWISE_TOKEN` in `/etc/streetwise.env`; session cookie set on first login |
+| Chrome extension | Server URL + token fields added to popup; all API calls include token |
+| Data sync | `deploy\upload_data.bat` — one double-click push from Windows |
+
+### Discussion — Issues Encountered and How They Were Resolved
+
+**1. Ampere A1 not available in Frankfurt**
+All three Availability Domains (AD-1, AD-2, AD-3) showed no free Ampere slots.
+Used `VM.Standard.E2.1.Micro` (Always Free x86, 1 OCPU, 1 GB RAM) as the fallback.
+The setup script was updated to create a 2 GB swap file before pip install runs — without swap,
+pip can OOM-kill on a 1 GB machine.
+
+**2. Setup script returned 404**
+The GitHub repo was private. `raw.githubusercontent.com` returns HTTP 404 for private repos —
+not a permissions error, just a 404 with no explanation.
+Fixed by making the repo public: GitHub → Settings → Danger Zone → Change visibility → Make public.
+
+**3. `icacls` failed with "account name not found" on German Windows**
+The `%username%` environment variable did not expand correctly when passed to `icacls` in the
+German locale. Fixed by using the literal Windows username `vasanthaganesh.arulm` directly in the command.
+
+**4. Port 5000 not reachable — three layers of firewall**
+Layer 1: Oracle Cloud Security List — added the rule to the **wrong VCN** (there were two VCNs
+in the account). Fixed by navigating from Compute → Instance → Primary VNIC → Subnet, which
+always leads to the correct security list.
+Layer 2: Ubuntu UFW — was correctly configured by the setup script (port 5000 open).
+Layer 3: Oracle's default `iptables` rules — the INPUT chain had a `REJECT all` rule at line 5,
+which blocked all traffic before UFW rules (lines 6–11) were ever evaluated. UFW adds its rules
+after the REJECT, so UFW alone is not enough on Oracle Cloud images. Fixed by inserting an ACCEPT
+rule at position 5: `sudo iptables -I INPUT 5 -p tcp --dport 5000 -j ACCEPT`, then saving with
+`iptables-persistent` to survive reboots.
+
+**5. Token with special characters (`#`, `+`) broke the URL**
+The token `do-dan-WET234#0hgt_dfgrj` caused two problems: the browser treats `#` as a URL fragment
+delimiter and strips everything after it (so the server only received `do-dan-WET234`), and `+`
+is decoded as a space in query strings. Rule: tokens must use only letters, numbers, and hyphens.
+
+**6. Dashboard loaded but showed "Error — check console"**
+The token auth middleware blocked the dashboard's own internal API calls. The page itself loaded
+correctly (token in the URL), but `widget.html` makes subsequent `fetch()` calls to `/api/data`,
+`/api/status` etc. without any token — these all got 403. Fixed with session cookies: on the first
+request with a valid token, the server sets `session['auth'] = True`. All subsequent API calls
+from that browser tab carry the session cookie and are automatically authenticated.
+
+**7. Both old and new token appeared to work simultaneously**
+After changing the token on the server, `barrons2026` still appeared to work. The reason: the
+browser retained the session cookie from the initial login. Even though the server's token had
+changed, the session cookie was still valid (it contains `auth=True`, signed with the Flask
+secret key). The old cookie only becomes invalid when the secret key changes (which happens when
+`STREETWISE_TOKEN` is updated and the service is restarted). To test token enforcement cleanly,
+always use an incognito window — it starts with no cookies.
+
+**8. Chrome extension not configured for Oracle Cloud**
+The extension's `popup.html` had `http://localhost:5000` hardcoded as the server URL, and there
+was no token field at all. All API calls in `popup.js` (`/api/status`, `/api/sources`,
+`/api/delete-episode`) and `progress.js` (`/api/ingest-page`) made requests without any token.
+Fixed by: adding a token input field to the popup; adding `getToken()` and `authUrl()` helper
+functions; updating all fetch calls to use `authUrl()`; passing the token through the job object
+to the progress window; saving/restoring token from `chrome.storage.local`.
+
+### Key Commands Reference
+
+```bash
+# Check server status
+sudo systemctl status streetwise
+
+# View live logs
+sudo journalctl -u streetwise -f
+
+# Edit API keys / token
+sudo nano /etc/streetwise.env
+
+# Restart after config change
+sudo systemctl restart streetwise
+
+# Pull latest code from GitHub
+bash /opt/streetwise/deploy/update.sh
+
+# Fix iptables port 5000 (if blocked after reboot)
+sudo iptables -I INPUT 5 -p tcp --dport 5000 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+```cmd
+REM Windows — push local data to server
+deploy\upload_data.bat
+
+REM Windows — pull server data to local
+deploy\download_data.bat
+
+REM Windows — trigger server code update
+deploy\remote_update.bat
+```
