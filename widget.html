@@ -1823,14 +1823,25 @@ const TV_SYMBOLS = {
 
 function tvSym(t) { return TV_SYMBOLS[t] || t; }
 
+const TV_MAX = 10;  // max tickers in one chart (1 primary + 9 compare)
+let _tvBuildTimer = null;
+
 function buildTVChart() {
+  // Debounce — skip intermediate rebuilds when user checks many boxes quickly
+  clearTimeout(_tvBuildTimer);
+  _tvBuildTimer = setTimeout(_buildTVChartNow, 120);
+}
+
+function _buildTVChartNow() {
   const container = document.getElementById('tv-chart');
   if (!container) return;
   if (selectedChk.size === 0) { clearChart(); return; }
 
   container.innerHTML = '';  // destroy existing widget
 
-  const tickers  = [...selectedChk];
+  // Cap at TV_MAX tickers — take first 10 from the selection set
+  const all      = [...selectedChk];
+  const tickers  = all.slice(0, TV_MAX);
   const primary  = tickers[0];
   const compare  = tickers.slice(1);
   const interval = TV_INTERVAL[currentRange] || 'D';
@@ -1840,32 +1851,39 @@ function buildTVChart() {
 
   // Update symbol label in header
   const lbl = document.getElementById('tv-symbol-label');
-  if (lbl) lbl.textContent = tickers.join(' · ');
+  if (lbl) {
+    const extra = all.length > TV_MAX ? ` (+${all.length - TV_MAX} not shown)` : '';
+    lbl.textContent = tickers.join(' · ') + extra;
+  }
 
-  const compareSymbols = compare.slice(0, 9).map(t => ({
+  // For multi-ticker: line chart (style 3) overlays cleanly on one scale
+  // For single ticker: area chart (style 2) looks nicer
+  const chartStyle = tickers.length > 1 ? '3' : '2';
+
+  const compareSymbols = compare.map(t => ({
     symbol:   tvSym(t),
     position: 'SameScale',
   }));
 
   try {
     new TradingView.widget({
-      container_id:      'tv-chart',
-      autosize:          true,
-      symbol:            tvSym(primary),
-      interval:          interval,
-      range:             rangeVal,
-      timezone:          'Etc/UTC',
-      theme:             isDark ? 'dark' : 'light',
-      style:             '2',           // area chart
-      locale:            'en',
-      toolbar_bg:        isDark ? '#1e293b' : '#f8f9fa',
-      enable_publishing: false,
-      hide_top_toolbar:  false,
-      hide_legend:       false,
-      hide_side_toolbar: true,
+      container_id:        'tv-chart',
+      autosize:            true,
+      symbol:              tvSym(primary),
+      interval:            interval,
+      range:               rangeVal,
+      timezone:            'Etc/UTC',
+      theme:               isDark ? 'dark' : 'light',
+      style:               chartStyle,
+      locale:              'en',
+      toolbar_bg:          isDark ? '#1e293b' : '#f8f9fa',
+      enable_publishing:   false,
+      hide_top_toolbar:    false,
+      hide_legend:         false,
+      hide_side_toolbar:   true,
       allow_symbol_change: true,
-      save_image:        false,
-      compare_symbols:   compareSymbols,
+      save_image:          false,
+      compare_symbols:     compareSymbols,
     });
   } catch(e) { console.warn('TV widget error:', e); }
 
