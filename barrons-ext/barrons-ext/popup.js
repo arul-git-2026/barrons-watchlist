@@ -32,6 +32,13 @@ function logTickers(added, updated, tickers) {
 function getServerUrl() {
   return (document.getElementById('server-url').value || 'http://localhost:5000').replace(/\/$/,'');
 }
+function getToken() {
+  return (document.getElementById('server-token').value || '').trim();
+}
+function authUrl(path) {
+  var t = getToken();
+  return getServerUrl() + path + (t ? '?token=' + encodeURIComponent(t) : '');
+}
 function updatePreview() {
   var date   = document.getElementById('inp-date').value.trim()   || 'M/D';
   var year   = document.getElementById('inp-year').value.trim()   || '????';
@@ -106,7 +113,7 @@ async function pingServer() {
   var dot = document.getElementById('server-dot');
   var txt = document.getElementById('server-status-txt');
   try {
-    var res = await fetch(getServerUrl()+'/api/status', {signal:AbortSignal.timeout(2500)});
+    var res = await fetch(authUrl('/api/status'), {signal:AbortSignal.timeout(2500)});
     if (res.ok) {
       var d = await res.json();
       dot.className = 'dot ok';
@@ -122,7 +129,7 @@ async function pingServer() {
 async function loadSources() {
   var container = document.getElementById('quick-btns');
   try {
-    var res = await fetch(getServerUrl()+'/api/sources', {signal:AbortSignal.timeout(3000)});
+    var res = await fetch(authUrl('/api/sources'), {signal:AbortSignal.timeout(3000)});
     if (!res.ok) throw new Error('HTTP '+res.status);
     var data = await res.json();
     var sources = data.sources || [];
@@ -303,6 +310,7 @@ async function sendPage() {
       title:     title,
       model:     model,
       serverUrl: getServerUrl(),
+      token:     getToken(),
     };
 
     await chrome.storage.local.set({pendingJob: job});
@@ -337,7 +345,7 @@ async function deleteEpisode() {
   if(!confirm('Delete episode "'+epKey+'"?\n\nThis cannot be undone.'))return;
   btn.disabled=true;btn.textContent='⏳…';
   try{
-    var res=await fetch(getServerUrl()+'/api/delete-episode',{
+    var res=await fetch(authUrl('/api/delete-episode'),{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ep_key:epKey,remove_empty:rmEmpty})
     });
@@ -357,8 +365,9 @@ async function deleteEpisode() {
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function() {
   // Restore saved state
-  var stored=await chrome.storage.local.get(['serverUrl','selectedModel','sessionCost']);
-  if(stored.serverUrl) document.getElementById('server-url').value=stored.serverUrl;
+  var stored=await chrome.storage.local.get(['serverUrl','serverToken','selectedModel','sessionCost']);
+  if(stored.serverUrl)   document.getElementById('server-url').value=stored.serverUrl;
+  if(stored.serverToken) document.getElementById('server-token').value=stored.serverToken;
   if(stored.selectedModel) setActiveModel(stored.selectedModel);
   if(stored.sessionCost)  { _sessionCost=parseFloat(stored.sessionCost)||0; updateCostDisplay(); }
 
@@ -374,6 +383,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
   document.getElementById('server-url').addEventListener('change',function(){
     chrome.storage.local.set({serverUrl:getServerUrl()});
+    loadSources();pingServer();
+  });
+  document.getElementById('server-token').addEventListener('change',function(){
+    chrome.storage.local.set({serverToken:getToken()});
     loadSources();pingServer();
   });
 

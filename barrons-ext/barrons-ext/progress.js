@@ -74,7 +74,8 @@ async function runExtraction(job) {
 
   try {
     _controller = new AbortController();
-    var res = await fetch(job.serverUrl+'/api/ingest-page', {
+    var ingestUrl = job.serverUrl+'/api/ingest-page'+(job.token ? '?token='+encodeURIComponent(job.token) : '');
+    var res = await fetch(ingestUrl, {
       method:  'POST',
       headers: {'Content-Type':'application/json'},
       signal:  _controller.signal,
@@ -178,7 +179,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   document.getElementById('btn-retry').addEventListener('click', retry);
   document.getElementById('btn-close').addEventListener('click', function() { window.close(); });
   document.getElementById('btn-dash').addEventListener('click', function() {
-    chrome.tabs.create({url: job.serverUrl});
+    var dashUrl = job.serverUrl + (job.token ? '/?token='+encodeURIComponent(job.token) : '/');
+    chrome.tabs.create({url: dashUrl});
   });
 
   // Start
