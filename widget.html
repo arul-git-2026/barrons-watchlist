@@ -554,6 +554,10 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 .sum-bullet{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;line-height:1.6}
 .sum-bullet-dot{flex-shrink:0;margin-top:5px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
 .sum-bullet strong{color:var(--accent);font-weight:700}
+/* Discussion narrative — prose summary above bullet points */
+.disc-text{font-size:12.5px;line-height:1.7;color:var(--text);font-style:italic;
+  margin:0 0 10px 0;padding:8px 10px;background:var(--hover);border-radius:6px;
+  border-left:3px solid var(--accent);opacity:0.9}
 .ep-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px}
 .ep-tag{
   padding:2px 8px;border-radius:4px;font-size:11px;
@@ -1468,10 +1472,12 @@ function epBadgeCls(epKey) {
 
 // Render summary: collapsible badge sections.
 // State (open/closed) is persisted per ticker+epKey in sessionStorage.
-function renderSummary(raw, ticker) {
+function renderSummary(raw, disc, ticker) {
   if (!raw) return '';
   const sections = parseSummary(raw);
   if (!sections.length) return '';
+  // disc is {ep_key: "narrative text"} or undefined
+  const discMap = (disc && typeof disc === 'object') ? disc : {};
 
   return sections.map((s, i) => {
     if (!s.epKey) {
@@ -1488,12 +1494,18 @@ function renderSummary(raw, ticker) {
     const isOpen   = sessionStorage.getItem(storeKey) !== 'closed';
     const openCls  = isOpen ? ' open' : '';
 
+    // Discussion narrative for this episode
+    const discText = discMap[s.epKey]
+      ? '<p class="disc-text">' + discMap[s.epKey] + '</p>'
+      : '';
+
     return '<div class="sum-section' + openCls + '" data-sum-key="' + storeKey + '">'
       + '<div class="sum-section-toggle" onclick="toggleSumSection(this)">'
       + '<span class="sum-ep-badge ' + cls + '">' + badgeLabel + '</span>'
       + '<span class="sum-chevron">' + (isOpen ? '▲' : '▼') + '</span>'
       + '</div>'
       + '<div class="sum-section-body">'
+      + discText
       + formatSummaryBody(s.text)
       + '</div>'
       + '</div>';
@@ -1626,7 +1638,7 @@ function selectRow(ticker) {
       </div>
     </div>
 
-    ${d.sum ? renderSummary(d.sum, d.t) : ''}
+    ${d.sum ? renderSummary(d.sum, d.disc, d.t) : ''}
 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Scenarios</span>

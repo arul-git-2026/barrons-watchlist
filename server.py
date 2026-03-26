@@ -1091,6 +1091,7 @@ For EACH one return a JSON object with exactly these fields:
   "rec":      "Buy",
   "price":    "~$46",
   "status":   "rot",
+  "discussion": "2-3 sentence prose narrative summarising how this stock was discussed in the article. Written in third person, past tense. No bullet points — this is a short readable paragraph.",
   "summary":  "6-8 bullet points, each on its own line, format: \'• **Label:** explanation\'. Cover: why mentioned, analyst thesis, key metrics, valuation, price targets/EPS, risks, macro tailwind. Bold (**) the label before each colon.",
   "base":     "one sentence base-case outcome",
   "bear":     "one sentence bear-case risk",
@@ -1204,7 +1205,8 @@ CONTENT:
         if not ticker or ticker == "N/A":
             continue
 
-        new_sum = e.get("summary", "")
+        new_sum  = e.get("summary", "")
+        new_disc = e.get("discussion", "").strip()
         tickers_touched.append(ticker)
 
         # Clean sector
@@ -1232,6 +1234,10 @@ CONTENT:
                     rec["sum"] = f"{existing.rstrip()}\n\n{heading}\n{new_sum}" if existing.strip() else f"{heading}\n{new_sum}"
             else:
                 rec["sum"] = (rec.get("sum", "") + "\n\n" + new_sum).strip()
+            # Discussion narrative (per-episode dict)
+            if new_disc:
+                disc_map = rec.setdefault("disc", {})
+                disc_map[ep_key] = new_disc
             # Fields
             rec["s"] = e.get("status", rec.get("s", "flat"))
             if e.get("price", "N/A") != "N/A":
@@ -1251,6 +1257,8 @@ CONTENT:
                 "base": e.get("base", ""), "bear": e.get("bear", ""),
                 "bull": e.get("bull", ""),
             }
+            if new_disc:
+                new_rec["disc"] = {ep_key: new_disc}
             if sector != "N/A":       new_rec["sector"]     = sector
             if e.get("rec") and e["rec"] != "N/A": new_rec["rec_analyst"] = e["rec"]
             lookup[ticker] = new_rec
