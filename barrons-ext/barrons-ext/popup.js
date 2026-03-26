@@ -223,13 +223,37 @@ async function getPageText(tabId) {
   var results = await chrome.scripting.executeScript({
     target: {tabId:tabId},
     func: function() {
-      var sels=['article','[data-type="article"]','.article__body','[class*="ArticleBody"]','main'];
-      var el=null;
-      for(var i=0;i<sels.length;i++){el=document.querySelector(sels[i]);if(el)break;}
-      if(!el)el=document.body;
-      var c=el.cloneNode(true);
-      c.querySelectorAll('script,style,nav,header,footer,[class*="Ad"],[class*="newsletter"],button,[class*="paywall"],aside').forEach(function(n){n.remove();});
-      return c.innerText.replace(/\n{3,}/g,'\n\n').trim();
+      var NOISE = 'script,style,nav,header,footer,button,aside,[class*="Ad"],[class*="newsletter"],[class*="Subscribe"],[class*="related"],[class*="READ NEXT"]';
+
+      function extractFrom(el) {
+        var c = el.cloneNode(true);
+        c.querySelectorAll(NOISE).forEach(function(n){n.remove();});
+        return c.innerText.replace(/\n{3,}/g,'\n\n').trim();
+      }
+
+      // Try specific article selectors first
+      var sels = [
+        'article',
+        '[data-type="article"]',
+        '.article__body',
+        '[class*="ArticleBody"]',
+        '[class*="article-body"]',
+        '[class*="paywall"]',   // Barrons wraps content in paywall div even when subscribed
+        'main'
+      ];
+      for (var i = 0; i < sels.length; i++) {
+        var el = document.querySelector(sels[i]);
+        if (el) {
+          var text = extractFrom(el);
+          if (text.length > 800) return text;  // enough content — use it
+        }
+      }
+
+      // Fallback: collect all paragraph text from the page
+      var paras = Array.from(document.querySelectorAll('p'))
+        .map(function(p){ return p.innerText.trim(); })
+        .filter(function(t){ return t.length > 40; });
+      return paras.join('\n\n').trim();
     }
   });
   return (results[0]&&results[0].result)||'';
