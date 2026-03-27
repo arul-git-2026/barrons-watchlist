@@ -13,6 +13,8 @@ Install
   pip install flask flask-cors yfinance
 """
 
+from __future__ import annotations
+
 from flask import Flask, jsonify, send_file, request, session, make_response
 import yfinance as yf
 import sqlite3
