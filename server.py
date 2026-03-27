@@ -2275,46 +2275,64 @@ def rpo_extract(ticker):
 
     result = {"ok": True, "ticker": ticker}
 
-    # Step 1 — Exa.ai retrieves 10-K → Claude extracts RPO
+    # Step 1 — Exa /search (type=deep) retrieves 10-K text → Claude extracts RPO
+    # Note: Exa /answer requires a paid plan; /search is available on free tier.
     try:
-        # Use Exa /answer endpoint — returns a direct answer with citations, no extra Claude call needed
         exa_pl = json.dumps({
             "query": (
-                f"What is {ticker} ({name}) remaining performance obligation (RPO) in their latest 10-K? "
-                f"Include: total RPO amount, current 12-month portion, long-term portion, YoY change, and filing date."
+                f"{ticker} {name} remaining performance obligation RPO 10-K annual report "
+                f"current portion long-term deferred revenue backlog"
             ),
-            "text": True,
+            "type":        "deep",
+            "num_results": 3,
+            "contents": {"text": {"max_characters": 10000}},
         }).encode()
-        exa_req  = _ur.Request("https://api.exa.ai/answer", data=exa_pl,
+        exa_req  = _ur.Request("https://api.exa.ai/search", data=exa_pl,
                                headers={"Content-Type": "application/json", "x-api-key": exa_key})
         exa_resp = json.loads(_ur.urlopen(exa_req, timeout=45).read())
-        answer   = (exa_resp.get("answer") or "").strip()
-        sources  = exa_resp.get("citations") or exa_resp.get("results") or []
+        results  = exa_resp.get("results") or []
+
+        # Collect text from top results
+        doc_text = ""
         src_list = ""
-        if sources:
-            src_list = "\n".join(
-                f"• **Source:** {s.get('title','')[:60]} — {s.get('url','')[:80]}"
-                for s in sources[:3] if s.get("url")
+        for r in results[:3]:
+            t = (r.get("text") or "")[:6000]
+            if t:
+                doc_text += t + "\n\n"
+                title = (r.get("title") or "")[:60]
+                url   = (r.get("url")   or "")[:80]
+                if url:
+                    src_list += f"• **Source:** {title} — {url}\n"
+        doc_text = doc_text[:12000]   # hard cap to keep Claude tokens reasonable
+
+        if not doc_text:
+            result["step1"] = (
+                "• **Note:** Exa search returned no documents for this ticker.\n"
+                "• **Tip:** Open the SEC tab, download the latest 10-K, find the RPO footnote "
+                "(search Ctrl+F → 'remaining performance obligation'), then re-run.\n"
+                "• **Also note:** Not all companies have RPO — it applies mainly to "
+                "SaaS/subscription businesses (MSFT, CRM, NVDA, etc.)."
             )
-        if answer:
-            # Format as bullet points matching our pipeline structure
+        else:
             client = _ant.Anthropic(api_key=ant_key)
             msg = client.messages.create(
-                model="claude-sonnet-4-5", max_tokens=512,
+                model="claude-sonnet-4-5", max_tokens=600,
                 messages=[{"role": "user", "content":
-                    f"Reformat this RPO data for {ticker} as bullet points:\n{answer}\n\n"
-                    f"Use this exact format:\n• **Total RPO:** $X.XB\n• **Current (12m):** $X.XB (XX%)\n"
-                    f"• **Long-term:** $X.XB (XX%)\n• **YoY change:** +XX%\n• **Filing date:** YYYY-MM-DD\n"
-                    f"If any value is missing, write — for that field."}])
-            result["step1"] = msg.content[0].text
+                    f"Extract Remaining Performance Obligation (RPO) data for {ticker} ({name}) "
+                    f"from the document below. Use ONLY bullet points — no tables, no headers.\n\n"
+                    f"Required format (write — if not found):\n"
+                    f"• **Total RPO:** $X.XB\n"
+                    f"• **Current (12m):** $X.XB (XX% of total)\n"
+                    f"• **Long-term (>12m):** $X.XB (XX% of total)\n"
+                    f"• **YoY change:** +XX% vs prior year\n"
+                    f"• **Filing date:** YYYY-MM-DD\n"
+                    f"• **Note:** one sentence on RPO relevance for this business type\n\n"
+                    f"Document:\n{doc_text}"}])
+            result["step1"] = msg.content[0].text.strip()
             if src_list:
-                result["step1"] += "\n" + src_list
-            log.info(f"  rpo step1: {ticker} {len(result['step1'])} chars (Exa /answer)")
-        else:
-            result["step1"] = (
-                "• **Note:** Exa /answer returned no RPO data for this ticker. "
-                "Open the SEC tab, search for the latest 10-K, and paste the RPO table here.\n" + src_list
-            )
+                result["step1"] += "\n" + src_list.strip()
+            log.info(f"  rpo step1: {ticker} {len(result['step1'])} chars (Exa /search deep)")
+
     except Exception as ex:
         log.error(f"RPO step1 {ticker}: {ex}")
         result["step1"] = f"• **Error (Step 1):** {str(ex)[:200]}"
@@ -2325,26 +2343,32 @@ def rpo_extract(ticker):
         msg2 = client.messages.create(
             model="claude-sonnet-4-5", max_tokens=512,
             messages=[{"role": "user", "content":
-                f"Based on this RPO extraction for {ticker}:\n{result.get('step1','')}\n\n"
-                f"Verify and summarize:\n• **Billed backlog:** amount recognized\n"
-                f"• **Unbilled backlog:** contracted but not billed\n"
-                f"• **12m conversion rate:** estimated % to revenue\n"
-                f"• **Confidence:** High/Medium/Low + reason"}])
-        result["step2"] = msg2.content[0].text
+                f"Based on this RPO data for {ticker}:\n{result.get('step1','')}\n\n"
+                f"Summarize the backlog verification using ONLY bullet points. "
+                f"No markdown tables, no headers, just • bullets.\n\n"
+                f"• **Billed backlog:** amount already invoiced (estimate or — if unavailable)\n"
+                f"• **Unbilled backlog:** contracted but not yet billed\n"
+                f"• **12m conversion rate:** estimated % converting to revenue next 12 months\n"
+                f"• **Confidence:** High / Medium / Low — one sentence reason\n"
+                f"• **Business type note:** is this a SaaS/subscription company where RPO is meaningful?"}])
+        result["step2"] = msg2.content[0].text.strip()
     except Exception as ex:
         log.error(f"RPO step2 {ticker}: {ex}")
         result["step2"] = f"• **Error (Step 2):** {str(ex)[:200]}"
 
-    # Step 3 — Gemini 2.0 Flash builds revenue bridge
+    # Step 3 — Gemini 2.5 Flash builds revenue bridge
     try:
         gurl = ("https://generativelanguage.googleapis.com/v1beta/"
-                f"models/gemini-2.0-flash:generateContent?key={gemini_key}")
+                f"models/gemini-2.5-flash:generateContent?key={gemini_key}")
         gpl  = json.dumps({"contents": [{"parts": [{"text":
             f"Build a 4-quarter revenue bridge for {ticker} ({name}) based on:\n"
             f"RPO: {result.get('step1','')}\nBacklog: {result.get('step2','')}\n\n"
-            f"Format as bullet points:\n• **Q1 forecast:** $X.XB (reason)\n• **Q2:** $X.XB\n"
-            f"• **Q3:** $X.XB\n• **Q4:** $X.XB\n• **Full year:** $X.XB (+XX% YoY)\n"
-            f"• **Key assumption:** one sentence"}]}],
+            f"Use ONLY bullet points — no markdown tables, no headers.\n"
+            f"• **Q1 forecast:** $X.XB (reason)\n• **Q2 forecast:** $X.XB\n"
+            f"• **Q3 forecast:** $X.XB\n• **Q4 forecast:** $X.XB\n"
+            f"• **Full year:** $X.XB (+XX% YoY)\n"
+            f"• **Key assumption:** one sentence\n"
+            f"If RPO data is unavailable, say so clearly rather than fabricating numbers."}]}],
             "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512}}).encode()
         greq  = _ur.Request(gurl, data=gpl, headers={"Content-Type": "application/json"})
         gdata = json.loads(_ur.urlopen(greq, timeout=30).read())
