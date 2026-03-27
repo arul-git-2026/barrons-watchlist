@@ -1659,6 +1659,21 @@ function selectRow(ticker) {
   activeRow = ticker;
   showResearchCard(ticker);
   render();
+  // Auto-fetch Finnhub in background so sidebar earn-pill + sentiment dot populate
+  // immediately on row click (not only when Finnhub tab is opened manually)
+  if (!_rcCache[ticker] || !_rcCache[ticker].finnhub) {
+    fetch('/api/finnhub/' + ticker)
+      .then(r => r.json())
+      .then(data => {
+        if (!_rcCache[ticker]) _rcCache[ticker] = {};
+        _rcCache[ticker].finnhub = data;
+        updateSidebarSentiment(ticker, data);
+        // If Finnhub tab is currently open for this ticker, render it now
+        const pane = document.getElementById('rc-tab-finnhub');
+        if (pane && _rcTab === 'finnhub' && _rcTicker === ticker) renderFinnhub(ticker, data);
+      })
+      .catch(() => {});  // silent — sidebar just stays empty if API unreachable
+  }
   const d = allData.find(x => x.t === ticker);
   if (!d) return;
 
