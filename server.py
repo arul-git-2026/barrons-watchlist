@@ -2051,6 +2051,312 @@ def save_research():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── Finnhub — earnings calendar + news sentiment ──────────────────────────────
+def _fmt_rev(v):
+    if not v: return None
+    v = float(v)
+    if v >= 1e9: return f"${v/1e9:.1f}B"
+    if v >= 1e6: return f"${v/1e6:.1f}M"
+    return f"${v:.0f}"
+
+def _eps_surprise(actual, estimate):
+    try:
+        a, e = float(actual), float(estimate)
+        if e == 0: return None
+        return round((a - e) / abs(e) * 100, 1)
+    except Exception:
+        return None
+
+@app.route("/api/finnhub/<ticker>")
+def get_finnhub(ticker):
+    """Finnhub earnings calendar + news sentiment. Requires FINNHUB_API_KEY."""
+    import urllib.request as _ur, urllib.error as _ue
+    api_key = os.environ.get("FINNHUB_API_KEY", "").strip()
+    ticker  = ticker.upper()
+    if not api_key:
+        return jsonify({"ok": True, "ticker": ticker, "earnings": {}, "sentiment": {},
+                        "error": "FINNHUB_API_KEY not set — add to /etc/streetwise.env"})
+    result = {"ok": True, "ticker": ticker, "earnings": {}, "sentiment": {}}
+    # Earnings calendar
+    try:
+        today  = date.today().isoformat()
+        ahead  = (date.today() + timedelta(days=90)).isoformat()
+        url    = (f"https://finnhub.io/api/v1/calendar/earnings"
+                  f"?from={today}&to={ahead}&symbol={ticker}&token={api_key}")
+        resp   = _ur.urlopen(_ur.Request(url), timeout=10)
+        cal    = json.loads(resp.read()).get("earningsCalendar", [])
+        if cal:
+            e = cal[0]
+            result["earnings"] = {
+                "next_date":       e.get("date", ""),
+                "eps_estimate":    e.get("epsEstimate"),
+                "eps_actual":      e.get("epsActual"),
+                "revenue_estimate": _fmt_rev(e.get("revenueEstimate")),
+                "surprise":        _eps_surprise(e.get("epsActual"), e.get("epsEstimate")),
+            }
+    except Exception as ex:
+        log.warning(f"Finnhub earnings {ticker}: {ex}")
+        result["earnings_error"] = str(ex)
+    # News sentiment
+    try:
+        url  = f"https://finnhub.io/api/v1/news-sentiment?symbol={ticker}&token={api_key}"
+        resp = _ur.urlopen(_ur.Request(url), timeout=10)
+        data = json.loads(resp.read())
+        result["sentiment"] = {
+            "score":    data.get("sentiment", {}).get("bullishPercent", 0.5),
+            "buzz":     data.get("buzz", {}).get("buzz", 0),
+            "articles": data.get("buzz", {}).get("articlesInLastWeek", 0),
+        }
+    except Exception as ex:
+        log.warning(f"Finnhub sentiment {ticker}: {ex}")
+        result["sentiment_error"] = str(ex)
+    return jsonify(result)
+
+
+# ── Perplexity /v1/responses — deep research (fast-search preset) ─────────────
+@app.route("/api/perplexity", methods=["POST"])
+def perplexity_research():
+    """
+    Perplexity deep research using /v1/responses with fast-search preset.
+    Body: {ticker, name, query}. Requires PERPLEXITY_API_KEY.
+    Uses the newer /v1/responses API (simpler than /chat/completions — no model selection needed).
+    """
+    import urllib.request as _ur, urllib.error as _ue
+    body   = request.get_json(force=True)
+    ticker = body.get("ticker", "").upper().strip()
+    name   = body.get("name", "")
+    query  = body.get("query", "").strip()
+    if not ticker:
+        return jsonify({"ok": False, "error": "ticker required"}), 400
+    api_key = os.environ.get("PERPLEXITY_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"ok": False,
+                        "error": "PERPLEXITY_API_KEY not set — add to /etc/streetwise.env"})
+    if not query:
+        query = f"Latest RPO trend, revenue growth, and analyst consensus for {ticker} ({name})."
+
+    # Build a focused financial research prompt
+    full_input = (
+        f"Research {ticker} ({name}) for a stock investor. "
+        f"{query} "
+        f"Format as bullet points: • **Label:** one sentence with specific numbers and dates. "
+        f"Labels: Recent news, Earnings, RPO/Backlog, Revenue growth, Analyst rating, "
+        f"Price target, EPS forecast, Catalyst, Risk, Valuation."
+    )
+
+    payload = json.dumps({
+        "preset": "fast-search",
+        "input":  full_input,
+    }).encode()
+
+    req = _ur.Request(
+        "https://api.perplexity.ai/v1/responses",
+        data=payload,
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {api_key}"},
+    )
+    try:
+        resp = _ur.urlopen(req, timeout=45)
+        data = json.loads(resp.read())
+        # /v1/responses returns {"output": [{"type":"message","content":[{"text":"..."}]}]}
+        # or a simpler {"text": "..."} depending on version — handle both
+        text = ""
+        if "output" in data:
+            for item in (data["output"] or []):
+                if item.get("type") == "message":
+                    for c in (item.get("content") or []):
+                        text += c.get("text", "")
+        elif "text" in data:
+            text = data["text"]
+        elif "choices" in data:
+            # fallback: old format
+            text = data["choices"][0]["message"]["content"]
+
+        text = text.strip()
+        if not text:
+            text = "Perplexity returned an empty response — check your API key and billing."
+        log.info(f"  perplexity /v1/responses: {ticker} {len(text)} chars")
+        return jsonify({"ok": True, "text": text})
+    except _ue.HTTPError as e:
+        err = e.read().decode("utf-8", errors="replace")[:400]
+        log.error(f"Perplexity HTTP {e.code}: {err}")
+        # Gracefully fall back to /chat/completions if /v1/responses returns 404
+        if e.code == 404:
+            return _perplexity_chat_fallback(ticker, name, full_input, api_key)
+        return jsonify({"ok": False, "error": f"Perplexity API error {e.code}: {err}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+def _perplexity_chat_fallback(ticker, name, query, api_key):
+    """Fallback to /chat/completions if /v1/responses endpoint is unavailable."""
+    import urllib.request as _ur, urllib.error as _ue
+    payload = json.dumps({
+        "model": "sonar-pro",
+        "messages": [{"role": "user", "content": query}],
+        "max_tokens": 1024, "temperature": 0.2,
+    }).encode()
+    req = _ur.Request("https://api.perplexity.ai/chat/completions", data=payload,
+                      headers={"Content-Type": "application/json",
+                               "Authorization": f"Bearer {api_key}"})
+    try:
+        resp = _ur.urlopen(req, timeout=30)
+        data = json.loads(resp.read())
+        text = data["choices"][0]["message"]["content"]
+        log.info(f"  perplexity fallback /chat/completions: {ticker} {len(text)} chars")
+        return jsonify({"ok": True, "text": text})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+# ── Perplexity /search — live news per ticker ──────────────────────────────────
+@app.route("/api/news/<ticker>")
+def get_news(ticker):
+    """
+    Live news headlines for a ticker via Perplexity /search endpoint.
+    Returns top 5 results: title, url, snippet.
+    Requires PERPLEXITY_API_KEY.
+    """
+    import urllib.request as _ur, urllib.error as _ue
+    ticker  = ticker.upper()
+    api_key = os.environ.get("PERPLEXITY_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"ok": False,
+                        "error": "PERPLEXITY_API_KEY not set — add to /etc/streetwise.env"})
+    payload = json.dumps({
+        "query":              f"{ticker} stock news earnings analyst",
+        "max_results":        5,
+        "max_tokens_per_page": 256,
+    }).encode()
+    req = _ur.Request(
+        "https://api.perplexity.ai/search",
+        data=payload,
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {api_key}"},
+    )
+    try:
+        resp    = _ur.urlopen(req, timeout=20)
+        data    = json.loads(resp.read())
+        results = data.get("results") or data.get("hits") or []
+        articles = [
+            {"title": r.get("title", ""),
+             "url":   r.get("url", ""),
+             "snippet": (r.get("text") or r.get("snippet") or "")[:300]}
+            for r in results
+        ]
+        log.info(f"  news /search: {ticker} {len(articles)} articles")
+        return jsonify({"ok": True, "ticker": ticker, "articles": articles})
+    except _ue.HTTPError as e:
+        err = e.read().decode("utf-8", errors="replace")[:300]
+        log.error(f"Perplexity /search HTTP {e.code}: {err}")
+        return jsonify({"ok": False, "error": f"Perplexity search error {e.code}: {err}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+# ── RPO Extractor — Exa.ai → Claude Sonnet 4.6 → Gemini 2.0 Flash ────────────
+@app.route("/api/rpo/<ticker>", methods=["POST"])
+def rpo_extract(ticker):
+    """3-step RPO pipeline. Requires ANTHROPIC_API_KEY + EXA_API_KEY + GEMINI_API_KEY."""
+    import urllib.request as _ur, urllib.error as _ue, anthropic as _ant
+    body   = request.get_json(force=True)
+    name   = body.get("name", "")
+    ticker = ticker.upper()
+
+    ant_key    = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    exa_key    = os.environ.get("EXA_API_KEY",       "").strip()
+    gemini_key = os.environ.get("GEMINI_API_KEY",    "").strip()
+
+    missing = [k for k, v in [("ANTHROPIC_API_KEY", ant_key),
+                               ("EXA_API_KEY", exa_key),
+                               ("GEMINI_API_KEY", gemini_key)] if not v]
+    if missing:
+        return jsonify({"ok": False, "error": f"Missing keys: {', '.join(missing)}"})
+
+    result = {"ok": True, "ticker": ticker}
+
+    # Step 1 — Exa.ai retrieves 10-K → Claude extracts RPO
+    try:
+        # Use Exa /answer endpoint — returns a direct answer with citations, no extra Claude call needed
+        exa_pl = json.dumps({
+            "query": (
+                f"What is {ticker} ({name}) remaining performance obligation (RPO) in their latest 10-K? "
+                f"Include: total RPO amount, current 12-month portion, long-term portion, YoY change, and filing date."
+            ),
+            "text": True,
+        }).encode()
+        exa_req  = _ur.Request("https://api.exa.ai/answer", data=exa_pl,
+                               headers={"Content-Type": "application/json", "x-api-key": exa_key})
+        exa_resp = json.loads(_ur.urlopen(exa_req, timeout=45).read())
+        answer   = (exa_resp.get("answer") or "").strip()
+        sources  = exa_resp.get("citations") or exa_resp.get("results") or []
+        src_list = ""
+        if sources:
+            src_list = "\n".join(
+                f"• **Source:** {s.get('title','')[:60]} — {s.get('url','')[:80]}"
+                for s in sources[:3] if s.get("url")
+            )
+        if answer:
+            # Format as bullet points matching our pipeline structure
+            client = _ant.Anthropic(api_key=ant_key)
+            msg = client.messages.create(
+                model="claude-sonnet-4-5", max_tokens=512,
+                messages=[{"role": "user", "content":
+                    f"Reformat this RPO data for {ticker} as bullet points:\n{answer}\n\n"
+                    f"Use this exact format:\n• **Total RPO:** $X.XB\n• **Current (12m):** $X.XB (XX%)\n"
+                    f"• **Long-term:** $X.XB (XX%)\n• **YoY change:** +XX%\n• **Filing date:** YYYY-MM-DD\n"
+                    f"If any value is missing, write — for that field."}])
+            result["step1"] = msg.content[0].text
+            if src_list:
+                result["step1"] += "\n" + src_list
+            log.info(f"  rpo step1: {ticker} {len(result['step1'])} chars (Exa /answer)")
+        else:
+            result["step1"] = (
+                "• **Note:** Exa /answer returned no RPO data for this ticker. "
+                "Open the SEC tab, search for the latest 10-K, and paste the RPO table here.\n" + src_list
+            )
+    except Exception as ex:
+        log.error(f"RPO step1 {ticker}: {ex}")
+        result["step1"] = f"• **Error (Step 1):** {str(ex)[:200]}"
+
+    # Step 2 — Claude verifies unbilled backlog
+    try:
+        client = _ant.Anthropic(api_key=ant_key)
+        msg2 = client.messages.create(
+            model="claude-sonnet-4-5", max_tokens=512,
+            messages=[{"role": "user", "content":
+                f"Based on this RPO extraction for {ticker}:\n{result.get('step1','')}\n\n"
+                f"Verify and summarize:\n• **Billed backlog:** amount recognized\n"
+                f"• **Unbilled backlog:** contracted but not billed\n"
+                f"• **12m conversion rate:** estimated % to revenue\n"
+                f"• **Confidence:** High/Medium/Low + reason"}])
+        result["step2"] = msg2.content[0].text
+    except Exception as ex:
+        log.error(f"RPO step2 {ticker}: {ex}")
+        result["step2"] = f"• **Error (Step 2):** {str(ex)[:200]}"
+
+    # Step 3 — Gemini 2.0 Flash builds revenue bridge
+    try:
+        gurl = ("https://generativelanguage.googleapis.com/v1beta/"
+                f"models/gemini-2.0-flash:generateContent?key={gemini_key}")
+        gpl  = json.dumps({"contents": [{"parts": [{"text":
+            f"Build a 4-quarter revenue bridge for {ticker} ({name}) based on:\n"
+            f"RPO: {result.get('step1','')}\nBacklog: {result.get('step2','')}\n\n"
+            f"Format as bullet points:\n• **Q1 forecast:** $X.XB (reason)\n• **Q2:** $X.XB\n"
+            f"• **Q3:** $X.XB\n• **Q4:** $X.XB\n• **Full year:** $X.XB (+XX% YoY)\n"
+            f"• **Key assumption:** one sentence"}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512}}).encode()
+        greq  = _ur.Request(gurl, data=gpl, headers={"Content-Type": "application/json"})
+        gdata = json.loads(_ur.urlopen(greq, timeout=30).read())
+        parts = (gdata.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+        result["step3"] = "".join(p.get("text", "") for p in parts).strip()
+    except Exception as ex:
+        log.error(f"RPO step3 {ticker}: {ex}")
+        result["step3"] = f"• **Error (Step 3):** {str(ex)[:200]}"
+
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     sep = "─" * 54
     print(f"\n\033[1m\033[36m{sep}\033[0m")
@@ -2096,8 +2402,11 @@ if __name__ == "__main__":
         else:
             print(f"  \033[2m{label:<26}\033[0m  \033[33m⚠  not set  ({hint})\033[0m")
 
-    _key_status("Anthropic API key",   os.environ.get("ANTHROPIC_API_KEY",""),  "Claude + Live Research")
-    _key_status("Gemini API key",      os.environ.get("GEMINI_API_KEY",""),     "optional — Gemini search")
+    _key_status("Anthropic API key",   os.environ.get("ANTHROPIC_API_KEY",""),  "Claude + Live Research + RPO")
+    _key_status("Gemini API key",      os.environ.get("GEMINI_API_KEY",""),     "Gemini search + RPO step 3")
+    _key_status("Finnhub API key",     os.environ.get("FINNHUB_API_KEY",""),    "Earnings calendar + sentiment")
+    _key_status("Perplexity API key",  os.environ.get("PERPLEXITY_API_KEY",""), "Research tab + live news (/v1/responses + /search)")
+    _key_status("Exa API key",         os.environ.get("EXA_API_KEY",""),        "RPO 10-K document retrieval")
 
     # Cache TTL
     print(f"  \033[2m{'Quote cache TTL':<26}\033[0m  \033[36m{CACHE_TTL}s\033[0m")

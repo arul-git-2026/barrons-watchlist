@@ -23,7 +23,7 @@
 }
 @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap');
 body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:14px}
-.layout{display:grid;grid-template-columns:300px 1fr;height:100vh}
+.layout{display:grid;grid-template-columns:420px 1fr;height:100vh}
 
 /* ── Sidebar ──────────────────────────────────────────────────────── */
 .sidebar{
@@ -627,6 +627,88 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
   justify-content:center;height:100%;color:var(--muted);gap:10px;font-size:13px
 }
 .placeholder svg{opacity:.25}
+/* ── Sidebar: ticker-line single-row layout ──────────────────────── */
+.ticker-line{display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden}
+.ian-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:#ede9fe;color:#6d28d9;font-weight:600;flex-shrink:0}
+.earn-pill{font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#fef3c7;color:#92400e;
+  white-space:nowrap;flex-shrink:0;display:none}
+.earn-pill.visible{display:inline-block}
+.sent-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:none}
+.sent-dot.visible{display:inline-block}
+.sent-dot.bull{background:#16a34a}.sent-dot.bear{background:#dc2626}.sent-dot.neut{background:#d97706}
+.sent-score{font-size:9px;color:var(--muted);flex-shrink:0;display:none}
+.sent-score.visible{display:inline-block}
+
+/* ── Research & Analysis Card ───────────────────────────────────── */
+.rc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+.rc-title-group{display:flex;flex-direction:column;gap:2px}
+.rc-title{font-size:13px;font-weight:600;color:var(--text)}
+.rc-subtitle{font-size:10px;color:var(--muted)}
+.rc-tickers{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap}
+.rc-tick{padding:3px 10px;border-radius:4px;border:1px solid var(--border);font-size:11px;font-weight:700;
+  cursor:pointer;background:none;color:var(--muted);font-family:'Roboto Mono',monospace;transition:all .15s}
+.rc-tick:hover{border-color:var(--accent);color:var(--accent)}
+.rc-tick.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.rc-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;gap:0;overflow-x:auto}
+.rctab{padding:7px 14px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;
+  border:none;border-bottom:2px solid transparent;margin-bottom:-1px;background:none;
+  font-family:var(--font);white-space:nowrap;transition:all .15s;display:flex;align-items:center;gap:5px}
+.rctab:hover{color:var(--text)}
+.rctab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.tab-pane{display:none}.tab-pane.on{display:block}
+.rc-placeholder{text-align:center;padding:24px;color:var(--muted);font-size:12px}
+/* Perplexity */
+.rc-run-btn{padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:opacity .15s}
+.rc-run-btn:disabled{opacity:.5;cursor:not-allowed}
+.perp-out{min-height:80px;padding:12px;border:1px dashed var(--border);border-radius:6px;
+  font-size:12.5px;line-height:1.75;color:var(--text);margin-top:10px;white-space:pre-wrap;word-break:break-word}
+.perp-out.empty{color:var(--muted);font-style:italic;text-align:center;padding:20px}
+.perp-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.ptag{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid}
+.ptag.bull{border-color:var(--up);color:var(--up)}.ptag.bear{border-color:var(--down);color:var(--down)}.ptag.neut{border-color:#d97706;color:#d97706}
+.ai-footer{font-size:10px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+/* RPO */
+.rpo-steps{display:flex;flex-direction:column;gap:16px}
+.rpo-step{display:flex;gap:12px}
+.step-num{width:22px;height:22px;border-radius:50%;background:#d97706;color:#fff;font-size:10px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.step-body{flex:1}
+.step-title{font-size:11px;font-weight:700;color:#d97706;margin-bottom:2px}
+.step-model{font-size:10px;color:var(--muted);margin-bottom:6px}
+.rpo-out{min-height:40px;padding:10px;border:1px dashed var(--border);border-radius:6px;
+  font-size:12px;line-height:1.7;color:var(--text);background:var(--bg);margin-top:6px}
+.rpo-out.empty{color:var(--muted);font-style:italic}
+/* SEC */
+.sec-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sec-card{border:1px solid var(--border);border-radius:6px;padding:12px;background:var(--bg)}
+.sec-card h4{font-size:12px;font-weight:600;margin-bottom:3px}
+.sec-card p{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5}
+.sec-link-btn{font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;border:1px solid var(--border);
+  color:var(--muted);background:var(--card);cursor:pointer;text-decoration:none;display:inline-block;transition:all .15s}
+.sec-link-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* TOS */
+.tos-card{border:1px solid #0d9488;border-radius:8px;padding:14px;background:#f0fdfa;margin-bottom:10px}
+.tos-card h4{font-size:12px;font-weight:600;color:#0f766e;margin-bottom:5px}
+.tos-card p{font-size:12px;color:#134e4a;line-height:1.6;margin-bottom:10px}
+.tos-open-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:6px;
+  background:#0d9488;color:#fff;font-size:12px;font-weight:600;cursor:pointer;border:none;
+  text-decoration:none;font-family:var(--font)}
+.tos-tip{padding:9px 12px;background:#fff;border:1px solid #99f6e4;border-radius:6px;
+  font-size:11px;color:#134e4a;line-height:1.6;margin-top:8px}
+.tos-tip strong{color:#0f766e}
+/* Finnhub */
+.finn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.finn-card{border:1px solid var(--border);border-radius:6px;padding:12px;background:var(--bg)}
+.finn-card h4{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.finn-metric{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f1f3f4;font-size:12px}
+.finn-metric:last-child{border-bottom:none}
+.finn-metric label{color:var(--muted);font-size:11px}
+.finn-metric .mv{font-weight:600}
+.sent-bar-bg{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:8px}
+.sent-bar-fill{height:100%;border-radius:3px}
+.finn-loading{text-align:center;padding:20px;color:var(--muted);font-size:12px;font-style:italic}
+
 ::-webkit-scrollbar{width:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
@@ -936,6 +1018,44 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
           Check tickers in the sidebar to compare
         </span>
       </div>
+    </div>
+
+    <!-- ══ RESEARCH & ANALYSIS CARD ══ -->
+    <div class="card" id="research-card" style="display:none;padding:12px 16px">
+      <div class="rc-header">
+        <div class="rc-title-group">
+          <span class="rc-title">Research &amp; Analysis</span>
+          <span class="rc-subtitle">Perplexity &nbsp;·&nbsp; RPO Extractor &nbsp;·&nbsp; SEC &nbsp;·&nbsp; TOS &nbsp;·&nbsp; Finnhub</span>
+        </div>
+        <div class="rc-tickers" id="rc-ticker-pills"></div>
+      </div>
+      <div class="rc-tabs">
+        <button class="rctab on" id="rctab-perplexity" onclick="setRCTab('perplexity',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Perplexity Research
+        </button>
+        <button class="rctab" id="rctab-rpo" onclick="setRCTab('rpo',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          RPO Extractor
+        </button>
+        <button class="rctab" id="rctab-sec" onclick="setRCTab('sec',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          SEC Filings
+        </button>
+        <button class="rctab" id="rctab-tos" onclick="setRCTab('tos',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          TOS
+        </button>
+        <button class="rctab" id="rctab-finnhub" onclick="setRCTab('finnhub',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Earnings &amp; Sentiment
+        </button>
+      </div>
+      <div class="tab-pane on" id="rc-tab-perplexity"><div class="rc-placeholder">Click a ticker row to begin</div></div>
+      <div class="tab-pane" id="rc-tab-rpo"><div class="rc-placeholder">Click a ticker row to run the RPO pipeline</div></div>
+      <div class="tab-pane" id="rc-tab-sec"><div class="rc-placeholder">Click a ticker row to view SEC filing links</div></div>
+      <div class="tab-pane" id="rc-tab-tos"><div class="rc-placeholder">Click a ticker row to open in thinkorswim</div></div>
+      <div class="tab-pane" id="rc-tab-finnhub"><div class="rc-placeholder">Click a ticker row to load earnings &amp; sentiment</div></div>
     </div>
 
     <!-- Detail card (hidden until row is clicked) -->
@@ -1354,9 +1474,14 @@ function render() {
           onclick="toggleChart('${d.t}', event)">
       </td>
       <td class="cell">
-        <span class="chip">${d.t}</span>
-        ${(d.src||[]).includes('ian') ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#ede9fe;color:#6d28d9;font-weight:600;margin-right:3px">Ian</span>' : ''}
-        <div class="co-name">${d.n || ''}</div>
+        <div class="ticker-line">
+          <span class="chip">${d.t}</span>
+          ${(d.src||[]).includes('ian') ? '<span class="ian-badge">Ian</span>' : ''}
+          <span class="earn-pill" data-earn="${d.t}"></span>
+          <span class="sent-dot" data-sdot="${d.t}"></span>
+          <span class="sent-score" data-sscore="${d.t}"></span>
+          <span class="co-name">${d.n || ''}</span>
+        </div>
       </td>
       <td class="cell" style="text-align:right">
         <div class="price-val">${d.price_fmt || '—'}</div>
@@ -1532,6 +1657,7 @@ function toggleSumSection(toggleEl) {
 // ── Detail panel ───────────────────────────────────────────────────
 function selectRow(ticker) {
   activeRow = ticker;
+  showResearchCard(ticker);
   render();
   const d = allData.find(x => x.t === ticker);
   if (!d) return;
@@ -2188,6 +2314,338 @@ setInterval(async () => {
     fetchChart();
   } catch (e) { console.warn('Auto-refresh failed:', e); }
 }, 5 * 60 * 1000);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Research & Analysis Card ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _rcTicker  = null;
+let _rcTab     = 'perplexity';
+let _rcHistory = [];          // last 4 tickers (for pills)
+const RC_MAX   = 4;
+let _rcCache   = {};          // { NVDA: { finnhub:{}, perplexity:'', rpo:{} } }
+
+function showResearchCard(ticker) {
+  const card = document.getElementById('research-card');
+  if (card) card.style.display = 'block';
+  _rcTicker = ticker;
+  if (!_rcHistory.includes(ticker)) {
+    _rcHistory.unshift(ticker);
+    if (_rcHistory.length > RC_MAX) _rcHistory = _rcHistory.slice(0, RC_MAX);
+  }
+  updateRCPills();
+  loadRCTabContent(ticker, _rcTab);
+}
+
+function updateRCPills() {
+  const el = document.getElementById('rc-ticker-pills');
+  if (!el) return;
+  el.innerHTML = _rcHistory.map(t =>
+    `<button class="rc-tick${t === _rcTicker ? ' on' : ''}" onclick="setRCTicker('${t}',this)">${t}</button>`
+  ).join('');
+}
+
+function setRCTicker(ticker, btn) {
+  _rcTicker = ticker;
+  document.querySelectorAll('.rc-tick').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  loadRCTabContent(ticker, _rcTab);
+}
+
+function setRCTab(tab, btn) {
+  _rcTab = tab;
+  document.querySelectorAll('.rctab').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  const pane = document.getElementById('rc-tab-' + tab);
+  if (pane) pane.classList.add('on');
+  if (_rcTicker) loadRCTabContent(_rcTicker, tab);
+}
+
+function loadRCTabContent(ticker, tab) {
+  if (!ticker) return;
+  if (tab === 'finnhub')    loadFinnhub(ticker);
+  else if (tab === 'sec')   renderSECLinks(ticker);
+  else if (tab === 'tos')   renderTOS(ticker);
+  else if (tab === 'perplexity') renderPerplexityPrompt(ticker);
+  else if (tab === 'rpo')   renderRPOPanel(ticker);
+}
+
+// ── Finnhub ──────────────────────────────────────────────────────────────────
+async function loadFinnhub(ticker) {
+  const pane = document.getElementById('rc-tab-finnhub');
+  if (!pane) return;
+  if (_rcCache[ticker] && _rcCache[ticker].finnhub) {
+    renderFinnhub(ticker, _rcCache[ticker].finnhub); return;
+  }
+  pane.innerHTML = '<div class="finn-loading">Loading Finnhub data…<span class="research-cursor"></span></div>';
+  try {
+    const res  = await fetch('/api/finnhub/' + ticker);
+    const data = await res.json();
+    if (!_rcCache[ticker]) _rcCache[ticker] = {};
+    _rcCache[ticker].finnhub = data;
+    renderFinnhub(ticker, data);
+    updateSidebarSentiment(ticker, data);
+  } catch (e) {
+    pane.innerHTML = '<div class="finn-loading" style="color:var(--down)">Could not load Finnhub data: ' + e.message + '</div>';
+  }
+}
+
+function renderFinnhub(ticker, data) {
+  const pane = document.getElementById('rc-tab-finnhub');
+  if (!pane) return;
+  const earn = data.earnings  || {};
+  const sent = data.sentiment || {};
+  const score   = sent.score != null ? +sent.score : 0.5;
+  const sCls    = score > 0.6 ? 'bull' : score < 0.4 ? 'bear' : 'neut';
+  const sColor  = sCls === 'bull' ? '#16a34a' : sCls === 'bear' ? '#dc2626' : '#d97706';
+  const sLabel  = sCls === 'bull' ? '▲ Bullish' : sCls === 'bear' ? '▼ Bearish' : '● Neutral';
+  const barPct  = Math.round(score * 100);
+  const surpClr = (earn.surprise || 0) >= 0 ? 'var(--up)' : 'var(--down)';
+
+  pane.innerHTML = `
+    <div class="finn-grid">
+      <div class="finn-card">
+        <h4>Earnings Calendar</h4>
+        <div class="finn-metric"><label>Next EPS date</label><span class="mv">${earn.next_date || '—'}</span></div>
+        <div class="finn-metric"><label>EPS estimate</label><span class="mv">${earn.eps_estimate != null ? '$'+earn.eps_estimate : '—'}</span></div>
+        <div class="finn-metric"><label>Revenue estimate</label><span class="mv">${earn.revenue_estimate || '—'}</span></div>
+        <div class="finn-metric"><label>Last EPS surprise</label>
+          <span class="mv" style="color:${surpClr}">${earn.surprise != null ? ((earn.surprise>=0?'+':'')+earn.surprise+'%') : '—'}</span>
+        </div>
+      </div>
+      <div class="finn-card">
+        <h4>News Sentiment (7d)</h4>
+        <div class="finn-metric"><label>Score</label>
+          <span class="mv" style="color:${sColor}">${score.toFixed(2)} ${sLabel}</span>
+        </div>
+        <div class="finn-metric"><label>Articles</label><span class="mv">${sent.articles || '—'}</span></div>
+        <div class="finn-metric"><label>Buzz score</label><span class="mv">${sent.buzz != null ? (+sent.buzz).toFixed(2) : '—'}</span></div>
+        <div class="sent-bar-bg"><div class="sent-bar-fill" style="width:${barPct}%;background:${sColor}"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px">
+          <span>Bearish 0</span><span>1 Bullish</span>
+        </div>
+      </div>
+    </div>
+    ${data.error ? `<div style="margin-top:8px;font-size:11px;color:var(--down)">${data.error}</div>` : ''}
+    <div style="margin-top:8px;font-size:10px;color:var(--muted)">Powered by Finnhub · requires FINNHUB_API_KEY</div>`;
+}
+
+function updateSidebarSentiment(ticker, data) {
+  const earn = data.earnings  || {};
+  const sent = data.sentiment || {};
+  const earnEl  = document.querySelector(`[data-earn="${ticker}"]`);
+  const dotEl   = document.querySelector(`[data-sdot="${ticker}"]`);
+  const scoreEl = document.querySelector(`[data-sscore="${ticker}"]`);
+  if (earnEl && earn.next_date) {
+    earnEl.textContent = 'EPS ' + earn.next_date.slice(5);  // "May 28" style
+    earnEl.classList.add('visible');
+  }
+  if (dotEl && sent.score != null) {
+    const c = +sent.score > 0.6 ? 'bull' : +sent.score < 0.4 ? 'bear' : 'neut';
+    dotEl.className = 'sent-dot visible ' + c;
+  }
+  if (scoreEl && sent.score != null) {
+    scoreEl.textContent = (+sent.score).toFixed(2);
+    scoreEl.classList.add('visible');
+  }
+}
+
+// ── SEC Links ────────────────────────────────────────────────────────────────
+function renderSECLinks(ticker) {
+  const pane = document.getElementById('rc-tab-sec');
+  if (!pane) return;
+  const t = encodeURIComponent(ticker);
+  const yr = new Date().getFullYear() - 1;
+  pane.innerHTML = `
+    <div class="sec-grid">
+      <div class="sec-card">
+        <h4>Annual Report (10-K)</h4>
+        <p>Latest 10-K — includes RPO / remaining performance obligations in footnotes</p>
+        <a class="sec-link-btn" href="https://efts.sec.gov/LATEST/search-index?q=%22${t}%22&dateRange=custom&startdt=${yr}-01-01&forms=10-K" target="_blank">Open EDGAR ↗</a>
+      </div>
+      <div class="sec-card">
+        <h4>Quarterly Report (10-Q)</h4>
+        <p>Most recent 10-Q — deferred revenue and backlog disclosures</p>
+        <a class="sec-link-btn" href="https://efts.sec.gov/LATEST/search-index?q=%22${t}%22&forms=10-Q" target="_blank">Open EDGAR ↗</a>
+      </div>
+      <div class="sec-card">
+        <h4>8-K Current Reports</h4>
+        <p>Earnings releases, guidance updates, material events</p>
+        <a class="sec-link-btn" href="https://efts.sec.gov/LATEST/search-index?q=%22${t}%22&forms=8-K" target="_blank">Open EDGAR ↗</a>
+      </div>
+      <div class="sec-card">
+        <h4>Full Filing History</h4>
+        <p>All SEC filings for ${ticker} — search by ticker or company name</p>
+        <a class="sec-link-btn" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=${t}&type=10-K&dateb=&owner=include&count=10" target="_blank">Search EDGAR ↗</a>
+      </div>
+    </div>
+    <div style="margin-top:10px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);line-height:1.6">
+      <strong style="color:var(--text)">RPO tip:</strong> Open the 10-K and search <em>Ctrl+F → "remaining performance obligation"</em>.
+      The RPO table is usually in Note 3–4 of the financial statements. Paste it into the RPO Extractor tab.
+    </div>`;
+}
+
+// ── TOS Tab ──────────────────────────────────────────────────────────────────
+function renderTOS(ticker) {
+  const pane = document.getElementById('rc-tab-tos');
+  if (!pane) return;
+  const d    = allData.find(x => x.t === ticker);
+  const name = d ? (d.n || ticker) : ticker;
+  const t    = encodeURIComponent(ticker);
+  pane.innerHTML = `
+    <div class="tos-card">
+      <h4>📊 Open ${ticker} in thinkorswim</h4>
+      <p>Launch the thinkorswim platform and load the ${ticker} chart directly with a single click.</p>
+      <a class="tos-open-btn" href="thinkorswim://platform=CHARTS&chartType=CANDLE&symbol=${t}">Open ${ticker} in TOS ↗</a>
+    </div>
+    <div class="tos-tip">
+      <strong>Set up an RPO growth alert in TOS:</strong><br>
+      1. Open ${ticker} chart → Studies → Add Study → New Study (thinkScript)<br>
+      2. Ask Gemini: <em>"Write a thinkScript for ${ticker} that plots RPO growth rate and fires an alert when it accelerates above 10%"</em><br>
+      3. Paste the result into the TOS Study Editor → Save → Apply<br>
+      4. Right-click chart → Create Alert → Based on Study → fires to your mobile app
+    </div>
+    <div class="tos-tip" style="margin-top:8px">
+      <strong>Gemini revenue model:</strong> In the RPO Extractor tab, run the pipeline for ${name}.
+      Gemini 2.0 Flash will build a 4-quarter revenue bridge based on the RPO conversion rate.
+    </div>`;
+}
+
+// ── Perplexity Research Tab ───────────────────────────────────────────────────
+function renderPerplexityPrompt(ticker) {
+  const pane = document.getElementById('rc-tab-perplexity');
+  if (!pane) return;
+  const d    = allData.find(x => x.t === ticker);
+  const name = d ? (d.n || ticker) : ticker;
+  const cached = _rcCache[ticker] && _rcCache[ticker].perplexity;
+  const resultHtml = cached
+    ? `<div class="perp-out">${cached}</div><div class="ai-footer">Perplexity sonar-pro · cached</div>`
+    : `<div class="perp-out empty" id="perp-result-${ticker}">Click "Run Research" to fetch deep analysis</div>`;
+  pane.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:2px">
+      <input class="research-input" id="perp-q-${ticker}" type="text" style="flex:1;font-size:12px;padding:7px 10px"
+        placeholder="What is the latest RPO trend and revenue outlook for ${ticker}?"
+        value="Latest RPO, revenue growth, and analyst outlook for ${ticker} (${name})"
+        onkeydown="if(event.key==='Enter')runPerplexity('${ticker}','${name}')">
+      <button class="rc-run-btn" id="perp-btn-${ticker}" onclick="runPerplexity('${ticker}','${name}')">Run Research</button>
+    </div>
+    <div id="perp-wrap-${ticker}">${resultHtml}</div>
+    <div style="margin-top:6px;font-size:10px;color:var(--muted)">
+      Powered by Perplexity sonar-pro · ~$0.013/query · requires PERPLEXITY_API_KEY in /etc/streetwise.env
+    </div>`;
+}
+
+async function runPerplexity(ticker, name) {
+  const qEl   = document.getElementById('perp-q-' + ticker);
+  const wrap  = document.getElementById('perp-wrap-' + ticker);
+  const btn   = document.getElementById('perp-btn-' + ticker);
+  if (!qEl || !wrap) return;
+  const q = qEl.value.trim();
+  if (!q) return;
+  wrap.innerHTML = '<div class="perp-out empty">Researching…<span class="research-cursor"></span></div>';
+  if (btn) btn.disabled = true;
+  try {
+    const res  = await fetch('/api/perplexity', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ticker, name, query: q})
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Perplexity request failed');
+    const html = formatSummaryBody(data.text);
+    if (!_rcCache[ticker]) _rcCache[ticker] = {};
+    _rcCache[ticker].perplexity = html;
+    wrap.innerHTML = `<div class="perp-out">${html}</div>
+      <div class="ai-footer">Perplexity sonar-pro · ${new Date().toLocaleString()}</div>`;
+  } catch (e) {
+    wrap.innerHTML = `<div class="perp-out empty" style="color:var(--down)">Error: ${e.message}</div>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── RPO Extractor Tab ─────────────────────────────────────────────────────────
+function renderRPOPanel(ticker) {
+  const pane = document.getElementById('rc-tab-rpo');
+  if (!pane) return;
+  const d    = allData.find(x => x.t === ticker);
+  const name = d ? (d.n || ticker) : ticker;
+  const cached = _rcCache[ticker] && _rcCache[ticker].rpo;
+  const s1 = cached ? cached.step1 : null;
+  const s2 = cached ? cached.step2 : null;
+  const s3 = cached ? cached.step3 : null;
+
+  pane.innerHTML = `
+    <div class="rpo-steps">
+      <div class="rpo-step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Extract RPO from 10-K</div>
+          <div class="step-model">Exa.ai document retrieval &nbsp;→&nbsp; Claude Sonnet 4.6</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">
+            Retrieves the latest 10-K for ${name} via Exa.ai and extracts the RPO table.
+          </div>
+          <div class="rpo-out ${s1 ? '' : 'empty'}" id="rpo-s1-${ticker}">${s1 ? formatSummaryBody(s1) : 'Not run yet'}</div>
+        </div>
+      </div>
+      <div class="rpo-step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Verify Unbilled Backlog</div>
+          <div class="step-model">Claude Sonnet 4.6 · cross-reference verification</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">
+            Checks the RPO split (current 12m vs. long-term) and verifies unbilled backlog against footnotes.
+          </div>
+          <div class="rpo-out ${s2 ? '' : 'empty'}" id="rpo-s2-${ticker}">${s2 ? formatSummaryBody(s2) : 'Runs after Step 1'}</div>
+        </div>
+      </div>
+      <div class="rpo-step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Revenue Bridge Forecast</div>
+          <div class="step-model">Gemini 2.0 Flash · financial modelling</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">
+            Builds a 4-quarter revenue bridge projecting conversion rate from historical RPO patterns.
+          </div>
+          <div class="rpo-out ${s3 ? '' : 'empty'}" id="rpo-s3-${ticker}">${s3 ? formatSummaryBody(s3) : 'Runs after Step 2'}</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="rc-run-btn" id="rpo-btn-${ticker}" onclick="runRPO('${ticker}','${name}')">▶ Run RPO Pipeline</button>
+      <span style="font-size:11px;color:var(--muted)">Requires: ANTHROPIC_API_KEY · EXA_API_KEY · GEMINI_API_KEY</span>
+    </div>`;
+}
+
+async function runRPO(ticker, name) {
+  const btn = document.getElementById('rpo-btn-' + ticker);
+  const s1  = document.getElementById('rpo-s1-' + ticker);
+  const s2  = document.getElementById('rpo-s2-' + ticker);
+  const s3  = document.getElementById('rpo-s3-' + ticker);
+  if (!btn || !s1) return;
+  btn.disabled = true; btn.textContent = '⏳ Running pipeline…';
+  s1.className = 'rpo-out'; s1.innerHTML = 'Searching for 10-K…<span class="research-cursor"></span>';
+  if (s2) { s2.className = 'rpo-out empty'; s2.textContent = 'Waiting…'; }
+  if (s3) { s3.className = 'rpo-out empty'; s3.textContent = 'Waiting…'; }
+  try {
+    const res  = await fetch('/api/rpo/' + ticker, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ticker, name})
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'RPO pipeline failed');
+    if (!_rcCache[ticker]) _rcCache[ticker] = {};
+    _rcCache[ticker].rpo = data;
+    if (s1 && data.step1) { s1.className = 'rpo-out'; s1.innerHTML = formatSummaryBody(data.step1); }
+    if (s2 && data.step2) { s2.className = 'rpo-out'; s2.innerHTML = formatSummaryBody(data.step2); }
+    if (s3 && data.step3) { s3.className = 'rpo-out'; s3.innerHTML = formatSummaryBody(data.step3); }
+    toast('RPO analysis complete for ' + ticker);
+  } catch (e) {
+    if (s1) { s1.className = 'rpo-out'; s1.innerHTML = '<span style="color:var(--down)">Error: ' + e.message + '</span>'; }
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ Run RPO Pipeline';
+  }
+}
 
 // ── Case history renderer ─────────────────────────────────────────
 // Case fields store entries separated by "--- YYYY-MM-DD ---" date stamps.
