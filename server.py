@@ -529,6 +529,16 @@ def home():
     return resp
 
 
+@app.route("/v2")
+def home_v2():
+    """widget_v2.html — development/testing version. Production stays at /"""
+    resp = send_file("widget_v2.html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"]        = "no-cache"
+    resp.headers["Expires"]       = "0"
+    return resp
+
+
 @app.route("/api/data")
 def get_all_data():
     """
