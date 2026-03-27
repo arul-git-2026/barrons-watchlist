@@ -2278,8 +2278,6 @@ def _sec_get_cik(ticker: str) -> str | None:
 def _sec_get_rpo_xbrl(cik: str) -> list:
     """Fetch RPO figures from SEC XBRL API. Returns list of {end, val, form} dicts."""
     import urllib.request as _ur
-    url  = (f"https://data.sec.gov/api/xbrl/companycontent/{cik}"
-            f"/us-gaap/RevenueRemainingPerformanceObligation.json")
     # Try primary URL first, then alternate path
     for path in [
         f"https://data.sec.gov/api/xbrl/companyconcept/{cik}/us-gaap/RevenueRemainingPerformanceObligation.json",
@@ -2301,6 +2299,77 @@ def _sec_get_rpo_xbrl(cik: str) -> list:
     return [], "", "", ""
 
 
+def _sec_get_rpo_efts_fallback(cik: str, ticker: str) -> tuple:
+    """Fallback when XBRL has no RPO data.
+    Downloads the latest 10-K primary document via EDGAR submissions API,
+    finds the 'remaining performance obligation' section, returns raw text.
+    Returns (extracted_text, filing_info_str) or ("", "") if not found.
+    """
+    import urllib.request as _ur
+    import re
+    try:
+        # Step A — get latest 10-K accession number from submissions API
+        subs_url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+        req = _ur.Request(subs_url,
+                          headers={"User-Agent": "Streetwise/1.0 research@streetwise.app"})
+        subs = json.loads(_ur.urlopen(req, timeout=15).read())
+
+        filings      = subs.get("filings", {}).get("recent", {})
+        forms        = filings.get("form", [])
+        adsh_list    = filings.get("accessionNumber", [])
+        dates        = filings.get("filingDate", [])
+        primary_docs = filings.get("primaryDocument", [])
+
+        adsh = filing_date = primary_doc = matched_form = None
+        for i, form in enumerate(forms):
+            if form in ("10-K", "20-F", "10-Q"):
+                adsh         = adsh_list[i]
+                filing_date  = dates[i]
+                primary_doc  = primary_docs[i] if i < len(primary_docs) else None
+                matched_form = form
+                break
+
+        if not adsh or not primary_doc:
+            log.info(f"  sec efts: no recent 10-K found for CIK {cik}")
+            return "", ""
+
+        # Step B — download the primary filing document (cap at 2 MB)
+        adsh_clean = adsh.replace("-", "")
+        cik_int    = str(int(cik))
+        doc_url    = (f"https://www.sec.gov/Archives/edgar/data/"
+                      f"{cik_int}/{adsh_clean}/{primary_doc}")
+        log.info(f"  sec efts: downloading {doc_url[:80]}...")
+        req2     = _ur.Request(doc_url,
+                               headers={"User-Agent": "Streetwise/1.0 research@streetwise.app"})
+        response = _ur.urlopen(req2, timeout=30)
+        html     = response.read(2 * 1024 * 1024).decode("utf-8", errors="replace")
+
+        # Step C — strip HTML, find RPO mentions
+        text = re.sub(r'<[^>]+>', ' ', html)
+        text = re.sub(r'&nbsp;',  ' ', text)
+        text = re.sub(r'&amp;',   '&', text)
+        text = re.sub(r'\s+',     ' ', text)
+
+        matches = list(re.finditer(r'remaining performance obligation', text, re.IGNORECASE))
+        if not matches:
+            log.info(f"  sec efts: 'remaining performance obligation' not found in {matched_form}")
+            return "", ""
+
+        # Extract text around first mention (200 chars before, 2500 after)
+        m       = matches[0]
+        start   = max(0, m.start() - 200)
+        end     = min(len(text), m.start() + 2500)
+        extract = text[start:end].strip()
+
+        filing_info = f"{ticker} {matched_form} filed {filing_date} (EDGAR full-text)"
+        log.info(f"  sec efts: found RPO text in {matched_form} {filing_date} — {len(extract)} chars")
+        return extract, filing_info
+
+    except Exception as ex:
+        log.warning(f"  sec efts fallback {ticker}: {ex}")
+        return "", ""
+
+
 # ── RPO Extractor — SEC EDGAR XBRL → Claude Sonnet 4.6 → Gemini 2.5 Flash ────
 @app.route("/api/rpo/<ticker>", methods=["POST"])
 def rpo_extract(ticker):
@@ -2311,9 +2380,11 @@ def rpo_extract(ticker):
     name   = body.get("name", "")
     ticker = ticker.upper()
 
-    ant_key    = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    exa_key    = os.environ.get("EXA_API_KEY",       "").strip()
-    gemini_key = os.environ.get("GEMINI_API_KEY",    "").strip()
+    ant_key     = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    exa_key     = os.environ.get("EXA_API_KEY",       "").strip()
+    gemini_key  = os.environ.get("GEMINI_API_KEY",    "").strip()
+    extra_prompt = body.get("extra_prompt", "").strip()
+    extra_note   = f"\n\nAdditional instructions from analyst: {extra_prompt}" if extra_prompt else ""
 
     missing = [k for k, v in [("ANTHROPIC_API_KEY", ant_key),
                                ("GEMINI_API_KEY",    gemini_key)] if not v]
@@ -2334,15 +2405,39 @@ def rpo_extract(ticker):
         else:
             rows, entity_name, label, src_path = _sec_get_rpo_xbrl(cik)
             if not rows:
-                result["step1"] = (
-                    f"• **No RPO data:** SEC EDGAR has no XBRL filing for "
-                    f"RevenueRemainingPerformanceObligation for {ticker}.\n"
-                    f"• **Business type note:** RPO is typically disclosed by SaaS / "
-                    f"subscription companies (MSFT, CRM, NOW, ADBE, NVDA). "
-                    f"Restaurants, retailers, and industrials rarely have RPO.\n"
-                    f"• **Manual option:** Open the SEC tab, find the latest 10-K, "
-                    f"search Ctrl+F → 'remaining performance obligation'."
-                )
+                # XBRL concept not tagged — try EFTS full-text fallback
+                efts_text, efts_info = _sec_get_rpo_efts_fallback(cik, ticker)
+                if efts_text:
+                    client  = _ant.Anthropic(api_key=ant_key)
+                    msg_efts = client.messages.create(
+                        model="claude-sonnet-4-5", max_tokens=600,
+                        messages=[{"role": "user", "content":
+                            f"Extract all Remaining Performance Obligation (RPO) figures from this "
+                            f"SEC filing excerpt for {ticker} and format as bullet points ONLY "
+                            f"(no tables, no headers, no markdown ##).\n\n"
+                            f"Source: {efts_info}\n\n"
+                            f"Text:\n{efts_text}\n\n"
+                            f"Required output (use only what you can find — do not fabricate):\n"
+                            f"• **Total RPO:** $X.XB as of [date]\n"
+                            f"• **Current (next 12m):** $X.XB (if disclosed)\n"
+                            f"• **Long-term (beyond 12m):** $X.XB (if disclosed)\n"
+                            f"• **YoY change:** vs prior period if mentioned\n"
+                            f"• **Source:** {efts_info}\n"
+                            f"If the filing does not disclose RPO, say so clearly."
+                            f"{extra_note}"}])
+                    result["step1"] = msg_efts.content[0].text.strip()
+                    log.info(f"  rpo step1 (EFTS fallback): {ticker} — parsed from {efts_info}")
+                else:
+                    result["step1"] = (
+                        f"• **No RPO data:** SEC EDGAR has no XBRL filing for "
+                        f"RevenueRemainingPerformanceObligation for {ticker}, and no RPO "
+                        f"disclosure was found in the latest 10-K text.\n"
+                        f"• **Business type note:** RPO is typically disclosed by SaaS / "
+                        f"subscription companies (MSFT, CRM, NOW, ADBE, NVDA). "
+                        f"Restaurants, retailers, and industrials rarely have RPO.\n"
+                        f"• **Manual option:** Open the SEC tab, find the latest 10-K, "
+                        f"search Ctrl+F → 'remaining performance obligation'."
+                    )
             else:
                 # Build YoY summary from XBRL rows
                 def _fmt_usd(v):
@@ -2382,7 +2477,8 @@ def rpo_extract(ticker):
                         f"• **Current (12m) / Long-term split:** note that XBRL total is available "
                         f"but the split requires reading the 10-K footnote\n"
                         f"• **Filing date:** date of latest 10-K\n"
-                        f"• **Source:** SEC EDGAR XBRL — free, official data"}])
+                        f"• **Source:** SEC EDGAR XBRL — free, official data"
+                        f"{extra_note}"}])
                 result["step1"] = msg.content[0].text.strip()
                 log.info(f"  rpo step1: {ticker} CIK={cik} RPO={val_fmt} YoY={yoy_str}")
 
@@ -2403,7 +2499,8 @@ def rpo_extract(ticker):
                 f"• **Unbilled backlog:** contracted but not yet billed\n"
                 f"• **12m conversion rate:** estimated % converting to revenue next 12 months\n"
                 f"• **Confidence:** High / Medium / Low — one sentence reason\n"
-                f"• **Business type note:** is this a SaaS/subscription company where RPO is meaningful?"}])
+                f"• **Business type note:** is this a SaaS/subscription company where RPO is meaningful?"
+                f"{extra_note}"}])
         result["step2"] = msg2.content[0].text.strip()
     except Exception as ex:
         log.error(f"RPO step2 {ticker}: {ex}")
@@ -2421,7 +2518,8 @@ def rpo_extract(ticker):
             f"• **Q3 forecast:** $X.XB\n• **Q4 forecast:** $X.XB\n"
             f"• **Full year:** $X.XB (+XX% YoY)\n"
             f"• **Key assumption:** one sentence\n"
-            f"If RPO data is unavailable, say so clearly rather than fabricating numbers."}]}],
+            f"If RPO data is unavailable, say so clearly rather than fabricating numbers."
+            f"{extra_note}"}]}],
             "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512}}).encode()
         greq  = _ur.Request(gurl, data=gpl, headers={"Content-Type": "application/json"})
         gdata = json.loads(_ur.urlopen(greq, timeout=30).read())

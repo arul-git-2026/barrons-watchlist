@@ -2575,15 +2575,16 @@ function renderRPOPanel(ticker) {
   const s2 = cached ? cached.step2 : null;
   const s3 = cached ? cached.step3 : null;
 
+  const savedQuery = (_rcCache[ticker] && _rcCache[ticker].rpoQuery) || '';
   pane.innerHTML = `
     <div class="rpo-steps">
       <div class="rpo-step">
         <div class="step-num">1</div>
         <div class="step-body">
-          <div class="step-title">Extract RPO from 10-K</div>
-          <div class="step-model">Exa.ai document retrieval &nbsp;→&nbsp; Claude Sonnet 4.6</div>
+          <div class="step-title">Extract RPO from SEC EDGAR</div>
+          <div class="step-model">SEC EDGAR XBRL API (free) &nbsp;→&nbsp; Claude Sonnet 4.6</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">
-            Retrieves the latest 10-K for ${name} via Exa.ai and extracts the RPO table.
+            Fetches structured RPO figures via XBRL concept API. Falls back to full 10-K text extraction if XBRL not tagged.
           </div>
           <div class="rpo-out ${s1 ? '' : 'empty'}" id="rpo-s1-${ticker}">${s1 ? formatSummaryBody(s1) : 'Not run yet'}</div>
         </div>
@@ -2603,7 +2604,7 @@ function renderRPOPanel(ticker) {
         <div class="step-num">3</div>
         <div class="step-body">
           <div class="step-title">Revenue Bridge Forecast</div>
-          <div class="step-model">Gemini 2.0 Flash · financial modelling</div>
+          <div class="step-model">Gemini 2.5 Flash · financial modelling</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">
             Builds a 4-quarter revenue bridge projecting conversion rate from historical RPO patterns.
           </div>
@@ -2611,31 +2612,52 @@ function renderRPOPanel(ticker) {
         </div>
       </div>
     </div>
-    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div style="margin-top:14px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600">
+        Additional instructions (optional — appended to all 3 steps):
+      </div>
+      <textarea id="rpo-query-${ticker}"
+        placeholder="e.g. Focus on Azure RPO split · Compare to CRM · Flag any seasonality in recognition"
+        style="width:100%;box-sizing:border-box;resize:vertical;min-height:54px;max-height:120px;
+               font-size:12px;font-family:inherit;padding:7px 9px;
+               border:1px solid var(--border);border-radius:5px;
+               background:var(--bg);color:var(--text);outline:none"
+        onchange="if(!_rcCache['${ticker}'])_rcCache['${ticker}']={};_rcCache['${ticker}'].rpoQuery=this.value"
+        oninput="if(!_rcCache['${ticker}'])_rcCache['${ticker}']={};_rcCache['${ticker}'].rpoQuery=this.value"
+      >${savedQuery}</textarea>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="rc-run-btn" id="rpo-btn-${ticker}" onclick="runRPO('${ticker}','${name}')">▶ Run RPO Pipeline</button>
-      <span style="font-size:11px;color:var(--muted)">Requires: ANTHROPIC_API_KEY · EXA_API_KEY · GEMINI_API_KEY</span>
+      <button class="rc-run-btn" style="background:#f1f5f9;color:var(--text);border:1px solid var(--border)"
+        onclick="if(_rcCache['${ticker}'])delete _rcCache['${ticker}'].rpo;renderRPOPanel('${ticker}');runRPO('${ticker}','${name}')">
+        🔄 Refresh
+      </button>
+      <span style="font-size:11px;color:var(--muted)">Free: SEC EDGAR · Paid: ANTHROPIC · GEMINI</span>
     </div>`;
 }
 
 async function runRPO(ticker, name) {
-  const btn = document.getElementById('rpo-btn-' + ticker);
-  const s1  = document.getElementById('rpo-s1-' + ticker);
-  const s2  = document.getElementById('rpo-s2-' + ticker);
-  const s3  = document.getElementById('rpo-s3-' + ticker);
+  const btn   = document.getElementById('rpo-btn-' + ticker);
+  const s1    = document.getElementById('rpo-s1-' + ticker);
+  const s2    = document.getElementById('rpo-s2-' + ticker);
+  const s3    = document.getElementById('rpo-s3-' + ticker);
+  const qtEl  = document.getElementById('rpo-query-' + ticker);
+  const extra = qtEl ? qtEl.value.trim() : '';
   if (!btn || !s1) return;
   btn.disabled = true; btn.textContent = '⏳ Running pipeline…';
-  s1.className = 'rpo-out'; s1.innerHTML = 'Searching for 10-K…<span class="research-cursor"></span>';
-  if (s2) { s2.className = 'rpo-out empty'; s2.textContent = 'Waiting…'; }
-  if (s3) { s3.className = 'rpo-out empty'; s3.textContent = 'Waiting…'; }
+  s1.className = 'rpo-out'; s1.innerHTML = 'Querying SEC EDGAR…<span class="research-cursor"></span>';
+  if (s2) { s2.className = 'rpo-out empty'; s2.textContent = 'Waiting for Step 1…'; }
+  if (s3) { s3.className = 'rpo-out empty'; s3.textContent = 'Waiting for Step 2…'; }
   try {
     const res  = await fetch('/api/rpo/' + ticker, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ticker, name})
+      body: JSON.stringify({ticker, name, extra_prompt: extra})
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'RPO pipeline failed');
     if (!_rcCache[ticker]) _rcCache[ticker] = {};
-    _rcCache[ticker].rpo = data;
+    _rcCache[ticker].rpo      = data;
+    _rcCache[ticker].rpoQuery = extra;
     if (s1 && data.step1) { s1.className = 'rpo-out'; s1.innerHTML = formatSummaryBody(data.step1); }
     if (s2 && data.step2) { s2.className = 'rpo-out'; s2.innerHTML = formatSummaryBody(data.step2); }
     if (s3 && data.step3) { s3.className = 'rpo-out'; s3.innerHTML = formatSummaryBody(data.step3); }
