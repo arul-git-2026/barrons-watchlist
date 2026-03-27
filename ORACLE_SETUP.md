@@ -119,10 +119,10 @@ icacls "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-25.ke
 
 **Step 2 — Connect:**
 ```powershell
-ssh -i "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-25.key" ubuntu@79.76.99.90
+ssh -i "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-27.key" opc@132.145.243.138
 ```
 
-You should see: `ubuntu@streetwise:~$`
+You should see: `[opc@barron-watchlist ~]$`
 
 ### On Windows — PuTTY (alternative)
 
@@ -281,19 +281,23 @@ deploy\remote_update.bat
 
 ---
 
-## Session Summary — dev_02 Setup (2026-03-25)
+## Session Summary — dev_02 Setup (2026-03-27, migrated to A1.Flex)
 
 ### What Was Built
 
 | Item | Detail |
 |---|---|
-| Oracle Cloud VM | VM.Standard.E2.1.Micro, Ubuntu 22.04, Frankfurt (`eu-frankfurt-1`) |
-| Public IP | `79.76.99.90` |
-| Dashboard URL | `http://79.76.99.90:5000/?token=<your-token>` |
+| Oracle Cloud VM | VM.Standard.A1.Flex, Oracle Linux 9, Frankfurt (`eu-frankfurt-1`) |
+| Shape | 4 OCPUs (Ampere ARM64), 24 GB RAM, 4 Gbps network |
+| Public IP | `132.145.243.138` |
+| Dashboard URL | `http://132.145.243.138:5000/?token=<your-token>` |
+| SSH user | `opc` (Oracle Linux default — not `ubuntu`) |
+| SSH key | `ssh-key-2026-03-27.key` |
 | Auto-start | systemd service — survives reboots |
 | Token auth | `STREETWISE_TOKEN` in `/etc/streetwise.env`; session cookie set on first login |
 | Chrome extension | Server URL + token fields added to popup; all API calls include token |
 | Data sync | `deploy\upload_data.bat` — one double-click push from Windows |
+| Previous server | E2.1.Micro Ubuntu `79.76.99.90` — terminated 2026-03-27 |
 
 ### Discussion — Issues Encountered and How They Were Resolved
 
