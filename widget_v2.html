@@ -2531,20 +2531,25 @@ function renderPerplexityPrompt(ticker) {
   const d    = allData.find(x => x.t === ticker);
   const name = d ? (d.n || ticker) : ticker;
   const cached = _rcCache[ticker] && _rcCache[ticker].perplexity;
+  const cachedTs = _rcCache[ticker] && _rcCache[ticker].perplexityTs;
   const resultHtml = cached
-    ? `<div class="perp-out">${cached}</div><div class="ai-footer">Perplexity sonar-pro · cached</div>`
+    ? `<div class="perp-out">${cached}</div><div class="ai-footer">Perplexity sonar-pro · ${cachedTs || 'cached'}</div>`
     : `<div class="perp-out empty" id="perp-result-${ticker}">Click "Run Research" to fetch deep analysis</div>`;
   pane.innerHTML = `
-    <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:2px">
+    <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">
       <input class="research-input" id="perp-q-${ticker}" type="text" style="flex:1;font-size:12px;padding:7px 10px"
         placeholder="What is the latest RPO trend and revenue outlook for ${ticker}?"
         value="Latest RPO, revenue growth, and analyst outlook for ${ticker} (${name})"
         onkeydown="if(event.key==='Enter')runPerplexity('${ticker}','${name}')">
       <button class="rc-run-btn" id="perp-btn-${ticker}" onclick="runPerplexity('${ticker}','${name}')">Run Research</button>
+      <button class="rc-run-btn" style="background:#f1f5f9;color:var(--text);border:1px solid var(--border)"
+        onclick="if(_rcCache['${ticker}'])delete _rcCache['${ticker}'].perplexity;renderPerplexityPrompt('${ticker}');runPerplexity('${ticker}','${name}')">
+        🔄 Refresh
+      </button>
     </div>
     <div id="perp-wrap-${ticker}">${resultHtml}</div>
     <div style="margin-top:6px;font-size:10px;color:var(--muted)">
-      Powered by Perplexity sonar-pro · ~$0.013/query · requires PERPLEXITY_API_KEY in /etc/streetwise.env
+      Powered by Perplexity sonar-pro · ~$0.013/query · requires PERPLEXITY_API_KEY in /etc/streetwise.env · results auto-saved to ticker notes
     </div>`;
 }
 
@@ -2565,10 +2570,20 @@ async function runPerplexity(ticker, name) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Perplexity request failed');
     const html = formatSummaryBody(data.text);
+    const ts   = new Date().toLocaleString();
     if (!_rcCache[ticker]) _rcCache[ticker] = {};
-    _rcCache[ticker].perplexity = html;
+    _rcCache[ticker].perplexity   = html;
+    _rcCache[ticker].perplexityTs = ts;
     wrap.innerHTML = `<div class="perp-out">${html}</div>
-      <div class="ai-footer">Perplexity sonar-pro · ${new Date().toLocaleString()}</div>`;
+      <div class="ai-footer">Perplexity sonar-pro · ${ts}</div>`;
+    // Auto-save to streetwise_data.json
+    const section = `=== Perplexity Research · ${new Date().toISOString().slice(0,10)} ===\n${data.text}`;
+    fetch('/api/save-research', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ticker, section})
+    }).then(r => r.json()).then(r => {
+      if (r.ok) toast('Research saved to ' + ticker + ' notes');
+    }).catch(() => {});
   } catch (e) {
     wrap.innerHTML = `<div class="perp-out empty" style="color:var(--down)">Error: ${e.message}</div>`;
   } finally {
@@ -2674,6 +2689,19 @@ async function runRPO(ticker, name) {
     if (s2 && data.step2) { s2.className = 'rpo-out'; s2.innerHTML = formatSummaryBody(data.step2); }
     if (s3 && data.step3) { s3.className = 'rpo-out'; s3.innerHTML = formatSummaryBody(data.step3); }
     toast('RPO analysis complete for ' + ticker);
+    // Auto-save all 3 steps to streetwise_data.json
+    const rpoSection = [
+      `=== RPO Analysis · ${new Date().toISOString().slice(0,10)} ===`,
+      data.step1 ? `--- Step 1: SEC EDGAR ---\n${data.step1}` : '',
+      data.step2 ? `--- Step 2: Backlog Verification ---\n${data.step2}` : '',
+      data.step3 ? `--- Step 3: Revenue Bridge ---\n${data.step3}` : '',
+    ].filter(Boolean).join('\n\n');
+    fetch('/api/save-research', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ticker, section: rpoSection})
+    }).then(r => r.json()).then(r => {
+      if (r.ok) toast('RPO saved to ' + ticker + ' notes');
+    }).catch(() => {});
   } catch (e) {
     if (s1) { s1.className = 'rpo-out'; s1.innerHTML = '<span style="color:var(--down)">Error: ' + e.message + '</span>'; }
   } finally {
