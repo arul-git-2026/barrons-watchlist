@@ -867,6 +867,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       <div class="sub">
         <span class="dot" id="live-dot"></span>
         <span id="status-txt">Loading…</span>
+        <span id="market-status-badge" style="font-size:10px;padding:2px 6px;border-radius:10px;font-weight:600"></span>
         <button class="hdr-btn" id="refresh-btn" onclick="handleRefresh()"
                 title="Refresh selected tickers, or all if none checked">
           <svg viewBox="0 0 24 24">
@@ -2368,22 +2369,61 @@ document.getElementById('atm-summary').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveAddTicker();
 });
 
-// ── Auto-refresh every 5 minutes — only for checked tickers ──────────
-setInterval(async () => {
-  if (!allData.length || selectedChk.size === 0) return;
-  const param = [...selectedChk].join(',');
-  try {
-    await fetch(`/api/cache/clear?tickers=${param}`, { method: 'POST' });
-    const res   = await fetch(`/api/data?tickers=${param}`);
-    const fresh = await res.json();
-    fresh.forEach(u => {
-      const idx = allData.findIndex(d => d.t === u.t);
-      if (idx !== -1) allData[idx] = u;
-    });
-    render();
-    fetchChart();
-  } catch (e) { console.warn('Auto-refresh failed:', e); }
-}, 5 * 60 * 1000);
+// ── Auto-refresh prices — market hours only (9:30–16:00 ET, Mon–Fri) ──────────
+function isMarketHours() {
+  const now = new Date();
+  const et  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = et.getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return false;
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return mins >= 9 * 60 + 30 && mins < 16 * 60;
+}
+
+let _autoRefreshTimer = null;
+let _marketStatusEl   = document.getElementById('live-dot');
+
+function scheduleAutoRefresh() {
+  if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  // Check every 60s during market hours, every 5min outside
+  const interval = isMarketHours() ? 60_000 : 5 * 60_000;
+  _autoRefreshTimer = setInterval(async () => {
+    if (!allData.length) return;
+    // Only refresh visible tickers (or all if none checked)
+    const targets = selectedChk.size > 0 ? [...selectedChk] : allData.slice(0, 30).map(d => d.t);
+    const param   = targets.join(',');
+    try {
+      await fetch(`/api/cache/clear?tickers=${param}`, { method: 'POST' });
+      const res   = await fetch(`/api/data?tickers=${param}`);
+      const fresh = await res.json();
+      fresh.forEach(u => {
+        const idx = allData.findIndex(d => d.t === u.t);
+        if (idx !== -1) allData[idx] = u;
+      });
+      render();
+      if (selectedChk.size > 0) fetchChart();
+      const dot = document.getElementById('live-dot');
+      if (dot) { dot.style.background = '#137333'; setTimeout(() => { if(dot) dot.style.background=''; }, 800); }
+    } catch (e) { console.warn('Auto-refresh failed:', e); }
+    // Reschedule when market status changes
+    scheduleAutoRefresh();
+  }, interval);
+}
+scheduleAutoRefresh();
+
+// ── Market status badge ────────────────────────────────────────────────────────
+function updateMarketBadge() {
+  const el = document.getElementById('market-status-badge');
+  if (!el) return;
+  if (isMarketHours()) {
+    el.textContent = '● LIVE';
+    el.style.cssText = 'font-size:10px;padding:2px 6px;border-radius:10px;font-weight:600;background:#e6f4ea;color:#137333';
+  } else {
+    el.textContent = '○ Closed';
+    el.style.cssText = 'font-size:10px;padding:2px 6px;border-radius:10px;font-weight:600;background:#f1f3f4;color:#5f6368';
+  }
+}
+updateMarketBadge();
+setInterval(updateMarketBadge, 60_000);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ── Research & Analysis Card ──────────────────────────────────────────────────
@@ -2432,12 +2472,24 @@ function setRCTab(tab, btn) {
 function loadRCTabContent(tab) {
   const ticker = _rcTicker;
   if (!ticker) return;
-  if      (tab === 'perplexity')   renderPerplexityPrompt(ticker);
-  else if (tab === 'rpo')          renderRPOPanel(ticker);
-  else if (tab === 'sec')          renderSECLinks(ticker);
-  else if (tab === 'tos')          renderTOS(ticker);
-  else if (tab === 'finnhub')      loadFinnhub(ticker);
-  // barrons / liveresearch / scenarios: content rendered inline — nothing to load
+  try {
+    if      (tab === 'perplexity')   renderPerplexityPrompt(ticker);
+    else if (tab === 'rpo')          renderRPOPanel(ticker);
+    else if (tab === 'sec')          renderSECLinks(ticker);
+    else if (tab === 'tos')          renderTOS(ticker);
+    else if (tab === 'finnhub')      loadFinnhub(ticker);
+    // barrons / liveresearch / scenarios: content rendered inline — nothing to load
+  } catch(e) {
+    const pane = document.getElementById('rc-tab-' + tab);
+    if (pane) pane.innerHTML = `
+      <div style="padding:24px;text-align:center;color:var(--down)">
+        <div style="font-size:20px;margin-bottom:8px">⚠</div>
+        <div style="font-weight:600;margin-bottom:4px">Tab failed to load</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${e.message}</div>
+        <button onclick="loadRCTabContent('${tab}')" style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">↺ Retry</button>
+      </div>`;
+    console.error('Tab error [' + tab + ']:', e);
+  }
 }
 
 // ── Finnhub ──────────────────────────────────────────────────────────────────
