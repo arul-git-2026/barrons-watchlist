@@ -2818,37 +2818,51 @@ def crisis_monitor():
         hist_pts = []
         result["fg"] = {"label": "Fear & Greed", "symbol": "CNN", "error": str(ex)}
 
-    # ── Put/Call Ratio (base URL — greed_factors only present here) ───────────
+    # ── Put/Call Ratio — CBOE direct download (CSV) ──────────────────────────
+    # CNN greed_factors is now empty; use CBOE's public daily options stats CSV instead.
+    # CBOE publishes equity + total P/C ratio at:
+    #   https://www.cboe.com/us/options/market_statistics/daily/  (HTML)
+    # The underlying data file is available as a download — we fetch it directly.
     try:
-        fg_base    = _cnn_fetch(
-            "https://production.dataviz.cnn.io/index/fearandgreed/graphdata")
-        gf         = fg_base.get("greed_factors", {})
-        log.debug(f"  CNN greed_factors keys: {list(gf.keys())}")
-        pcr_factor = gf.get("put_call_options", {})
-        pcr_ratio  = pcr_factor.get("data", {}).get("score")
-        pcr_score  = pcr_factor.get("score")
-        pcr_rating = str(pcr_factor.get("rating", "unknown")).replace("_", " ").title()
-        if pcr_ratio is None:
-            # Log actual keys so we can find the right one if the structure changes
-            raise ValueError(
-                f"put_call_options.data.score missing; "
-                f"greed_factors keys={list(gf.keys())}; "
-                f"put_call_options={pcr_factor}"
-            )
-        pcr_ratio = float(pcr_ratio)
-        # Sparkline: use composite F&G history as proxy (sub-indicator history not public)
-        pcr_spark = [round(float(d["y"]), 1) for d in hist_pts[-30:]] if hist_pts else []
+        # CBOE total put/call ratio historical CSV (equity + index + total, daily)
+        cboe_url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/PC_History.json"
+        cboe_req = _ur.Request(cboe_url, headers={
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/124.0.0.0 Safari/537.36"),
+            "Accept":     "application/json, */*",
+            "Referer":    "https://www.cboe.com/",
+        })
+        cboe_raw  = json.loads(_ur.urlopen(cboe_req, timeout=12).read())
+        # Response: {"data": [{"Date":"2024-01-02","TOTAL_PC_RATIO":0.72,...}, ...]}
+        rows = cboe_raw.get("data", [])
+        if not rows:
+            raise ValueError(f"empty CBOE response; keys={list(cboe_raw.keys())}")
+        # Sort ascending by date (they may be newest-first or oldest-first)
+        rows.sort(key=lambda r: r.get("Date", r.get("date", "")))
+        # Find the P/C ratio field — try common field names
+        _pcr_fields = ["TOTAL_PC_RATIO", "PC_RATIO", "EQUITY_PC_RATIO",
+                        "total_pc_ratio", "pc_ratio", "equity_pc_ratio"]
+        _pcr_key = next((f for f in _pcr_fields if f in rows[-1]), None)
+        if _pcr_key is None:
+            raise ValueError(f"unknown P/C field; row keys={list(rows[-1].keys())}")
+        vals   = [float(r[_pcr_key]) for r in rows if r.get(_pcr_key) not in (None, "", ".")]
+        spark  = [round(v, 3) for v in vals[-30:]]
+        cur    = vals[-1]
+        prev   = vals[-2] if len(vals) >= 2 else cur
+        w_ago  = vals[-6] if len(vals) >= 6 else prev
         result["pcr"] = {
             "label":         "Put/Call Ratio",
-            "symbol":        "CBOE PCR",
+            "symbol":        "CBOE " + _pcr_key,
             "unit":          " P/C",
-            "current":       round(pcr_ratio, 3),
-            "fg_score":      round(float(pcr_score), 1) if pcr_score is not None else None,
-            "rating":        pcr_rating,
-            "pct_day":       None,
-            "spark":         pcr_spark,
-            "high_52w":      None,
-            "low_52w":       None,
+            "current":       round(cur, 3),
+            "fg_score":      None,
+            "rating":        None,
+            "pct_day":       round(cur - prev, 3),     # absolute change
+            "pct_week":      round(cur - w_ago, 3),
+            "spark":         spark,
+            "high_52w":      round(max(vals[-252:]), 3) if len(vals) >= 252 else round(max(vals), 3),
+            "low_52w":       round(min(vals[-252:]), 3) if len(vals) >= 252 else round(min(vals), 3),
             "signal_thresh": 0.70,
             "signal_dir":    "below",
             "signal_note":   "Crisis over when P/C ratio < 0.70",

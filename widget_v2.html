@@ -4171,7 +4171,9 @@ function renderCrisisGrid(data, grid) {
     let changeText;
     const raw = d.pct_day ?? 0;
     if (key === 'pcr') {
-      changeText = `<div class="cc-change fl">5-day avg put/call</div>`;
+      const sign = raw > 0 ? '+' : '';
+      const cls  = raw > 0.02 ? 'up' : raw < -0.02 ? 'dn' : 'fl';
+      changeText = `<div class="cc-change ${cls}">${sign}${raw.toFixed(3)} vs prev day</div>`;
     } else if (key === 'fg') {
       const sign = raw > 0 ? '+' : '';
       const cls  = raw > 1 ? 'dn' : raw < -1 ? 'up' : 'fl'; // greed up = good = green(dn class inverted)
@@ -4193,9 +4195,8 @@ function renderCrisisGrid(data, grid) {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.rating || ''}</div>`;
     } else if (key === 'pcr') {
-      const fgScore = d.fg_score != null ? `F&G score: ${d.fg_score}/100` : '';
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.rating || ''}${fgScore ? ' · ' + fgScore : ''}</div>`;
+        <div style="font-size:10px;color:var(--muted);margin-top:1px">5-day avg equity put/call</div>`;
     } else if (key === 'tanker') {
       const pfp = d.pct_from_peak ?? 0;
       const sign = pfp > 0 ? '+' : '';
