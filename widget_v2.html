@@ -4201,12 +4201,13 @@ function renderCrisisGrid(data, grid) {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.rating || ''}</div>`;
     } else if (key === 'ttf') {
-      // JKM-TTF spread card — show the two underlying prices as context
-      const jkm = d.jkm != null ? `JKM $${d.jkm}` : '';
+      // JKM-TTF spread card — show the two underlying prices + data source
+      const jkm  = d.jkm     != null ? `JKM $${d.jkm}`     : '';
       const ttfv = d.ttf_val != null ? `TTF $${d.ttf_val}` : '';
-      const ld = d.last_date ? ` (${d.last_date.replace('M', '-')})` : '';
+      const ld   = d.last_date   ? ` · ${d.last_date.replace('M','-')}` : '';
+      const src  = d.data_source ? ` · ${d.data_source}`                : '';
       valueDisplay = `<div class="cc-value">${d.current >= 0 ? '+' : ''}${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px">${jkm}  ${ttfv}${ld}</div>`;
+        <div style="font-size:10px;color:var(--muted);margin-top:1px;line-height:1.4">${jkm}  ${ttfv}${ld}${src}</div>`;
     } else if (key === 'pcr') {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">tail-risk / OTM put demand</div>`;

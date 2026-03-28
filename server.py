@@ -2878,71 +2878,106 @@ def crisis_monitor():
     except Exception as ex:
         result["spread"] = {"label": "WTI Backwardation", "symbol": "M1−M3", "error": str(ex)}
 
-    # ── 4. JKM vs TTF Spread — World Bank Pink Sheet API ─────────────────────
-    # JKM = Japan-Korea Marker (Asian LNG spot, $/MMBtu) — Platts benchmark
-    # TTF = Dutch Title Transfer Facility (European gas, $/MMBtu equivalent)
-    # Both available FREE from World Bank Commodity Prices (no API key needed).
-    # Signal: When JKM drops back BELOW TTF, the Asian bidding war for Qatari
-    #         gas is ending — supply routes stabilising or buyers supplied.
-    # World Bank series:
-    #   PNGASJP = Natural Gas, Japan LNG ($/MMBtu) ← JKM proxy
-    #   PNGASEU = Natural Gas, Europe   ($/MMBtu) ← TTF proxy
-    # Data is monthly (Pink Sheet), typically ~6 weeks lag.
+    # ── 4. JKM vs TTF Spread ─────────────────────────────────────────────────
+    # Signal: JKM (Asia LNG) drops below TTF (Europe gas) → Qatari bidding war over.
+    # Source priority:
+    #   1. IMF Primary Commodity Price System (PCPS) — authoritative, free, monthly
+    #      PNGASJP = Natural Gas Japan LNG ($/MMBtu) — JKM proxy
+    #      PNGASEU = Natural Gas Europe    ($/MMBtu) — TTF proxy
+    #   2. yfinance fallback: NG=F (Henry Hub $/MMBtu) vs TTF=F (€/MWh→$/MMBtu)
+    _jkm_map: dict = {}
+    _ttf_map: dict = {}
+    _spread_source = "unknown"
+
+    # Source 1 — IMF PCPS SDMX-JSON API (no key needed)
     try:
-        def _wb_series(indicator, n=24):
-            """Fetch n monthly observations from World Bank commodity API."""
-            url = (f"https://api.worldbank.org/v2/country/WLD/indicator/{indicator}"
-                   f"?format=json&per_page={n}&mrv={n}&frequency=M")
-            raw  = json.loads(_ur.urlopen(_ur.Request(url), timeout=12).read())
-            # Response: [metadata_dict, [{"date":"2024M01","value":12.3}, ...]]
-            pts  = raw[1] if isinstance(raw, list) and len(raw) > 1 else []
-            pts  = [p for p in pts if p.get("value") is not None]
-            pts.sort(key=lambda p: p["date"])
-            return pts
-
-        jkm_pts = _wb_series("PNGASJP")
-        ttf_pts = _wb_series("PNGASEU")
-        if not jkm_pts or not ttf_pts:
+        imf_url = (
+            "https://dataservices.imf.org/REST/SDMX_JSON.svc/"
+            "CompactData/PCPS/M.W0.PNGASJP+PNGASEU.USD"
+            "?startPeriod=2023-01"
+        )
+        imf_raw  = json.loads(_ur.urlopen(_ur.Request(imf_url), timeout=15).read())
+        series   = (imf_raw.get("CompactData", {})
+                           .get("DataSet",    {})
+                           .get("Series",     []))
+        if isinstance(series, dict):
+            series = [series]   # single series → wrap in list
+        for s in series:
+            commodity = s.get("@COMMODITY", "")
+            obs       = s.get("Obs", [])
+            if isinstance(obs, dict):
+                obs = [obs]     # single obs → wrap
+            vals = {o["@TIME_PERIOD"]: float(o["@OBS_VALUE"])
+                    for o in obs
+                    if o.get("@OBS_VALUE") not in (None, "", "NA")}
+            if commodity == "PNGASJP":
+                _jkm_map = vals
+            elif commodity == "PNGASEU":
+                _ttf_map = vals
+        if _jkm_map and _ttf_map:
+            _spread_source = "IMF PCPS"
+        else:
             raise ValueError(
-                f"World Bank returned no data — "
-                f"JKM rows={len(jkm_pts)}, TTF rows={len(ttf_pts)}"
+                f"IMF returned incomplete data — "
+                f"JKM series={bool(_jkm_map)}, TTF series={bool(_ttf_map)}; "
+                f"series keys={[s.get('@COMMODITY') for s in series]}"
             )
+    except Exception as imf_ex:
+        log.warning(f"  JKM/TTF IMF source failed: {imf_ex}")
 
-        # Align by date
-        jkm_map = {p["date"]: float(p["value"]) for p in jkm_pts}
-        ttf_map = {p["date"]: float(p["value"]) for p in ttf_pts}
-        common  = sorted(set(jkm_map) & set(ttf_map))
-        if not common:
-            raise ValueError("no overlapping dates between JKM and TTF series")
+        # Source 2 — yfinance fallback: NG=F (Henry Hub) vs TTF=F converted to $/MMBtu
+        try:
+            ng_c    = _yf_closes("NG=F",   period="365d")    # $/MMBtu
+            ttf_c   = _yf_closes("TTF=F",  period="365d")    # €/MWh
+            eur_c   = _yf_closes("EURUSD=X", period="365d")  # EUR→USD rate
+            # Align by index (date)
+            import pandas as _pd
+            df = _pd.DataFrame({
+                "ng":  ng_c, "ttf": ttf_c, "eur": eur_c
+            }).dropna()
+            if df.empty:
+                raise ValueError("no overlapping dates for NG/TTF/EURUSD")
+            # Convert TTF €/MWh → $/MMBtu: 1 MWh = 3.41214 MMBtu
+            df["ttf_usd"] = df["ttf"] * df["eur"] / 3.41214
+            df["spread"]  = df["ng"] - df["ttf_usd"]
+            # Build monthly maps from daily data (last trading day of each month)
+            df_m = df.resample("ME").last()
+            for dt, row in df_m.iterrows():
+                key = dt.strftime("%Y-%m")
+                _jkm_map[key] = round(float(row["ng"]), 3)
+                _ttf_map[key] = round(float(row["ttf_usd"]), 3)
+            _spread_source = "HH vs TTF (yfinance proxy)"
+        except Exception as yf_ex:
+            result["ttf"] = {
+                "label": "JKM vs TTF Spread", "symbol": "JKM−TTF",
+                "error": f"IMF: {imf_ex} | yfinance: {yf_ex}"
+            }
 
-        spreads  = {d: round(jkm_map[d] - ttf_map[d], 3) for d in common}
+    if _jkm_map and _ttf_map and "ttf" not in result:
+        common   = sorted(set(_jkm_map) & set(_ttf_map))
+        spreads  = {d: round(_jkm_map[d] - _ttf_map[d], 3) for d in common}
         dates    = sorted(spreads)
-        spark    = [spreads[d] for d in dates[-12:]]   # 12 months of spread
+        spark    = [spreads[d] for d in dates[-12:]]
         cur      = spreads[dates[-1]]
         prev     = spreads[dates[-2]] if len(dates) >= 2 else cur
-        jkm_cur  = jkm_map[dates[-1]]
-        ttf_cur  = ttf_map[dates[-1]]
-        last_date = dates[-1]   # e.g. "2026M01"
-
         result["ttf"] = {
             "label":         "JKM vs TTF Spread",
             "symbol":        "JKM−TTF",
             "unit":          "$/MMBtu",
-            "current":       round(cur, 2),     # positive = Asia paying premium
-            "jkm":           round(jkm_cur, 2),
-            "ttf_val":       round(ttf_cur, 2),
-            "pct_day":       round(cur - prev, 2),    # absolute $/MMBtu change vs prior month
+            "current":       round(cur, 2),
+            "jkm":           round(_jkm_map[dates[-1]], 2),
+            "ttf_val":       round(_ttf_map[dates[-1]], 2),
+            "pct_day":       round(cur - prev, 2),
             "pct_week":      None,
             "spark":         spark,
             "high_52w":      round(max(spreads[d] for d in dates[-12:]), 2),
             "low_52w":       round(min(spreads[d] for d in dates[-12:]), 2),
-            "last_date":     last_date,
+            "last_date":     dates[-1],
+            "data_source":   _spread_source,
             "signal_thresh": 0,
             "signal_dir":    "below",
             "signal_note":   "Crisis over when JKM drops below TTF price",
         }
-    except Exception as ex:
-        result["ttf"] = {"label": "JKM vs TTF Spread", "symbol": "JKM−TTF", "error": str(ex)}
 
     # ── 5. Frontline FRO — VLCC freight rate proxy ────────────────────────────
     try:
