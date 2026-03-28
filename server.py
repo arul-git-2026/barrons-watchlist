@@ -2880,33 +2880,41 @@ def crisis_monitor():
 
     # ── 4. JKM vs TTF Spread ─────────────────────────────────────────────────
     # Signal: JKM (Asia LNG) drops below TTF (Europe gas) → Qatari bidding war over.
-    # Source priority:
-    #   1. IMF Primary Commodity Price System (PCPS) — authoritative, free, monthly
-    #      PNGASJP = Natural Gas Japan LNG ($/MMBtu) — JKM proxy
-    #      PNGASEU = Natural Gas Europe    ($/MMBtu) — TTF proxy
-    #   2. yfinance fallback: NG=F (Henry Hub $/MMBtu) vs TTF=F (€/MWh→$/MMBtu)
+    # Uses yfinance: NG=F (Henry Hub $/MMBtu) vs TTF=F (€/MWh → $/MMBtu via EURUSD=X).
+    # HH correlates with global LNG arbitrage pricing during supply crises.
+    # IMF PCPS API attempted first but often unreachable from cloud servers.
+    import pandas as _pd
+
     _jkm_map: dict = {}
     _ttf_map: dict = {}
     _spread_source = "unknown"
 
-    # Source 1 — IMF PCPS SDMX-JSON API (no key needed)
+    def _strip_tz(series):
+        """Strip timezone from a yfinance DatetimeIndex so DataFrames align."""
+        idx = series.index
+        if hasattr(idx, 'tz') and idx.tz is not None:
+            idx = idx.tz_convert('UTC').tz_localize(None)
+        series.index = idx.normalize()   # date-only, no time component
+        return series
+
+    # Source 1 — IMF PCPS (try briefly; Oracle egress often blocked/slow)
     try:
         imf_url = (
             "https://dataservices.imf.org/REST/SDMX_JSON.svc/"
             "CompactData/PCPS/M.W0.PNGASJP+PNGASEU.USD"
             "?startPeriod=2023-01"
         )
-        imf_raw  = json.loads(_ur.urlopen(_ur.Request(imf_url), timeout=15).read())
-        series   = (imf_raw.get("CompactData", {})
-                           .get("DataSet",    {})
-                           .get("Series",     []))
+        imf_raw = json.loads(_ur.urlopen(_ur.Request(imf_url), timeout=8).read())
+        series  = (imf_raw.get("CompactData", {})
+                          .get("DataSet",    {})
+                          .get("Series",     []))
         if isinstance(series, dict):
-            series = [series]   # single series → wrap in list
+            series = [series]
         for s in series:
             commodity = s.get("@COMMODITY", "")
-            obs       = s.get("Obs", [])
+            obs = s.get("Obs", [])
             if isinstance(obs, dict):
-                obs = [obs]     # single obs → wrap
+                obs = [obs]
             vals = {o["@TIME_PERIOD"]: float(o["@OBS_VALUE"])
                     for o in obs
                     if o.get("@OBS_VALUE") not in (None, "", "NA")}
@@ -2917,40 +2925,41 @@ def crisis_monitor():
         if _jkm_map and _ttf_map:
             _spread_source = "IMF PCPS"
         else:
-            raise ValueError(
-                f"IMF returned incomplete data — "
-                f"JKM series={bool(_jkm_map)}, TTF series={bool(_ttf_map)}; "
-                f"series keys={[s.get('@COMMODITY') for s in series]}"
-            )
+            raise ValueError("IMF series incomplete")
     except Exception as imf_ex:
-        log.warning(f"  JKM/TTF IMF source failed: {imf_ex}")
+        log.warning(f"  JKM/TTF IMF failed ({imf_ex}), trying yfinance")
 
-        # Source 2 — yfinance fallback: NG=F (Henry Hub) vs TTF=F converted to $/MMBtu
+    # Source 2 — yfinance: NG=F (Henry Hub) vs TTF=F converted to $/MMBtu
+    if not (_jkm_map and _ttf_map):
         try:
-            ng_c    = _yf_closes("NG=F",   period="365d")    # $/MMBtu
-            ttf_c   = _yf_closes("TTF=F",  period="365d")    # €/MWh
-            eur_c   = _yf_closes("EURUSD=X", period="365d")  # EUR→USD rate
-            # Align by index (date)
-            import pandas as _pd
-            df = _pd.DataFrame({
-                "ng":  ng_c, "ttf": ttf_c, "eur": eur_c
-            }).dropna()
+            ng_s  = _strip_tz(_yf_closes("NG=F",    period="365d"))  # $/MMBtu
+            ttf_s = _strip_tz(_yf_closes("TTF=F",   period="365d"))  # €/MWh
+            eur_s = _strip_tz(_yf_closes("EURUSD=X", period="365d")) # EUR/USD
+
+            # Outer join on date, forward-fill gaps (different trading calendars)
+            all_idx = ng_s.index.union(ttf_s.index).union(eur_s.index)
+            ng_s  = ng_s.reindex(all_idx).ffill().bfill()
+            ttf_s = ttf_s.reindex(all_idx).ffill().bfill()
+            eur_s = eur_s.reindex(all_idx).ffill().bfill()
+
+            df = _pd.DataFrame({"ng": ng_s, "ttf": ttf_s, "eur": eur_s}).dropna()
             if df.empty:
-                raise ValueError("no overlapping dates for NG/TTF/EURUSD")
-            # Convert TTF €/MWh → $/MMBtu: 1 MWh = 3.41214 MMBtu
+                raise ValueError("DataFrame empty after ffill/bfill")
+
+            # Convert TTF €/MWh → $/MMBtu  (1 MWh = 3.41214 MMBtu)
             df["ttf_usd"] = df["ttf"] * df["eur"] / 3.41214
-            df["spread"]  = df["ng"] - df["ttf_usd"]
-            # Build monthly maps from daily data (last trading day of each month)
-            df_m = df.resample("ME").last()
+
+            # Resample to month-end, keep last value
+            df_m = df.resample("ME").last().dropna()
             for dt, row in df_m.iterrows():
-                key = dt.strftime("%Y-%m")
-                _jkm_map[key] = round(float(row["ng"]), 3)
-                _ttf_map[key] = round(float(row["ttf_usd"]), 3)
-            _spread_source = "HH vs TTF (yfinance proxy)"
+                k = dt.strftime("%Y-%m")
+                _jkm_map[k] = round(float(row["ng"]), 3)
+                _ttf_map[k] = round(float(row["ttf_usd"]), 3)
+            _spread_source = "HH vs TTF proxy"
         except Exception as yf_ex:
             result["ttf"] = {
                 "label": "JKM vs TTF Spread", "symbol": "JKM−TTF",
-                "error": f"IMF: {imf_ex} | yfinance: {yf_ex}"
+                "error": f"yfinance: {yf_ex}",
             }
 
     if _jkm_map and _ttf_map and "ttf" not in result:
