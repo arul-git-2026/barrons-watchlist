@@ -23,12 +23,17 @@
 }
 @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap');
 body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:14px}
-.layout{display:grid;grid-template-columns:420px 1fr;height:100vh}
+.layout{display:grid;grid-template-columns:var(--sidebar-w,480px) 1fr;height:100vh}
+.sidebar-resize-handle{
+  position:absolute;top:0;right:0;width:5px;height:100%;cursor:col-resize;z-index:100;
+  background:transparent;transition:background .15s
+}
+.sidebar-resize-handle:hover,.sidebar-resize-handle.dragging{background:var(--accent);opacity:.5}
 
 /* ── Sidebar ──────────────────────────────────────────────────────── */
 .sidebar{
   background:var(--card);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;overflow:hidden
+  display:flex;flex-direction:column;overflow:hidden;position:relative
 }
 .sidebar-header{
   padding:14px 16px;background:var(--card);
@@ -835,7 +840,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 <div class="layout">
 
   <!-- ── Sidebar ──────────────────────────────────────────────── -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
     <div class="sidebar-header">
       <h2>Barrons<span class="logo-accent">Watchlists</span></h2>
       <div class="sub">
@@ -1051,6 +1057,47 @@ const PALETTE = [
 // The legend always reads ds.borderColor from the final datasets array,
 // so legend and chart lines are guaranteed to match.
 // No persistent map — eliminates all stale-state color mismatches.
+// ── Sidebar resize ────────────────────────────────────────────────────────────
+(function() {
+  const MIN_W = 320, MAX_W = 720;
+  const saved = parseInt(localStorage.getItem('sw-sidebar-w'), 10);
+  if (saved && saved >= MIN_W && saved <= MAX_W)
+    document.documentElement.style.setProperty('--sidebar-w', saved + 'px');
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const handle = document.getElementById('sidebar-resize-handle');
+    if (!handle) return;
+    let dragging = false, startX = 0, startW = 0;
+
+    handle.addEventListener('mousedown', e => {
+      dragging = true;
+      startX = e.clientX;
+      startW = parseInt(getComputedStyle(document.documentElement)
+                        .getPropertyValue('--sidebar-w')) || 480;
+      handle.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const w = Math.min(MAX_W, Math.max(MIN_W, startW + e.clientX - startX));
+      document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const w = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w');
+      localStorage.setItem('sw-sidebar-w', parseInt(w));
+    });
+  });
+})();
+
 const STATUS_MAP = {
   hot:'Momentum', rot:'Rotating',  pull:'Pullback', press:'Pressure',
   dip:'Dip Buy',  rec:'Recovery',  caut:'Caution',  flat:'Neutral'
