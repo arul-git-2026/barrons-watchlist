@@ -1699,8 +1699,8 @@ function selectRow(ticker) {
   const dyVal = (d.div_yield != null && d.div_yield > 0) ? (+d.div_yield).toFixed(2) : '0.00';
   const dy = '<span class="pill pill-yield">Yield ' + dyVal + '%</span>';
   const mc  = d.mktcap ? '<span class="pill">Mktcap ' + fmtMktcap(d.mktcap) + '</span>' : '';
-  const recVal = (d.rec && d.rec !== 'N/A') ? d.rec : (d.rec_analyst || '');
-  const rec    = recVal ? `<span class="pill">Analyst: ${recVal}</span>` : '';
+  const recVal = (d.rec && d.rec !== 'N/A' && d.rec !== 'None') ? d.rec : (d.rec_analyst || '');
+  const rec    = (recVal && recVal !== 'None' && recVal !== 'N/A') ? `<span class="pill">Analyst: ${recVal}</span>` : '';
   const ts  = d.fetched_at
     ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">
          Updated ${new Date(d.fetched_at).toLocaleTimeString()}
