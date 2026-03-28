@@ -147,7 +147,7 @@ def log_cost(service: str, ticker: str, inp: int, out: int, cost: float, model: 
 # When not set (local dev), auth is skipped entirely.
 _AUTH_TOKEN: str = os.environ.get("STREETWISE_TOKEN", "").strip()
 
-_AUTH_EXEMPT = {"/favicon.ico", "/health", "/api/costs"}
+_AUTH_EXEMPT = {"/favicon.ico", "/health", "/api/costs", "/api/crisis-monitor"}
 
 # Cloudflare Access JWT header — presence means CF Access already authenticated the user
 _CF_JWT_HEADER = "Cf-Access-Jwt-Assertion"
