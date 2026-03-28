@@ -115,7 +115,7 @@ def calc_cost(response) -> tuple[int, int, float]:
 # When not set (local dev), auth is skipped entirely.
 _AUTH_TOKEN: str = os.environ.get("STREETWISE_TOKEN", "").strip()
 
-_AUTH_EXEMPT = {"/favicon.ico"}
+_AUTH_EXEMPT = {"/favicon.ico", "/health"}
 
 @app.before_request
 def _check_token():
