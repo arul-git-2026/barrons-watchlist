@@ -2415,41 +2415,158 @@ async function loadFinnhub(ticker) {
 function renderFinnhub(ticker, data) {
   const pane = document.getElementById('rc-tab-finnhub');
   if (!pane) return;
-  const earn = data.earnings  || {};
-  const sent = data.sentiment || {};
-  const score   = sent.score != null ? +sent.score : 0.5;
-  const sCls    = score > 0.6 ? 'bull' : score < 0.4 ? 'bear' : 'neut';
-  const sColor  = sCls === 'bull' ? '#16a34a' : sCls === 'bear' ? '#dc2626' : '#d97706';
-  const sLabel  = sCls === 'bull' ? '▲ Bullish' : sCls === 'bear' ? '▼ Bearish' : '● Neutral';
-  const barPct  = Math.round(score * 100);
-  const surpClr = (earn.surprise || 0) >= 0 ? 'var(--up)' : 'var(--down)';
+  const earn  = data.earnings        || {};
+  const sent  = data.sentiment       || {};
+  const pt    = data.price_target    || {};
+  const rec   = data.recommendation  || {};
+  const hist  = data.earnings_history|| [];
+  const ins   = data.insider         || {};
+  const met   = data.metrics         || {};
+  const news  = data.news            || [];
+  const peers = data.peers           || [];
+
+  // sentiment
+  const score  = sent.score != null ? +sent.score : 0.5;
+  const sCls   = score > 0.6 ? 'bull' : score < 0.4 ? 'bear' : 'neut';
+  const sColor = sCls === 'bull' ? '#16a34a' : sCls === 'bear' ? '#dc2626' : '#d97706';
+  const sLabel = sCls === 'bull' ? '▲ Bullish' : sCls === 'bear' ? '▼ Bearish' : '● Neutral';
+  const barPct = Math.round(score * 100);
+
+  // recommendation bar
+  const recTotal = (rec.strong_buy||0)+(rec.buy||0)+(rec.hold||0)+(rec.sell||0)+(rec.strong_sell||0);
+  function recPct(n){ return recTotal ? Math.round((n/recTotal)*100) : 0; }
+  const recBar = recTotal ? `
+    <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin:6px 0 2px">
+      <div style="width:${recPct(rec.strong_buy)}%;background:#16a34a" title="Strong Buy"></div>
+      <div style="width:${recPct(rec.buy)}%;background:#86efac" title="Buy"></div>
+      <div style="width:${recPct(rec.hold)}%;background:#d97706" title="Hold"></div>
+      <div style="width:${recPct(rec.sell)}%;background:#fca5a5" title="Sell"></div>
+      <div style="width:${recPct(rec.strong_sell)}%;background:#dc2626" title="Strong Sell"></div>
+    </div>
+    <div style="display:flex;gap:8px;font-size:10px;flex-wrap:wrap">
+      ${rec.strong_buy  ? `<span style="color:#16a34a">▮ SBuy ${rec.strong_buy}</span>` : ''}
+      ${rec.buy         ? `<span style="color:#86efac">▮ Buy ${rec.buy}</span>` : ''}
+      ${rec.hold        ? `<span style="color:#d97706">▮ Hold ${rec.hold}</span>` : ''}
+      ${rec.sell        ? `<span style="color:#fca5a5">▮ Sell ${rec.sell}</span>` : ''}
+      ${rec.strong_sell ? `<span style="color:#dc2626">▮ SSell ${rec.strong_sell}</span>` : ''}
+    </div>` : '<span style="color:var(--muted)">—</span>';
+
+  // EPS beat/miss history
+  const epsRows = hist.map(e => {
+    const beat = e.actual != null && e.estimate != null && e.actual >= e.estimate;
+    const miss = e.actual != null && e.estimate != null && e.actual < e.estimate;
+    const icon = e.actual == null ? '○' : beat ? '✅' : '❌';
+    const surp = e.surprise != null ? ` (${e.surprise>=0?'+':''}${(+e.surprise).toFixed(1)}%)` : '';
+    return `<div class="finn-metric"><label>${e.period}</label>
+      <span class="mv">${icon} Act: ${e.actual!=null?'$'+e.actual:'—'} Est: ${e.estimate!=null?'$'+e.estimate:'—'}${surp}</span></div>`;
+  }).join('') || '<span style="color:var(--muted)">—</span>';
+
+  // Insider MSPR
+  const mspr = ins.mspr != null ? +ins.mspr : null;
+  const msprColor = mspr == null ? 'var(--text)' : mspr > 0 ? '#16a34a' : mspr < 0 ? '#dc2626' : 'var(--muted)';
+  const msprLabel = mspr == null ? '—' : `${mspr > 0 ? '▲ Net buying' : '▼ Net selling'} (MSPR ${mspr.toFixed(3)})`;
+
+  // Price target
+  const fmtPt = v => v != null ? '$' + (+v).toFixed(2) : '—';
+  const ptUpside = pt.mean != null && data.earnings && data.earnings.eps_estimate != null ? '' : '';
+
+  // Metrics helper
+  const fmt1 = v => v != null ? (+v).toFixed(1) : '—';
+  const fmt2 = v => v != null ? (+v).toFixed(2) : '—';
+  const fmtPct = v => v != null ? ((+v)*100).toFixed(1)+'%' : '—';
+
+  // News
+  const newsHtml = news.length ? news.map(n => {
+    const dt = n.dt ? new Date(n.dt*1000).toLocaleDateString([],{month:'short',day:'numeric'}) : '';
+    return `<div style="padding:5px 0;border-bottom:1px solid var(--border);line-height:1.4">
+      <a href="${n.url}" target="_blank" style="font-size:12px;color:var(--accent);text-decoration:none;display:block">${n.headline}</a>
+      <span style="font-size:10px;color:var(--muted)">${n.source}${dt?' · '+dt:''}</span>
+    </div>`;
+  }).join('') : '<span style="color:var(--muted)">No recent news</span>';
+
+  // Peers
+  const peersHtml = peers.length
+    ? peers.map(p=>`<span class="chip" style="cursor:pointer" onclick="selectRow('${p}')">${p}</span>`).join('')
+    : '<span style="color:var(--muted)">—</span>';
 
   pane.innerHTML = `
     <div class="finn-grid">
+
+      <!-- Earnings Calendar -->
       <div class="finn-card">
         <h4>Earnings Calendar</h4>
-        <div class="finn-metric"><label>Next EPS date</label><span class="mv">${earn.next_date || '—'}</span></div>
-        <div class="finn-metric"><label>EPS estimate</label><span class="mv">${earn.eps_estimate != null ? '$'+earn.eps_estimate : '—'}</span></div>
-        <div class="finn-metric"><label>Revenue estimate</label><span class="mv">${earn.revenue_estimate || '—'}</span></div>
-        <div class="finn-metric"><label>Last EPS surprise</label>
-          <span class="mv" style="color:${surpClr}">${earn.surprise != null ? ((earn.surprise>=0?'+':'')+earn.surprise+'%') : '—'}</span>
-        </div>
+        <div class="finn-metric"><label>Next EPS date</label><span class="mv">${earn.next_date||'—'}</span></div>
+        <div class="finn-metric"><label>EPS estimate</label><span class="mv">${earn.eps_estimate!=null?'$'+earn.eps_estimate:'—'}</span></div>
+        <div class="finn-metric"><label>Revenue estimate</label><span class="mv">${earn.revenue_estimate||'—'}</span></div>
       </div>
+
+      <!-- News Sentiment -->
       <div class="finn-card">
         <h4>News Sentiment (7d)</h4>
-        <div class="finn-metric"><label>Score</label>
-          <span class="mv" style="color:${sColor}">${score.toFixed(2)} ${sLabel}</span>
-        </div>
-        <div class="finn-metric"><label>Articles</label><span class="mv">${sent.articles || '—'}</span></div>
-        <div class="finn-metric"><label>Buzz score</label><span class="mv">${sent.buzz != null ? (+sent.buzz).toFixed(2) : '—'}</span></div>
+        <div class="finn-metric"><label>Score</label><span class="mv" style="color:${sColor}">${score.toFixed(2)} ${sLabel}</span></div>
+        <div class="finn-metric"><label>Articles</label><span class="mv">${sent.articles||'—'}</span></div>
+        <div class="finn-metric"><label>Buzz</label><span class="mv">${sent.buzz!=null?(+sent.buzz).toFixed(2):'—'}</span></div>
         <div class="sent-bar-bg"><div class="sent-bar-fill" style="width:${barPct}%;background:${sColor}"></div></div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px">
-          <span>Bearish 0</span><span>1 Bullish</span>
-        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px"><span>Bear 0</span><span>1 Bull</span></div>
       </div>
+
+      <!-- Price Target -->
+      <div class="finn-card">
+        <h4>Analyst Price Target</h4>
+        <div class="finn-metric"><label>Mean target</label><span class="mv">${fmtPt(pt.mean)}</span></div>
+        <div class="finn-metric"><label>Range</label><span class="mv">${fmtPt(pt.low)} – ${fmtPt(pt.high)}</span></div>
+        <div class="finn-metric"><label>Median</label><span class="mv">${fmtPt(pt.median)}</span></div>
+        <div class="finn-metric"><label>Updated</label><span class="mv">${pt.updated||'—'}</span></div>
+      </div>
+
+      <!-- Analyst Recommendations -->
+      <div class="finn-card">
+        <h4>Analyst Recommendations ${rec.period?'· '+rec.period:''}</h4>
+        ${recBar}
+        <div class="finn-metric" style="margin-top:6px"><label>Total analysts</label><span class="mv">${recTotal||'—'}</span></div>
+      </div>
+
+      <!-- EPS Beat/Miss History -->
+      <div class="finn-card">
+        <h4>EPS Beat / Miss (last 4Q)</h4>
+        ${epsRows}
+      </div>
+
+      <!-- Insider Sentiment -->
+      <div class="finn-card">
+        <h4>Insider Sentiment</h4>
+        <div class="finn-metric"><label>Signal</label><span class="mv" style="color:${msprColor}">${msprLabel}</span></div>
+        <div class="finn-metric"><label>Net change</label><span class="mv">${ins.change!=null?ins.change.toLocaleString():'—'} shares</span></div>
+        <div class="finn-metric"><label>Month</label><span class="mv">${ins.month||'—'}</span></div>
+      </div>
+
+      <!-- Key Metrics -->
+      <div class="finn-card">
+        <h4>Key Metrics</h4>
+        <div class="finn-metric"><label>Beta</label><span class="mv">${fmt2(met.beta)}</span></div>
+        <div class="finn-metric"><label>P/E (TTM)</label><span class="mv">${fmt1(met.pe_ttm)}</span></div>
+        <div class="finn-metric"><label>P/B</label><span class="mv">${fmt2(met.pb)}</span></div>
+        <div class="finn-metric"><label>ROE</label><span class="mv">${fmtPct(met.roe)}</span></div>
+        <div class="finn-metric"><label>Debt/Equity</label><span class="mv">${fmt2(met.debt_equity)}</span></div>
+        <div class="finn-metric"><label>Rev growth YoY</label><span class="mv">${fmtPct(met.rev_growth)}</span></div>
+      </div>
+
+      <!-- Peer Companies -->
+      <div class="finn-card">
+        <h4>Sector Peers</h4>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${peersHtml}</div>
+      </div>
+
     </div>
-    ${data.error ? `<div style="margin-top:8px;font-size:11px;color:var(--down)">${data.error}</div>` : ''}
-    <div style="margin-top:8px;font-size:10px;color:var(--muted)">Powered by Finnhub · requires FINNHUB_API_KEY</div>`;
+
+    <!-- Recent News -->
+    <div class="finn-card" style="margin-top:10px">
+      <h4>Recent News (7d)</h4>
+      ${newsHtml}
+    </div>
+
+    ${data.error?`<div style="margin-top:8px;font-size:11px;color:var(--down)">${data.error}</div>`:''}
+    <div style="margin-top:8px;font-size:10px;color:var(--muted)">Powered by Finnhub · FINNHUB_API_KEY</div>`;
 }
 
 function updateSidebarSentiment(ticker, data) {

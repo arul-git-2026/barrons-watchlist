@@ -2109,7 +2109,108 @@ def get_finnhub(ticker):
         }
     except Exception as ex:
         log.warning(f"Finnhub sentiment {ticker}: {ex}")
-        result["sentiment_error"] = str(ex)
+
+    # Price target
+    try:
+        url  = f"https://finnhub.io/api/v1/stock/price-target?symbol={ticker}&token={api_key}"
+        data = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
+        result["price_target"] = {
+            "mean":    data.get("targetMean"),
+            "high":    data.get("targetHigh"),
+            "low":     data.get("targetLow"),
+            "median":  data.get("targetMedian"),
+            "updated": data.get("lastUpdated", ""),
+        }
+    except Exception as ex:
+        log.warning(f"Finnhub price-target {ticker}: {ex}")
+
+    # Analyst recommendation trends (latest month)
+    try:
+        url  = f"https://finnhub.io/api/v1/stock/recommendation?symbol={ticker}&token={api_key}"
+        data = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
+        if data:
+            r = data[0]
+            result["recommendation"] = {
+                "period":      r.get("period", ""),
+                "strong_buy":  r.get("strongBuy", 0),
+                "buy":         r.get("buy", 0),
+                "hold":        r.get("hold", 0),
+                "sell":        r.get("sell", 0),
+                "strong_sell": r.get("strongSell", 0),
+            }
+    except Exception as ex:
+        log.warning(f"Finnhub recommendation {ticker}: {ex}")
+
+    # EPS beat/miss history (last 4 quarters)
+    try:
+        url  = f"https://finnhub.io/api/v1/stock/earnings?symbol={ticker}&limit=4&token={api_key}"
+        data = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
+        result["earnings_history"] = [
+            {"period": e.get("period",""), "actual": e.get("actual"),
+             "estimate": e.get("estimate"), "surprise": e.get("surprisePercent")}
+            for e in (data or [])[:4]
+        ]
+    except Exception as ex:
+        log.warning(f"Finnhub earnings history {ticker}: {ex}")
+
+    # Insider sentiment (last 6 months)
+    try:
+        from_d = (date.today() - timedelta(days=180)).isoformat()
+        to_d   = date.today().isoformat()
+        url    = (f"https://finnhub.io/api/v1/stock/insider-sentiment"
+                  f"?symbol={ticker}&from={from_d}&to={to_d}&token={api_key}")
+        data   = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
+        rows   = data.get("data") or []
+        if rows:
+            latest = rows[-1]
+            result["insider"] = {
+                "mspr":   latest.get("mspr"),
+                "change": latest.get("change"),
+                "month":  str(latest.get("month", "")),
+            }
+    except Exception as ex:
+        log.warning(f"Finnhub insider {ticker}: {ex}")
+
+    # Basic financials / key metrics
+    try:
+        url  = f"https://finnhub.io/api/v1/stock/metric?symbol={ticker}&metric=all&token={api_key}"
+        data = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
+        m    = data.get("metric", {})
+        result["metrics"] = {
+            "beta":          m.get("beta"),
+            "pe_ttm":        m.get("peTTM"),
+            "pb":            m.get("pb"),
+            "roe":           m.get("roeTTM"),
+            "debt_equity":   m.get("totalDebt/totalEquityQuarterly"),
+            "current_ratio": m.get("currentRatioQuarterly"),
+            "rev_growth":    m.get("revenueGrowthTTMYoy"),
+        }
+    except Exception as ex:
+        log.warning(f"Finnhub metrics {ticker}: {ex}")
+
+    # Company news (last 7 days, up to 8 articles)
+    try:
+        from_d = (date.today() - timedelta(days=7)).isoformat()
+        to_d   = date.today().isoformat()
+        url    = (f"https://finnhub.io/api/v1/company-news"
+                  f"?symbol={ticker}&from={from_d}&to={to_d}&token={api_key}")
+        data   = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
+        result["news"] = [
+            {"headline": n.get("headline",""), "source": n.get("source",""),
+             "url": n.get("url",""), "dt": n.get("datetime", 0)}
+            for n in (data or [])[:8]
+        ]
+    except Exception as ex:
+        log.warning(f"Finnhub news {ticker}: {ex}")
+
+    # Peers
+    try:
+        url  = f"https://finnhub.io/api/v1/stock/peers?symbol={ticker}&token={api_key}"
+        data = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
+        result["peers"] = [p for p in (data or []) if p != ticker][:10]
+    except Exception as ex:
+        log.warning(f"Finnhub peers {ticker}: {ex}")
+
     return jsonify(result)
 
 
