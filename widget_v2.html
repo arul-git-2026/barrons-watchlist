@@ -1020,44 +1020,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       </div>
     </div>
 
-    <!-- ══ RESEARCH & ANALYSIS CARD ══ -->
-    <div class="card" id="research-card" style="display:none;padding:12px 16px">
-      <div class="rc-header">
-        <div class="rc-title-group">
-          <span class="rc-title">Research &amp; Analysis</span>
-          <span class="rc-subtitle">Perplexity &nbsp;·&nbsp; RPO Extractor &nbsp;·&nbsp; SEC &nbsp;·&nbsp; TOS &nbsp;·&nbsp; Finnhub</span>
-        </div>
-        <div class="rc-tickers" id="rc-ticker-pills"></div>
-      </div>
-      <div class="rc-tabs">
-        <button class="rctab on" id="rctab-perplexity" onclick="setRCTab('perplexity',this)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          Perplexity Research
-        </button>
-        <button class="rctab" id="rctab-rpo" onclick="setRCTab('rpo',this)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          RPO Extractor
-        </button>
-        <button class="rctab" id="rctab-sec" onclick="setRCTab('sec',this)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-          SEC Filings
-        </button>
-        <button class="rctab" id="rctab-tos" onclick="setRCTab('tos',this)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          TOS
-        </button>
-        <button class="rctab" id="rctab-finnhub" onclick="setRCTab('finnhub',this)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Earnings &amp; Sentiment
-        </button>
-      </div>
-      <div class="tab-pane on" id="rc-tab-perplexity"><div class="rc-placeholder">Click a ticker row to begin</div></div>
-      <div class="tab-pane" id="rc-tab-rpo"><div class="rc-placeholder">Click a ticker row to run the RPO pipeline</div></div>
-      <div class="tab-pane" id="rc-tab-sec"><div class="rc-placeholder">Click a ticker row to view SEC filing links</div></div>
-      <div class="tab-pane" id="rc-tab-tos"><div class="rc-placeholder">Click a ticker row to open in thinkorswim</div></div>
-      <div class="tab-pane" id="rc-tab-finnhub"><div class="rc-placeholder">Click a ticker row to load earnings &amp; sentiment</div></div>
-    </div>
-
     <!-- Detail card (hidden until row is clicked) -->
     <div class="card" id="detail-card" style="display:none"></div>
 
@@ -1698,6 +1660,8 @@ function selectRow(ticker) {
        </div>`
     : '';
 
+  const activeTab = _rcTab || 'perplexity';
+
   card.innerHTML = `
     <div class="detail-header">
       <div style="flex:1">
@@ -1707,7 +1671,6 @@ function selectRow(ticker) {
           <button class="edit-ticker-btn" onclick="showTickerEditor('${d.t}')"
                   title="Edit ticker symbol">✏</button>
         </div>
-        <!-- Inline ticker editor — hidden until pencil is clicked -->
         <div class="ticker-edit-row" id="ticker-edit-row">
           <input class="ticker-edit-input" id="ticker-edit-input"
                  value="${d.t}" maxlength="12"
@@ -1725,176 +1688,176 @@ function selectRow(ticker) {
           <button class="edit-ticker-btn" onclick="showFieldsEditor('${d.t}')"
                   title="Edit sector, name, type, status" style="margin-left:2px">✏</button>
         </div>
-
-        <!-- Inline fields editor -->
         <div class="fields-edit-panel" id="fields-edit-panel">
-          <div class="field-group">
-            <label>Sector</label>
-            <input id="fe-sector" value="${d.sector || ''}" placeholder="e.g. Industrials">
-          </div>
-          <div class="field-group">
-            <label>Name</label>
-            <input id="fe-name" value="${d.n || ''}" placeholder="Full company name">
-          </div>
-          <div class="field-group">
-            <label>Type</label>
+          <div class="field-group"><label>Sector</label><input id="fe-sector" value="${d.sector || ''}" placeholder="e.g. Industrials"></div>
+          <div class="field-group"><label>Name</label><input id="fe-name" value="${d.n || ''}" placeholder="Full company name"></div>
+          <div class="field-group"><label>Type</label>
             <select id="fe-type">
               <option value="Stock"${(d.y||'Stock')==='Stock'?' selected':''}>Stock</option>
               <option value="ETF"${d.y==='ETF'?' selected':''}>ETF</option>
               <option value="Fund"${d.y==='Fund'?' selected':''}>Fund</option>
             </select>
           </div>
-          <div class="field-group">
-            <label>Status</label>
+          <div class="field-group"><label>Status</label>
             <select id="fe-status">
               ${['hot','rot','pull','press','dip','rec','caut','flat'].map(s =>
                 '<option value="' + s + '"' + (d.s === s ? ' selected' : '') + '>' + (STATUS_MAP[s] || s) + '</option>'
               ).join('')}
             </select>
           </div>
-          <div class="field-group">
-            <label>Analyst Rec</label>
-            <input id="fe-rec" value="${d.rec_analyst || ''}" placeholder="e.g. Buy, Hold">
-          </div>
+          <div class="field-group"><label>Analyst Rec</label><input id="fe-rec" value="${d.rec_analyst || ''}" placeholder="e.g. Buy, Hold"></div>
           <div class="fields-edit-actions">
-            <button class="ticker-save-btn"   onclick="saveFields('${d.t}')">Save</button>
+            <button class="ticker-save-btn" onclick="saveFields('${d.t}')">Save</button>
             <button class="ticker-cancel-btn" onclick="hideFieldsEditor()">Cancel</button>
           </div>
         </div>
-
         <div class="ep-tags" style="margin-top:10px">${eps}</div>
       </div>
       <div style="text-align:right">
         <div style="font-size:22px;font-weight:700">${d.price_fmt || '—'}</div>
         <div style="margin-top:4px">
           <span class="pct ${pc}">${d.pct_fmt || '—'}</span>
-          <span style="font-size:12px;color:var(--muted);margin-left:6px">
-            ${d.diff_fmt || ''}
-          </span>
+          <span style="font-size:12px;color:var(--muted);margin-left:6px">${d.diff_fmt || ''}</span>
         </div>
         ${ts}
       </div>
     </div>
 
-    ${d.sum ? renderSummary(d.sum, d.disc, d.t) : ''}
-
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Scenarios</span>
-      <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-        <select id="regen-provider" onchange="updateRegenModel()"
-                style="padding:3px 6px;font-size:10px;border:1px solid var(--border);
-                       border-radius:4px;background:var(--card);color:var(--text);
-                       outline:none;cursor:pointer;font-family:var(--font)">
-          <option value="claude">Claude</option>
-          <option value="gemini">Gemini</option>
-        </select>
-        <div id="regen-claude-tiers" style="display:flex;gap:2px">
-          <button class="rmb active" data-regen-tier="claude-haiku"
-                  onclick="setRegenTier('claude-haiku')">Haiku</button>
-          <button class="rmb" data-regen-tier="claude-sonnet"
-                  onclick="setRegenTier('claude-sonnet')">Sonnet</button>
-        </div>
-        <div id="regen-gemini-tiers" style="display:none;gap:2px">
-          <button class="rmb" data-regen-tier="gemini"
-                  onclick="setRegenTier('gemini')">Flash</button>
-          <button class="rmb" data-regen-tier="gemini-pro"
-                  onclick="setRegenTier('gemini-pro')">Pro</button>
-        </div>
-        <input type="hidden" id="regen-model" value="claude-haiku">
-        <button class="ticker-save-btn" id="regen-cases-btn"
-                onclick="regenCases('${d.t}','${d.n}')"
-                style="font-size:10px;padding:3px 10px;white-space:nowrap">
-          ✦ Update
-        </button>
-      </div>
-    </div>
-    <div id="cases-loading" style="display:none;font-size:11px;color:var(--muted);padding:8px 0">
-      <span class="research-cursor"></span> Researching ${d.n}…
-    </div>
-    <div class="case-grid" id="case-grid-${d.t}">
-      <div class="case-item">
-        <strong class="case-label label-base">Base case</strong>
-        <div class="case-text" id="case-base-${d.t}">${renderCaseHistory(d.base)}</div>
-      </div>
-      <div class="case-item">
-        <strong class="case-label label-bear">Bear case</strong>
-        <div class="case-text" id="case-bear-${d.t}">${renderCaseHistory(d.bear)}</div>
-      </div>
-      <div class="case-item">
-        <strong class="case-label label-bull">Bull case</strong>
-        <div class="case-text" id="case-bull-${d.t}">${renderCaseHistory(d.bull)}</div>
-      </div>
+    <!-- ── Unified tab bar ─────────────────────────────────────────── -->
+    <div class="rc-tabs" style="margin-top:14px;flex-wrap:nowrap;overflow-x:auto;border-bottom:1px solid var(--border);padding-bottom:0;gap:0">
+      <button class="rctab ${activeTab==='perplexity'?'on':''}" id="rctab-perplexity" onclick="setRCTab('perplexity',this)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Perplexity Research
+      </button>
+      <button class="rctab ${activeTab==='rpo'?'on':''}" id="rctab-rpo" onclick="setRCTab('rpo',this)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        RPO Extractor
+      </button>
+      <button class="rctab ${activeTab==='sec'?'on':''}" id="rctab-sec" onclick="setRCTab('sec',this)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        SEC Filings
+      </button>
+      <button class="rctab ${activeTab==='tos'?'on':''}" id="rctab-tos" onclick="setRCTab('tos',this)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        TOS
+      </button>
+      <button class="rctab ${activeTab==='finnhub'?'on':''}" id="rctab-finnhub" onclick="setRCTab('finnhub',this)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Earnings &amp; Sentiment
+      </button>
+      <button class="rctab ${activeTab==='barrons'?'on':''}" id="rctab-barrons" onclick="setRCTab('barrons',this)"
+              style="font-weight:700">Barrons</button>
+      <button class="rctab ${activeTab==='liveresearch'?'on':''}" id="rctab-liveresearch" onclick="setRCTab('liveresearch',this)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Live Research
+      </button>
+      <button class="rctab ${activeTab==='scenarios'?'on':''}" id="rctab-scenarios" onclick="setRCTab('scenarios',this)"
+              style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">Scenarios</button>
     </div>
 
-    <!-- ── Research panel ──────────────────────────────────────────── -->
-    <div class="research-panel">
-      <div class="research-header">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round"
-             stroke-linejoin="round" style="color:var(--accent)">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <h4>Live Research</h4>
-        <div style="display:flex;align-items:center;gap:4px">
-          <!-- Provider -->
-          <select class="research-model-select" id="research-provider"
-                  onchange="updateResearchModel()">
+    <!-- Research panes (content loaded by loadRCTabContent) -->
+    <div class="tab-pane ${activeTab==='perplexity'?'on':''}" id="rc-tab-perplexity" style="padding-top:10px"></div>
+    <div class="tab-pane ${activeTab==='rpo'?'on':''}" id="rc-tab-rpo" style="padding-top:10px"></div>
+    <div class="tab-pane ${activeTab==='sec'?'on':''}" id="rc-tab-sec" style="padding-top:10px"></div>
+    <div class="tab-pane ${activeTab==='tos'?'on':''}" id="rc-tab-tos" style="padding-top:10px"></div>
+    <div class="tab-pane ${activeTab==='finnhub'?'on':''}" id="rc-tab-finnhub" style="padding-top:10px"></div>
+
+    <!-- Barrons: episode-tagged research notes -->
+    <div class="tab-pane ${activeTab==='barrons'?'on':''}" id="rc-tab-barrons" style="padding-top:10px">
+      ${d.sum ? renderSummary(d.sum, d.disc, d.t) : '<div class="rc-placeholder">No Barron\'s research notes for ' + d.t + ' yet.</div>'}
+    </div>
+
+    <!-- Live Research tab -->
+    <div class="tab-pane ${activeTab==='liveresearch'?'on':''}" id="rc-tab-liveresearch" style="padding-top:10px">
+      <div class="research-panel" style="margin:0;border:none;padding:0;background:transparent">
+        <div class="research-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <h4>Live Research</h4>
+          <div style="display:flex;align-items:center;gap:4px">
+            <select class="research-model-select" id="research-provider" onchange="updateResearchModel()">
+              <option value="claude">Claude</option>
+              <option value="gemini">Gemini</option>
+            </select>
+            <div id="claude-tier-toggle" style="display:flex;gap:2px">
+              <button class="rmb active" id="rmb-haiku" data-tier="claude" onclick="setResearchTier('claude')">Haiku</button>
+              <button class="rmb" id="rmb-sonnet" data-tier="claude-sonnet" onclick="setResearchTier('claude-sonnet')">Sonnet</button>
+            </div>
+            <div id="gemini-tier-toggle" style="display:none;gap:2px">
+              <button class="rmb active" id="rmb-flash" data-tier="gemini" onclick="setResearchTier('gemini')">Flash</button>
+              <button class="rmb" id="rmb-pro" data-tier="gemini-pro" onclick="setResearchTier('gemini-pro')">Pro</button>
+            </div>
+            <input type="hidden" id="research-model" value="claude">
+          </div>
+        </div>
+        <div class="research-input-row">
+          <input class="research-input" id="research-q" type="text"
+            placeholder="Ask anything — or: build watchlist with 10 tech stocks…"
+            onkeydown="if(event.key==='Enter')handleResearchEnter('${d.t}','${d.n}')">
+          <button class="research-go-btn" id="research-go" onclick="handleResearchEnter('${d.t}','${d.n}')">Search</button>
+        </div>
+        <div id="wl-build-hint" style="display:none;padding:6px 14px;font-size:11px;color:var(--accent);background:var(--bg);border-bottom:1px solid var(--border)">
+          🗂 Looks like a watchlist request —
+          <button class="research-go-btn" style="padding:3px 10px;font-size:11px;margin-left:6px" onclick="buildWatchlistFromQuery()">Build Watchlist</button>
+          <span style="color:var(--muted);margin-left:6px">or press Search for web results</span>
+        </div>
+        <div class="research-output empty" id="research-out">Results will appear here…</div>
+        <div class="research-actions" id="research-actions">
+          <span style="font-size:11px;color:var(--muted);flex:1">Save this research to the ticker summary?</span>
+          <button class="research-save-btn" onclick="saveResearch('${d.t}')">Save to summary</button>
+          <button class="research-discard-btn" onclick="discardResearch()">Discard</button>
+        </div>
+        <div class="research-actions" id="wl-build-actions" style="display:none">
+          <span style="font-size:11px;color:var(--muted);flex:1" id="wl-build-status"></span>
+          <button class="research-save-btn" id="wl-create-btn" onclick="confirmCreateWatchlist()">✓ Create Watchlist</button>
+          <button class="research-discard-btn" onclick="discardWlBuild()">Discard</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenarios tab -->
+    <div class="tab-pane ${activeTab==='scenarios'?'on':''}" id="rc-tab-scenarios" style="padding-top:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Scenarios</span>
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+          <select id="regen-provider" onchange="updateRegenModel()" style="padding:3px 6px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);outline:none;cursor:pointer;font-family:var(--font)">
             <option value="claude">Claude</option>
             <option value="gemini">Gemini</option>
           </select>
-          <!-- Claude tiers -->
-          <div id="claude-tier-toggle" style="display:flex;gap:2px">
-            <button class="rmb active" id="rmb-haiku" data-tier="claude"
-                    onclick="setResearchTier('claude')">Haiku</button>
-            <button class="rmb" id="rmb-sonnet" data-tier="claude-sonnet"
-                    onclick="setResearchTier('claude-sonnet')">Sonnet</button>
+          <div id="regen-claude-tiers" style="display:flex;gap:2px">
+            <button class="rmb active" data-regen-tier="claude-haiku" onclick="setRegenTier('claude-haiku')">Haiku</button>
+            <button class="rmb" data-regen-tier="claude-sonnet" onclick="setRegenTier('claude-sonnet')">Sonnet</button>
           </div>
-          <!-- Gemini tiers (hidden until Gemini selected) -->
-          <div id="gemini-tier-toggle" style="display:none;gap:2px">
-            <button class="rmb active" id="rmb-flash" data-tier="gemini"
-                    onclick="setResearchTier('gemini')">Flash</button>
-            <button class="rmb" id="rmb-pro" data-tier="gemini-pro"
-                    onclick="setResearchTier('gemini-pro')">Pro</button>
+          <div id="regen-gemini-tiers" style="display:none;gap:2px">
+            <button class="rmb" data-regen-tier="gemini" onclick="setRegenTier('gemini')">Flash</button>
+            <button class="rmb" data-regen-tier="gemini-pro" onclick="setRegenTier('gemini-pro')">Pro</button>
           </div>
-          <input type="hidden" id="research-model" value="claude">
+          <input type="hidden" id="regen-model" value="claude-haiku">
+          <button class="ticker-save-btn" id="regen-cases-btn" onclick="regenCases('${d.t}','${d.n}')"
+                  style="font-size:10px;padding:3px 10px;white-space:nowrap">✦ Update</button>
         </div>
       </div>
-      <div class="research-input-row">
-        <input class="research-input" id="research-q" type="text"
-          placeholder="Ask anything — or: build watchlist with 10 tech stocks…"
-          onkeydown="if(event.key==='Enter')handleResearchEnter('${d.t}','${d.n}')">
-        <button class="research-go-btn" id="research-go"
-          onclick="handleResearchEnter('${d.t}','${d.n}')">Search</button>
+      <div id="cases-loading" style="display:none;font-size:11px;color:var(--muted);padding:8px 0">
+        <span class="research-cursor"></span> Researching ${d.n}…
       </div>
-      <!-- Watchlist builder hint — shown when query looks like a watchlist request -->
-      <div id="wl-build-hint" style="display:none;padding:6px 14px;font-size:11px;
-           color:var(--accent);background:var(--bg);border-bottom:1px solid var(--border)">
-        🗂 Looks like a watchlist request —
-        <button class="research-go-btn" style="padding:3px 10px;font-size:11px;margin-left:6px"
-          onclick="buildWatchlistFromQuery()">Build Watchlist</button>
-        <span style="color:var(--muted);margin-left:6px">or Search above for web results</span>
+      <div class="case-grid" id="case-grid-${d.t}">
+        <div class="case-item">
+          <strong class="case-label label-base">Base case</strong>
+          <div class="case-text" id="case-base-${d.t}">${renderCaseHistory(d.base)}</div>
+        </div>
+        <div class="case-item">
+          <strong class="case-label label-bear">Bear case</strong>
+          <div class="case-text" id="case-bear-${d.t}">${renderCaseHistory(d.bear)}</div>
+        </div>
+        <div class="case-item">
+          <strong class="case-label label-bull">Bull case</strong>
+          <div class="case-text" id="case-bull-${d.t}">${renderCaseHistory(d.bull)}</div>
+        </div>
       </div>
-      <div class="research-output empty" id="research-out">
-        Results will appear here…
-      </div>
-      <div class="research-actions" id="research-actions">
-        <span style="font-size:11px;color:var(--muted);flex:1">
-          Save this research to the ticker summary?
-        </span>
-        <button class="research-save-btn"
-          onclick="saveResearch('${d.t}')">Save to summary</button>
-        <button class="research-discard-btn"
-          onclick="discardResearch()">Discard</button>
-      </div>
-      <!-- Watchlist build result actions -->
-      <div class="research-actions" id="wl-build-actions" style="display:none">
-        <span style="font-size:11px;color:var(--muted);flex:1" id="wl-build-status"></span>
-        <button class="research-save-btn" id="wl-create-btn"
-          onclick="confirmCreateWatchlist()">✓ Create Watchlist</button>
-        <button class="research-discard-btn"
-          onclick="discardWlBuild()">Discard</button>
-      </div>
-    </div>`;
+    </div>
+  `;
+
+  // Load the active tab's dynamic content
+  loadRCTabContent(activeTab);
 
   document.getElementById('workspace').scrollTop = 0;
 }
@@ -2338,15 +2301,12 @@ const RC_MAX   = 4;
 let _rcCache   = {};          // { NVDA: { finnhub:{}, perplexity:'', rpo:{} } }
 
 function showResearchCard(ticker) {
-  const card = document.getElementById('research-card');
-  if (card) card.style.display = 'block';
   _rcTicker = ticker;
   if (!_rcHistory.includes(ticker)) {
     _rcHistory.unshift(ticker);
-    if (_rcHistory.length > RC_MAX) _rcHistory = _rcHistory.slice(0, RC_MAX);
+    if (_rcHistory.length > 4) _rcHistory.pop();
   }
-  updateRCPills();
-  loadRCTabContent(ticker, _rcTab);
+  // Research tabs are now embedded in the detail card — no separate card to show/hide
 }
 
 function updateRCPills() {
@@ -2361,7 +2321,7 @@ function setRCTicker(ticker, btn) {
   _rcTicker = ticker;
   document.querySelectorAll('.rc-tick').forEach(b => b.classList.remove('on'));
   if (btn) btn.classList.add('on');
-  loadRCTabContent(ticker, _rcTab);
+  loadRCTabContent(_rcTab);
 }
 
 function setRCTab(tab, btn) {
@@ -2371,16 +2331,18 @@ function setRCTab(tab, btn) {
   if (btn) btn.classList.add('on');
   const pane = document.getElementById('rc-tab-' + tab);
   if (pane) pane.classList.add('on');
-  if (_rcTicker) loadRCTabContent(_rcTicker, tab);
+  if (_rcTicker) loadRCTabContent(tab);
 }
 
-function loadRCTabContent(ticker, tab) {
+function loadRCTabContent(tab) {
+  const ticker = _rcTicker;
   if (!ticker) return;
-  if (tab === 'finnhub')    loadFinnhub(ticker);
-  else if (tab === 'sec')   renderSECLinks(ticker);
-  else if (tab === 'tos')   renderTOS(ticker);
-  else if (tab === 'perplexity') renderPerplexityPrompt(ticker);
-  else if (tab === 'rpo')   renderRPOPanel(ticker);
+  if      (tab === 'perplexity')   renderPerplexityPrompt(ticker);
+  else if (tab === 'rpo')          renderRPOPanel(ticker);
+  else if (tab === 'sec')          renderSECLinks(ticker);
+  else if (tab === 'tos')          renderTOS(ticker);
+  else if (tab === 'finnhub')      loadFinnhub(ticker);
+  // barrons / liveresearch / scenarios: content rendered inline — nothing to load
 }
 
 // ── Finnhub ──────────────────────────────────────────────────────────────────
