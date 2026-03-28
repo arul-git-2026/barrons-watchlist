@@ -4046,7 +4046,7 @@ function crisisSignalOn(key, d) {
   if (key === 'vix')    return v < t;                        // VIX < 20
   if (key === 'fg')     return v > t;                        // F&G > 50
   if (key === 'spread') return v < t;                        // spread < $2
-  if (key === 'ttf')    return v < t;                        // TTF < €30
+  if (key === 'ttf')    return v <= t;                       // JKM-TTF spread ≤ 0
   if (key === 'tanker') return (d.pct_from_peak ?? 0) < t;  // FRO down >20% from peak
   if (key === 'pcr')    return v < t;                        // P/C ratio < 0.70
   return false;
@@ -4095,13 +4095,13 @@ function crisisRisk(key, d) {
     if (val < 8)   return {label:'ACUTE',       cls:'fear'};
     return             {label:'EXTREME',    cls:'extreme'};
   }
-  // TTF: higher = worse
+  // JKM-TTF spread ($/MMBtu): positive = Asia paying premium over Europe
   if (key === 'ttf') {
-    if (val < 25)  return {label:'CHEAP',       cls:'calm'};
-    if (val < 40)  return {label:'NORMAL',      cls:'normal'};
-    if (val < 60)  return {label:'ELEVATED',    cls:'elevated'};
-    if (val < 90)  return {label:'HIGH',        cls:'fear'};
-    return             {label:'CRISIS',     cls:'extreme'};
+    if (val <= 0)   return {label:'NORMALISED',  cls:'calm'};
+    if (val < 2)    return {label:'NEAR PARITY', cls:'normal'};
+    if (val < 5)    return {label:'ELEVATED',    cls:'elevated'};
+    if (val < 10)   return {label:'ACUTE',       cls:'fear'};
+    return              {label:'EXTREME',    cls:'extreme'};
   }
   // Tanker (FRO): near 52w high = VLCC rates elevated = crisis ongoing
   if (key === 'tanker') {
@@ -4183,6 +4183,11 @@ function renderCrisisGrid(data, grid) {
       const sign = raw > 0 ? '+' : '';
       const cls  = raw > 0.1 ? 'up' : raw < -0.1 ? 'dn' : 'fl';
       changeText = `<div class="cc-change ${cls}">${sign}${raw.toFixed(2)} $/bbl today</div>`;
+    } else if (key === 'ttf') {
+      // JKM-TTF spread: absolute change vs prior month
+      const sign = raw > 0 ? '+' : '';
+      const cls  = raw > 0.1 ? 'up' : raw < -0.1 ? 'dn' : 'fl';
+      changeText = `<div class="cc-change ${cls}">${sign}${raw.toFixed(2)} vs prior month</div>`;
     } else {
       const cls  = raw > 0.5 ? 'up' : raw < -0.5 ? 'dn' : 'fl';
       const arrow = raw > 0.5 ? '▲' : raw < -0.5 ? '▼' : '—';
@@ -4195,6 +4200,13 @@ function renderCrisisGrid(data, grid) {
     if (key === 'fg') {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.rating || ''}</div>`;
+    } else if (key === 'ttf') {
+      // JKM-TTF spread card — show the two underlying prices as context
+      const jkm = d.jkm != null ? `JKM $${d.jkm}` : '';
+      const ttfv = d.ttf_val != null ? `TTF $${d.ttf_val}` : '';
+      const ld = d.last_date ? ` (${d.last_date.replace('M', '-')})` : '';
+      valueDisplay = `<div class="cc-value">${d.current >= 0 ? '+' : ''}${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px">${jkm}  ${ttfv}${ld}</div>`;
     } else if (key === 'pcr') {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">tail-risk / OTM put demand</div>`;
@@ -4207,8 +4219,9 @@ function renderCrisisGrid(data, grid) {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>`;
     }
 
+    const rangeLabel = key === 'ttf' ? '12m' : '52w';
     const rangeTxt = (d.low_52w != null && d.high_52w != null)
-      ? `<div class="cc-range">52w: ${fmt(d.low_52w)} – ${fmt(d.high_52w)}</div>` : '';
+      ? `<div class="cc-range">${rangeLabel}: ${fmt(d.low_52w)} – ${fmt(d.high_52w)}</div>` : '';
 
     return `<div class="crisis-card" style="border-left:3px solid ${color}">
       <div class="cc-label">${d.label}</div>

@@ -2878,13 +2878,71 @@ def crisis_monitor():
     except Exception as ex:
         result["spread"] = {"label": "WTI Backwardation", "symbol": "M1−M3", "error": str(ex)}
 
-    # ── 4. Dutch TTF Natural Gas ───────────────────────────────────────────────
+    # ── 4. JKM vs TTF Spread — World Bank Pink Sheet API ─────────────────────
+    # JKM = Japan-Korea Marker (Asian LNG spot, $/MMBtu) — Platts benchmark
+    # TTF = Dutch Title Transfer Facility (European gas, $/MMBtu equivalent)
+    # Both available FREE from World Bank Commodity Prices (no API key needed).
+    # Signal: When JKM drops back BELOW TTF, the Asian bidding war for Qatari
+    #         gas is ending — supply routes stabilising or buyers supplied.
+    # World Bank series:
+    #   PNGASJP = Natural Gas, Japan LNG ($/MMBtu) ← JKM proxy
+    #   PNGASEU = Natural Gas, Europe   ($/MMBtu) ← TTF proxy
+    # Data is monthly (Pink Sheet), typically ~6 weeks lag.
     try:
-        c = _yf_closes("TTF=F")
-        result["ttf"] = _yf_block("TTF=F", "TTF Natural Gas", "€/MWh", c, 30, "below",
-                                   "Crisis over when TTF < €30/MWh")
+        def _wb_series(indicator, n=24):
+            """Fetch n monthly observations from World Bank commodity API."""
+            url = (f"https://api.worldbank.org/v2/country/WLD/indicator/{indicator}"
+                   f"?format=json&per_page={n}&mrv={n}&frequency=M")
+            raw  = json.loads(_ur.urlopen(_ur.Request(url), timeout=12).read())
+            # Response: [metadata_dict, [{"date":"2024M01","value":12.3}, ...]]
+            pts  = raw[1] if isinstance(raw, list) and len(raw) > 1 else []
+            pts  = [p for p in pts if p.get("value") is not None]
+            pts.sort(key=lambda p: p["date"])
+            return pts
+
+        jkm_pts = _wb_series("PNGASJP")
+        ttf_pts = _wb_series("PNGASEU")
+        if not jkm_pts or not ttf_pts:
+            raise ValueError(
+                f"World Bank returned no data — "
+                f"JKM rows={len(jkm_pts)}, TTF rows={len(ttf_pts)}"
+            )
+
+        # Align by date
+        jkm_map = {p["date"]: float(p["value"]) for p in jkm_pts}
+        ttf_map = {p["date"]: float(p["value"]) for p in ttf_pts}
+        common  = sorted(set(jkm_map) & set(ttf_map))
+        if not common:
+            raise ValueError("no overlapping dates between JKM and TTF series")
+
+        spreads  = {d: round(jkm_map[d] - ttf_map[d], 3) for d in common}
+        dates    = sorted(spreads)
+        spark    = [spreads[d] for d in dates[-12:]]   # 12 months of spread
+        cur      = spreads[dates[-1]]
+        prev     = spreads[dates[-2]] if len(dates) >= 2 else cur
+        jkm_cur  = jkm_map[dates[-1]]
+        ttf_cur  = ttf_map[dates[-1]]
+        last_date = dates[-1]   # e.g. "2026M01"
+
+        result["ttf"] = {
+            "label":         "JKM vs TTF Spread",
+            "symbol":        "JKM−TTF",
+            "unit":          "$/MMBtu",
+            "current":       round(cur, 2),     # positive = Asia paying premium
+            "jkm":           round(jkm_cur, 2),
+            "ttf_val":       round(ttf_cur, 2),
+            "pct_day":       round(cur - prev, 2),    # absolute $/MMBtu change vs prior month
+            "pct_week":      None,
+            "spark":         spark,
+            "high_52w":      round(max(spreads[d] for d in dates[-12:]), 2),
+            "low_52w":       round(min(spreads[d] for d in dates[-12:]), 2),
+            "last_date":     last_date,
+            "signal_thresh": 0,
+            "signal_dir":    "below",
+            "signal_note":   "Crisis over when JKM drops below TTF price",
+        }
     except Exception as ex:
-        result["ttf"] = {"label": "TTF Natural Gas", "symbol": "TTF=F", "error": str(ex)}
+        result["ttf"] = {"label": "JKM vs TTF Spread", "symbol": "JKM−TTF", "error": str(ex)}
 
     # ── 5. Frontline FRO — VLCC freight rate proxy ────────────────────────────
     try:
