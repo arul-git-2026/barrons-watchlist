@@ -2520,7 +2520,7 @@ def rpo_extract(ticker):
             f"• **Key assumption:** one sentence\n"
             f"If RPO data is unavailable, say so clearly rather than fabricating numbers."
             f"{extra_note}"}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}}).encode()
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2048}}).encode()
         greq  = _ur.Request(gurl, data=gpl, headers={"Content-Type": "application/json"})
         gdata = json.loads(_ur.urlopen(greq, timeout=30).read())
         parts = (gdata.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
