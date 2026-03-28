@@ -2808,8 +2808,42 @@ def crisis_monitor():
             "signal_dir":    "above",
             "signal_note":   "Crisis over when F&G > 50 (neutral/greed)",
         }
+
+        # ── 2b. Put/Call Options ratio — extracted from same CNN response ──────
+        # greed_factors.put_call_options.data.score = actual P/C ratio (e.g. 0.77)
+        # greed_factors.put_call_options.score       = normalized 0-100 F&G component score
+        pcr_factor = fg_raw.get("greed_factors", {}).get("put_call_options", {})
+        pcr_ratio  = pcr_factor.get("data", {}).get("score")   # raw P/C ratio
+        pcr_score  = pcr_factor.get("score")                   # 0-100 normalized
+        pcr_rating = str(pcr_factor.get("rating", "unknown")).replace("_", " ").title()
+        if pcr_ratio is not None:
+            pcr_ratio = float(pcr_ratio)
+            # Build spark from composite F&G history as a proxy (inverted: high F&G ≈ low PCR)
+            # We don't have sub-indicator history, so use whatever we have
+            pcr_spark = [round(float(d["y"]), 1) for d in hist_pts[-30:]] if hist_pts else []
+            result["pcr"] = {
+                "label":         "Put/Call Ratio",
+                "symbol":        "CBOE PCR",
+                "unit":          " P/C",
+                "current":       round(pcr_ratio, 3),
+                "fg_score":      round(float(pcr_score), 1) if pcr_score is not None else None,
+                "rating":        pcr_rating,
+                "pct_day":       None,
+                "spark":         pcr_spark,   # composite F&G history proxy
+                "spark_note":    "sparkline = composite F&G (PCR sub-history not in public API)",
+                "high_52w":      None,
+                "low_52w":       None,
+                "signal_thresh": 0.70,
+                "signal_dir":    "below",
+                "signal_note":   "Crisis over when P/C ratio < 0.70",
+            }
+        else:
+            result["pcr"] = {"label": "Put/Call Ratio", "symbol": "CBOE PCR",
+                              "error": "not in CNN greed_factors response"}
+
     except Exception as ex:
-        result["fg"] = {"label": "Fear & Greed", "symbol": "CNN", "error": str(ex)}
+        result["fg"]  = {"label": "Fear & Greed",   "symbol": "CNN",      "error": str(ex)}
+        result["pcr"] = {"label": "Put/Call Ratio",  "symbol": "CBOE PCR", "error": str(ex)}
 
     # ── 3. WTI M1–M3 Crude Spread (EIA API) ───────────────────────────────────
     eia_key = os.environ.get("EIA_API_KEY", "").strip()
