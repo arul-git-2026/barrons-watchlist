@@ -2699,6 +2699,97 @@ def rpo_extract(ticker):
     return jsonify(result)
 
 
+# ── /api/crisis-monitor ───────────────────────────────────────────────────────
+_crisis_cache: dict = {"ts": 0, "data": None}
+_CRISIS_TTL = 900  # 15 minutes
+
+@app.route("/api/crisis-monitor")
+def crisis_monitor():
+    """
+    Global Crisis Monitor — VIX, Baltic Dry Index, Dutch TTF Gas, US Gas Price (FRED).
+    Cached 15 minutes.
+    """
+    import urllib.request as _ur
+
+    now = time.time()
+    if _crisis_cache["data"] and now - _crisis_cache["ts"] < _CRISIS_TTL:
+        return jsonify(_crisis_cache["data"])
+
+    result: dict = {"ok": True}
+
+    # ── yfinance indicators ────────────────────────────────────────────────────
+    yf_map = {
+        "vix": ("^VIX",   "CBOE VIX",              None),
+        "bdi": ("^BDIY",  "Baltic Dry Index",       None),
+        "ttf": ("TTF=F",  "Dutch TTF Gas",          "€/MWh"),
+        "oil": ("BZ=F",   "Brent Crude",            "$/bbl"),
+    }
+    for key, (sym, label, unit) in yf_map.items():
+        try:
+            hist = yf.Ticker(sym).history(period="60d", interval="1d")
+            if hist.empty:
+                raise ValueError("no data")
+            closes = hist["Close"].dropna()
+            cur   = float(closes.iloc[-1])
+            prev  = float(closes.iloc[-2]) if len(closes) > 1 else cur
+            w_ago = float(closes.iloc[-6]) if len(closes) >= 6 else prev
+            m_ago = float(closes.iloc[0])
+            spark = [round(float(v), 2) for v in closes.tail(30).tolist()]
+            result[key] = {
+                "label":      label,
+                "symbol":     sym,
+                "current":    round(cur, 2),
+                "pct_day":    round((cur - prev) / prev * 100, 2) if prev else 0,
+                "pct_week":   round((cur - w_ago) / w_ago * 100, 2) if w_ago else 0,
+                "pct_month":  round((cur - m_ago) / m_ago * 100, 2) if m_ago else 0,
+                "high_52w":   round(float(closes.max()), 2),
+                "low_52w":    round(float(closes.min()), 2),
+                "spark":      spark,
+                "unit":       unit or "",
+            }
+        except Exception as ex:
+            result[key] = {"label": label, "symbol": sym, "error": str(ex)}
+
+    # ── US Gas Price — FRED GASREGCOVW ────────────────────────────────────────
+    fred_key = os.environ.get("FRED_API_KEY", "").strip()
+    try:
+        if not fred_key:
+            raise ValueError("FRED_API_KEY not set")
+        url = (f"https://api.stlouisfed.org/fred/series/observations"
+               f"?series_id=GASREGCOVW&api_key={fred_key}"
+               f"&limit=30&sort_order=desc&file_type=json")
+        raw  = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
+        obs  = [o for o in raw.get("observations", []) if o.get("value") not in (".", None)]
+        if not obs:
+            raise ValueError("empty response")
+        cur   = float(obs[0]["value"])
+        prev  = float(obs[1]["value"]) if len(obs) > 1 else cur
+        w4ago = float(obs[4]["value"]) if len(obs) > 4 else prev
+        spark = [round(float(o["value"]), 3) for o in reversed(obs[:30])]
+        result["gas"] = {
+            "label":     "US Avg Gas Price",
+            "symbol":    "GASREGCOVW",
+            "current":   round(cur, 3),
+            "pct_day":   round((cur - prev) / prev * 100, 2) if prev else 0,
+            "pct_month": round((cur - w4ago) / w4ago * 100, 2) if w4ago else 0,
+            "high_52w":  round(max(float(o["value"]) for o in obs), 3),
+            "low_52w":   round(min(float(o["value"]) for o in obs), 3),
+            "spark":     spark,
+            "unit":      "$/gal",
+            "date":      obs[0]["date"],
+        }
+    except Exception as ex:
+        result["gas"] = {"label": "US Avg Gas Price", "error": str(ex)}
+
+    result["cached_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    _crisis_cache["ts"]   = now
+    _crisis_cache["data"] = result
+    log.info(f"  crisis-monitor: fetched VIX={result.get('vix',{}).get('current','?')} "
+             f"BDI={result.get('bdi',{}).get('current','?')} "
+             f"TTF={result.get('ttf',{}).get('current','?')}")
+    return jsonify(result)
+
+
 # ── /api/costs endpoint ───────────────────────────────────────────────────────
 @app.route("/api/costs")
 def get_costs():
