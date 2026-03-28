@@ -2250,9 +2250,8 @@ def get_finnhub(ticker):
 @app.route("/api/perplexity", methods=["POST"])
 def perplexity_research():
     """
-    Perplexity deep research using /v1/responses with fast-search preset.
+    Perplexity deep research using sonar-pro via /chat/completions.
     Body: {ticker, name, query}. Requires PERPLEXITY_API_KEY.
-    Uses the newer /v1/responses API (simpler than /chat/completions — no model selection needed).
     """
     import urllib.request as _ur, urllib.error as _ue
     body   = request.get_json(force=True)
@@ -2265,79 +2264,58 @@ def perplexity_research():
     if not api_key:
         return jsonify({"ok": False,
                         "error": "PERPLEXITY_API_KEY not set — add to /etc/streetwise.env"})
-    if not query:
-        query = f"Latest RPO trend, revenue growth, and analyst consensus for {ticker} ({name})."
 
-    # Build a focused financial research prompt
-    full_input = (
-        f"Research {ticker} ({name}) for a stock investor. "
-        f"{query} "
-        f"Format as bullet points: • **Label:** one sentence with specific numbers and dates. "
-        f"Labels: Recent news, Earnings, RPO/Backlog, Revenue growth, Analyst rating, "
-        f"Price target, EPS forecast, Catalyst, Risk, Valuation."
+    default_query = (
+        f"Give me a comprehensive deep-dive investment research report on {ticker} ({name}). "
+        f"Cover: latest earnings results with actual vs estimated EPS and revenue, "
+        f"revenue growth trajectory (YoY and QoQ with exact figures), "
+        f"RPO or backlog trends if applicable, "
+        f"forward guidance and management commentary, "
+        f"analyst consensus price targets and recent upgrades/downgrades, "
+        f"key catalysts and risks in the next 12 months, "
+        f"valuation (P/E, P/S, EV/EBITDA vs peers), "
+        f"competitive positioning and market share trends, "
+        f"and any recent material news or events. "
+        f"Be specific — include exact dollar amounts, percentages, dates, and quarter references."
+    )
+    user_query = query if query else default_query
+
+    system_prompt = (
+        f"You are a senior equity research analyst writing an institutional-grade report on {ticker} ({name}). "
+        f"Write in depth with specific numbers, percentages, dates, and quarter references throughout. "
+        f"Do not hedge excessively — give your best analysis based on the latest available data. "
+        f"Structure your response with clear markdown headers (##) for each section. "
+        f"Each section should have multiple sentences with supporting data, not just a single line."
     )
 
     payload = json.dumps({
-        "preset": "fast-search",
-        "input":  full_input,
+        "model": "sonar-pro",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_query},
+        ],
+        "max_tokens": 4096,
+        "temperature": 0.2,
     }).encode()
 
     req = _ur.Request(
-        "https://api.perplexity.ai/v1/responses",
+        "https://api.perplexity.ai/chat/completions",
         data=payload,
         headers={"Content-Type": "application/json",
                  "Authorization": f"Bearer {api_key}"},
     )
     try:
-        resp = _ur.urlopen(req, timeout=45)
+        resp = _ur.urlopen(req, timeout=60)
         data = json.loads(resp.read())
-        # /v1/responses returns {"output": [{"type":"message","content":[{"text":"..."}]}]}
-        # or a simpler {"text": "..."} depending on version — handle both
-        text = ""
-        if "output" in data:
-            for item in (data["output"] or []):
-                if item.get("type") == "message":
-                    for c in (item.get("content") or []):
-                        text += c.get("text", "")
-        elif "text" in data:
-            text = data["text"]
-        elif "choices" in data:
-            # fallback: old format
-            text = data["choices"][0]["message"]["content"]
-
-        text = text.strip()
+        text = data["choices"][0]["message"]["content"].strip()
         if not text:
             text = "Perplexity returned an empty response — check your API key and billing."
-        log.info(f"  perplexity /v1/responses: {ticker} {len(text)} chars")
+        log.info(f"  perplexity sonar-pro: {ticker} {len(text)} chars")
         return jsonify({"ok": True, "text": text})
     except _ue.HTTPError as e:
         err = e.read().decode("utf-8", errors="replace")[:400]
         log.error(f"Perplexity HTTP {e.code}: {err}")
-        # Gracefully fall back to /chat/completions if /v1/responses returns 404
-        if e.code == 404:
-            return _perplexity_chat_fallback(ticker, name, full_input, api_key)
         return jsonify({"ok": False, "error": f"Perplexity API error {e.code}: {err}"})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)})
-
-
-def _perplexity_chat_fallback(ticker, name, query, api_key):
-    """Fallback to /chat/completions if /v1/responses endpoint is unavailable."""
-    import urllib.request as _ur, urllib.error as _ue
-    payload = json.dumps({
-        "model": "sonar-pro",
-        "messages": [{"role": "user", "content": query}],
-        "max_tokens": 1024, "temperature": 0.2,
-    }).encode()
-    req = _ur.Request("https://api.perplexity.ai/chat/completions", data=payload,
-                      headers={"Content-Type": "application/json",
-                               "Authorization": f"Bearer {api_key}"})
-    try:
-        resp = _ur.urlopen(req, timeout=30)
-        data = json.loads(resp.read())
-        text = data["choices"][0]["message"]["content"]
-        log.info(f"  perplexity fallback /chat/completions: {ticker} {len(text)} chars")
-        return jsonify({"ok": True, "text": text})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
