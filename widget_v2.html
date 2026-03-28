@@ -1383,11 +1383,20 @@ function populateSourceDropdown() {
 // ── Filters ────────────────────────────────────────────────────────
 function populateFilters() {
   // sector: from live quote (d.sector) or stored by updater (d.sector)
-  const sectors  = [...new Set(allData.map(d => d.sector).filter(s => s && s !== 'N/A'))].sort();
+  const naLabel  = '— Unassigned / N/A';
+  const naValue  = 'N/A';
+  const knownSectors = [...new Set(allData.map(d => d.sector).filter(s => s && s !== 'N/A' && s !== 'ETF'))].sort();
+  const hasNA    = allData.some(d => !d.sector || d.sector === 'N/A');
+  const hasETF   = allData.some(d => d.y === 'ETF' || d.sector === 'ETF');
+  const sectors  = [
+    ...knownSectors,
+    ...(hasETF ? ['ETF'] : []),
+    ...(hasNA  ? [naValue] : []),
+  ];
   // rec: from live quote (d.rec) or stored by updater (d.rec_analyst)
   const recs     = [...new Set(allData.map(d => d.rec && d.rec !== 'N/A' ? d.rec : d.rec_analyst).filter(r => r && r !== 'N/A'))].sort();
   const episodes = [...new Set(allData.flatMap(d => d.e || []))].sort();
-  fillSelect('f-sector',  sectors,  'All Sectors');
+  fillSelectSector('f-sector', knownSectors, hasETF, hasNA);
   fillSelect('f-rec',     recs,     'All Recs');
   fillSelect('f-episode', episodes, 'All Episodes');
   // Mirror dynamic options to top filter bar
@@ -1400,6 +1409,18 @@ function fillSelect(id, values, placeholder) {
   const cur = sel.value;
   sel.innerHTML = `<option value="">${placeholder}</option>` +
     values.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`).join('');
+}
+
+function fillSelectSector(id, knownSectors, hasETF, hasNA) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  const opts = [
+    `<option value="">All Sectors</option>`,
+    ...knownSectors.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`),
+    ...(hasETF ? [`<option value="ETF"${'ETF' === cur ? ' selected' : ''}>ETF</option>`] : []),
+    ...(hasNA  ? [`<option value="N/A"${'N/A' === cur ? ' selected' : ''}>— Unassigned / N/A</option>`] : []),
+  ];
+  sel.innerHTML = opts.join('');
 }
 
 // ── Sort ───────────────────────────────────────────────────────────
@@ -1433,7 +1454,10 @@ function render() {
 
   let rows = allData.filter(d => {
     if (q       && !(`${d.t} ${d.n}`).toLowerCase().includes(q)) return false;
-    if (fSector && d.sector !== fSector)                          return false;
+    if (fSector) {
+      if (fSector === 'N/A') { if (d.sector && d.sector !== 'N/A') return false; }
+      else if (d.sector !== fSector) return false;
+    }
     if (fType   && d.y      !== fType)                            return false;
     if (fStatus && d.s      !== fStatus)                          return false;
     if (fRec    && d.rec !== fRec && d.rec_analyst !== fRec)     return false;
