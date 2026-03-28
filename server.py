@@ -2762,22 +2762,24 @@ def crisis_monitor():
         result["vix"] = {"label": "CBOE VIX", "symbol": "^VIX", "error": str(ex)}
 
     # ── 2. CNN Fear & Greed ───────────────────────────────────────────────────
+    # URL accepts optional /YYYY-MM-DD suffix for historical range start date
     try:
-        req    = _ur.Request(
-            "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
-            headers={"User-Agent": "Mozilla/5.0"})
+        start_90d = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
+        fg_url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{start_90d}"
+        req    = _ur.Request(fg_url, headers={"User-Agent": "Mozilla/5.0"})
         fg_raw = json.loads(_ur.urlopen(req, timeout=10).read())
         fg     = fg_raw.get("fear_and_greed", {})
         score  = float(fg.get("score", 0))
         rating = str(fg.get("rating", "unknown")).replace("_", " ").title()
+        # x = Unix ms timestamp, y = Fear & Greed score (0-100)
         hist_pts = fg_raw.get("fear_and_greed_historical", {}).get("data", [])
-        spark    = [round(float(d["x"]), 1) for d in hist_pts[-30:]] if hist_pts else [score]
+        spark    = [round(float(d["y"]), 1) for d in hist_pts[-30:]] if hist_pts else [score]
         prev_s   = float(spark[-2]) if len(spark) >= 2 else score
         result["fg"] = {
             "label": "Fear & Greed", "symbol": "CNN", "unit": "/100",
             "current":       round(score, 1),
             "rating":        rating,
-            "pct_day":       round(score - prev_s, 1),   # absolute pt change
+            "pct_day":       round(score - prev_s, 1),   # absolute pt change (not %)
             "pct_week":      None,
             "spark":         spark,
             "high_52w":      round(max(spark), 1),
