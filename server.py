@@ -2762,12 +2762,32 @@ def crisis_monitor():
         result["vix"] = {"label": "CBOE VIX", "symbol": "^VIX", "error": str(ex)}
 
     # ── 2. CNN Fear & Greed ───────────────────────────────────────────────────
-    # URL accepts optional /YYYY-MM-DD suffix for historical range start date
+    # URL accepts optional /YYYY-MM-DD suffix for historical range start date.
+    # CNN returns HTTP 418 on bare/minimal User-Agent — need a full browser header set.
     try:
         start_90d = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
         fg_url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{start_90d}"
-        req    = _ur.Request(fg_url, headers={"User-Agent": "Mozilla/5.0"})
-        fg_raw = json.loads(_ur.urlopen(req, timeout=10).read())
+        req = _ur.Request(fg_url, headers={
+            "User-Agent":      ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                "Chrome/124.0.0.0 Safari/537.36"),
+            "Accept":          "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer":         "https://edition.cnn.com/markets/fear-and-greed",
+            "Origin":          "https://edition.cnn.com",
+            "Connection":      "keep-alive",
+            "Sec-Fetch-Dest":  "empty",
+            "Sec-Fetch-Mode":  "cors",
+            "Sec-Fetch-Site":  "same-site",
+        })
+        import gzip as _gz, io as _io
+        raw_bytes = _ur.urlopen(req, timeout=12).read()
+        try:
+            raw_bytes = _gz.decompress(raw_bytes)
+        except Exception:
+            pass  # not gzip-encoded, use as-is
+        fg_raw = json.loads(raw_bytes)
         fg     = fg_raw.get("fear_and_greed", {})
         score  = float(fg.get("score", 0))
         rating = str(fg.get("rating", "unknown")).replace("_", " ").title()
