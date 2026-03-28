@@ -2280,8 +2280,8 @@ def _sec_get_rpo_xbrl(cik: str) -> list:
     import urllib.request as _ur
     # Try primary URL first, then alternate path
     for path in [
-        f"https://data.sec.gov/api/xbrl/companyconcept/{cik}/us-gaap/RevenueRemainingPerformanceObligation.json",
-        f"https://data.sec.gov/api/xbrl/companyconcept/{cik}/us-gaap/ContractWithCustomerLiability.json",
+        f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/RevenueRemainingPerformanceObligation.json",
+        f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/ContractWithCustomerLiability.json",
     ]:
         try:
             req  = _ur.Request(path, headers={"User-Agent": "Streetwise/1.0 research@streetwise.app"})
