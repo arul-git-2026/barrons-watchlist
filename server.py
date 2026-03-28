@@ -2643,6 +2643,66 @@ def rpo_extract(ticker):
     return jsonify(result)
 
 
+# ── /health endpoint ──────────────────────────────────────────────────────────
+@app.route("/health")
+def health_check():
+    """
+    Health check — returns API key status, data file info, DB stats, disk free, last backup.
+    Exempt from auth (safe for monitoring / uptime checkers).
+    """
+    import shutil
+
+    def key_ok(name): return bool(os.environ.get(name, "").strip())
+
+    data_ok   = os.path.exists(DATA_FILE)
+    data_size = round(os.path.getsize(DATA_FILE) / 1024, 1) if data_ok else 0
+    try:
+        ticker_count = len([r for r in load_data_raw() if not r.get("__meta__")]) if data_ok else 0
+    except Exception:
+        ticker_count = -1
+
+    db_ok = os.path.exists(DB_FILE)
+    db_rows = db_tickers = 0
+    if db_ok:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            db_rows    = conn.execute("SELECT COUNT(*) FROM prices").fetchone()[0]
+            db_tickers = conn.execute("SELECT COUNT(DISTINCT ticker) FROM prices").fetchone()[0]
+            conn.close()
+        except Exception:
+            pass
+
+    disk = shutil.disk_usage(".")
+    disk_free_gb = round(disk.free / 1024**3, 1)
+
+    backups = sorted([f for f in os.listdir(".") if f.startswith("streetwise_data.bak.")], reverse=True)
+
+    return jsonify({
+        "ok": True,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "api_keys": {
+            "anthropic":  key_ok("ANTHROPIC_API_KEY"),
+            "gemini":     key_ok("GEMINI_API_KEY"),
+            "finnhub":    key_ok("FINNHUB_API_KEY"),
+            "perplexity": key_ok("PERPLEXITY_API_KEY"),
+            "exa":        key_ok("EXA_API_KEY"),
+        },
+        "data_file": {
+            "exists":       data_ok,
+            "size_kb":      data_size,
+            "ticker_count": ticker_count,
+        },
+        "price_db": {
+            "exists":  db_ok,
+            "rows":    db_rows,
+            "tickers": db_tickers,
+        },
+        "disk_free_gb": disk_free_gb,
+        "last_backup":  backups[0] if backups else None,
+        "backup_count": len(backups),
+    })
+
+
 if __name__ == "__main__":
     sep = "─" * 54
     print(f"\n\033[1m\033[36m{sep}\033[0m")
@@ -2714,67 +2774,3 @@ if __name__ == "__main__":
     print(f"[36m{sep}[0m\n")
 
     app.run(debug=False, host="0.0.0.0", port=5000, use_reloader=False)
-
-
-# ── /health endpoint ──────────────────────────────────────────────────────────
-@app.route("/health")
-def health_check():
-    """
-    Health check endpoint — returns status of all API keys, data files, and DB.
-    Safe to call without auth token (used for monitoring).
-    """
-    import shutil
-
-    def key_ok(name): return bool(os.environ.get(name, "").strip())
-
-    # Data file
-    data_ok  = os.path.exists(DATA_FILE)
-    data_size = round(os.path.getsize(DATA_FILE) / 1024, 1) if data_ok else 0
-    try:
-        ticker_count = len([r for r in load_data_raw() if not r.get("__meta__")]) if data_ok else 0
-    except Exception:
-        ticker_count = -1
-
-    # DB
-    db_ok = os.path.exists(DB_FILE)
-    db_rows = db_tickers = 0
-    if db_ok:
-        try:
-            conn = sqlite3.connect(DB_FILE)
-            db_rows    = conn.execute("SELECT COUNT(*) FROM prices").fetchone()[0]
-            db_tickers = conn.execute("SELECT COUNT(DISTINCT ticker) FROM prices").fetchone()[0]
-            conn.close()
-        except Exception:
-            pass
-
-    # Disk
-    disk  = shutil.disk_usage(".")
-    disk_free_gb = round(disk.free / 1024**3, 1)
-
-    # Latest backup
-    backups = sorted([f for f in os.listdir(".") if f.startswith("streetwise_data.bak.")], reverse=True)
-    last_backup = backups[0] if backups else None
-
-    return jsonify({
-        "ok": True,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "api_keys": {
-            "anthropic":   key_ok("ANTHROPIC_API_KEY"),
-            "gemini":      key_ok("GEMINI_API_KEY"),
-            "finnhub":     key_ok("FINNHUB_API_KEY"),
-            "perplexity":  key_ok("PERPLEXITY_API_KEY"),
-            "exa":         key_ok("EXA_API_KEY"),
-        },
-        "data_file": {
-            "exists":       data_ok,
-            "size_kb":      data_size,
-            "ticker_count": ticker_count,
-        },
-        "price_db": {
-            "exists":   db_ok,
-            "rows":     db_rows,
-            "tickers":  db_tickers,
-        },
-        "disk_free_gb":  disk_free_gb,
-        "last_backup":   last_backup,
-    })
