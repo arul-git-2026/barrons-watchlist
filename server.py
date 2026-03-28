@@ -1706,6 +1706,38 @@ def delete_episode():
     })
 
 
+@app.route("/api/watchlists", methods=["GET"])
+def get_watchlists():
+    """Return saved watchlists from the __watchlists__ meta-record."""
+    db = load_data_raw()
+    for rec in db:
+        if rec.get("t") == "__watchlists__":
+            return jsonify({"ok": True, "watchlists": rec.get("watchlists", {})})
+    return jsonify({"ok": True, "watchlists": {}})
+
+
+@app.route("/api/watchlists", methods=["POST"])
+def save_watchlists():
+    """Save watchlists into the __watchlists__ meta-record atomically."""
+    body = request.get_json(force=True, silent=True) or {}
+    watchlists = body.get("watchlists", {})
+    db = load_data_raw()
+    found = False
+    for rec in db:
+        if rec.get("t") == "__watchlists__":
+            rec["watchlists"] = watchlists
+            found = True
+            break
+    if not found:
+        db.insert(0, {"t": "__watchlists__", "__meta__": True, "watchlists": watchlists})
+    tmp = DATA_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, DATA_FILE)
+    log.info(f"  watchlists saved: {list(watchlists.keys())}")
+    return jsonify({"ok": True})
+
+
 @app.route("/api/watchlist-build", methods=["POST"])
 def watchlist_build():
     """
