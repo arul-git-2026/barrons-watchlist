@@ -109,13 +109,45 @@ def calc_cost(response) -> tuple[int, int, float]:
     cost   = (inp * prices["input"] + out * prices["output"]) / 1_000_000
     return inp, out, cost
 
+
+# ── Cost ledger ───────────────────────────────────────────────────────────────
+COSTS_FILE = "costs_log.json"
+_costs_lock = __import__("threading").Lock()
+
+def log_cost(service: str, ticker: str, inp: int, out: int, cost: float, model: str = ""):
+    """Append one cost event to costs_log.json atomically."""
+    entry = {
+        "ts":      datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "date":    datetime.utcnow().strftime("%Y-%m-%d"),
+        "service": service,
+        "ticker":  ticker,
+        "model":   model,
+        "inp":     inp,
+        "out":     out,
+        "cost":    round(cost, 6),
+    }
+    with _costs_lock:
+        try:
+            if os.path.exists(COSTS_FILE):
+                with open(COSTS_FILE, encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = []
+            data.append(entry)
+            tmp = COSTS_FILE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp, COSTS_FILE)
+        except Exception as e:
+            log.warning(f"log_cost failed: {e}")
+
 # ── Token auth (Oracle Cloud deployment) ─────────────────────────────────────
 # Set STREETWISE_TOKEN in /etc/streetwise.env on the server.
 # When set, every request must include ?token=<value> or header X-Streetwise-Token.
 # When not set (local dev), auth is skipped entirely.
 _AUTH_TOKEN: str = os.environ.get("STREETWISE_TOKEN", "").strip()
 
-_AUTH_EXEMPT = {"/favicon.ico", "/health"}
+_AUTH_EXEMPT = {"/favicon.ico", "/health", "/api/costs"}
 
 @app.before_request
 def _check_token():
@@ -940,6 +972,7 @@ def research():
                 f"in={inp:,} out={out:,}  "
                 f"\033[32mcost=${cost:.4f}\033[0m"
             )
+            log_cost("claude-research", ticker, inp, out, cost, model=getattr(resp, "model", ""))
 
             if not full_text:
                 full_text = "No text returned by Claude. Check terminal for block details."
@@ -1189,6 +1222,7 @@ CONTENT:
             raw        = msg.content[0].text.strip()
             model_used = claude_model
             ilog(f"extraction done  in={inp:,} out={out:,} cost=${cost:.4f}")
+            log_cost("claude-ingest", "batch", inp, out, cost, model=claude_model)
 
         if raw.startswith("```"):
             parts = raw.split("```")
@@ -1487,6 +1521,7 @@ Respond ONLY in this exact JSON format, nothing else:
 
             cost = (total_inp * 0.80 + total_out * 4.00) / 1_000_000
             log.info(f"  regen-cases (claude): {ticker} turns={turn+1} in={total_inp:,} out={total_out:,} cost=${cost:.4f}")
+            log_cost("claude-scenarios", ticker, total_inp, total_out, cost, model="claude-haiku-4-5")
 
         # ── Parse JSON — extract first complete { } object ─────────────────────
         if not raw:
@@ -1807,6 +1842,7 @@ Instructions:
         )
         inp, out, cost = calc_cost(resp)
         log.info(f"  watchlist-build: in={inp:,} out={out:,} cost=${cost:.4f}")
+        log_cost("claude-watchlist-build", "batch", inp, out, cost, model="claude-haiku-4-5-20251001")
 
         raw = resp.content[0].text.strip()
         # Strip markdown fences if present
@@ -2310,7 +2346,12 @@ def perplexity_research():
         text = data["choices"][0]["message"]["content"].strip()
         if not text:
             text = "Perplexity returned an empty response — check your API key and billing."
-        log.info(f"  perplexity sonar-pro: {ticker} {len(text)} chars")
+        usage = data.get("usage", {})
+        p_inp  = usage.get("prompt_tokens", 0)
+        p_out  = usage.get("completion_tokens", 0)
+        p_cost = (p_inp * 3.0 + p_out * 15.0) / 1_000_000  # sonar-pro pricing
+        log.info(f"  perplexity sonar-pro: {ticker} {len(text)} chars in={p_inp} out={p_out} cost=${p_cost:.4f}")
+        log_cost("perplexity-sonar-pro", ticker, p_inp, p_out, p_cost, model="sonar-pro")
         return jsonify({"ok": True, "text": text})
     except _ue.HTTPError as e:
         err = e.read().decode("utf-8", errors="replace")[:400]
@@ -2612,7 +2653,9 @@ def rpo_extract(ticker):
                 f"• **Confidence:** High / Medium / Low — one sentence reason\n"
                 f"• **Business type note:** is this a SaaS/subscription company where RPO is meaningful?"
                 f"{extra_note}"}])
+        i2, o2, c2 = calc_cost(msg2)
         result["step2"] = msg2.content[0].text.strip()
+        log_cost("rpo-step2", ticker, i2, o2, c2, model="claude-sonnet-4-5")
     except Exception as ex:
         log.error(f"RPO step2 {ticker}: {ex}")
         result["step2"] = f"• **Error (Step 2):** {str(ex)[:200]}"
@@ -2636,11 +2679,53 @@ def rpo_extract(ticker):
         gdata = json.loads(_ur.urlopen(greq, timeout=30).read())
         parts = (gdata.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
         result["step3"] = "".join(p.get("text", "") for p in parts).strip()
+        g_usage = gdata.get("usageMetadata", {})
+        g_inp = g_usage.get("promptTokenCount", 0)
+        g_out = g_usage.get("candidatesTokenCount", 0)
+        g_cost = (g_inp * 0.075 + g_out * 0.30) / 1_000_000
+        log_cost("rpo-step3-gemini", ticker, g_inp, g_out, g_cost, model="gemini-2.5-flash")
     except Exception as ex:
         log.error(f"RPO step3 {ticker}: {ex}")
         result["step3"] = f"• **Error (Step 3):** {str(ex)[:200]}"
 
     return jsonify(result)
+
+
+# ── /api/costs endpoint ───────────────────────────────────────────────────────
+@app.route("/api/costs")
+def get_costs():
+    """Return cost ledger summary — today, this month, all-time, and last 50 events."""
+    if not os.path.exists(COSTS_FILE):
+        return jsonify({"ok": True, "events": [], "today": 0, "month": 0, "alltime": 0})
+    try:
+        with open(COSTS_FILE, encoding="utf-8") as f:
+            events = json.load(f)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    month = datetime.utcnow().strftime("%Y-%m")
+
+    today_cost  = sum(e["cost"] for e in events if e.get("date") == today)
+    month_cost  = sum(e["cost"] for e in events if e.get("date", "").startswith(month))
+    alltime_cost = sum(e["cost"] for e in events)
+
+    # Per-service breakdown (all-time)
+    by_service: dict = {}
+    for e in events:
+        svc = e.get("service", "unknown")
+        by_service[svc] = by_service.get(svc, 0) + e["cost"]
+    by_service = {k: round(v, 4) for k, v in sorted(by_service.items(), key=lambda x: -x[1])}
+
+    return jsonify({
+        "ok":       True,
+        "today":    round(today_cost,   4),
+        "month":    round(month_cost,   4),
+        "alltime":  round(alltime_cost, 4),
+        "by_service": by_service,
+        "events":   events[-50:][::-1],   # last 50, newest first
+        "total_events": len(events),
+    })
 
 
 # ── /health endpoint ──────────────────────────────────────────────────────────

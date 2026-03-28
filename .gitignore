@@ -11,7 +11,9 @@ cloudflared*
 # ── Personal / generated data ─────────────────────────────────────────────────
 streetwise_data.json
 streetwise_data.json.*
+streetwise_data.bak.*
 price_history.db
+costs_log.json
 
 # ── Backups ───────────────────────────────────────────────────────────────────
 *.bak
