@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Streetwise — Research Integration Mockup</title>
+<style>
+  :root {
+    --bg:       #0f172a;
+    --surface:  #1e293b;
+    --border:   #334155;
+    --text:     #e2e8f0;
+    --muted:    #94a3b8;
+    --accent:   #38bdf8;
+    --green:    #22c55e;
+    --red:      #ef4444;
+    --amber:    #f59e0b;
+    --purple:   #a78bfa;
+    --teal:     #2dd4bf;
+    --pill-bg:  #0f2744;
+  }
+  [data-theme="light"] {
+    --bg:       #f1f5f9;
+    --surface:  #ffffff;
+    --border:   #e2e8f0;
+    --text:     #0f172a;
+    --muted:    #64748b;
+    --accent:   #0284c7;
+    --pill-bg:  #dbeafe;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; padding: 24px; }
+
+  /* ── Header ── */
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .header h1 { font-size: 16px; font-weight: 600; letter-spacing: .03em; }
+  .badge-new { background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+               padding: 2px 7px; border-radius: 99px; margin-left: 8px; vertical-align: middle; }
+  .theme-btn { background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+               padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+
+  /* ── Legend ── */
+  .legend { display: flex; gap: 20px; margin-bottom: 16px; padding: 10px 14px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── Table ── */
+  .table { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .table-wrap { overflow-x: auto; }
+  .table-header { display: grid; grid-template-columns: 28px 80px 65px 65px 100px 120px 110px 58px 88px;
+                  gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border);
+                  font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; min-width: 740px; }
+  .row { display: grid; grid-template-columns: 28px 80px 65px 65px 100px 120px 110px 58px 88px;
+         gap: 8px; align-items: center; padding: 10px 12px;
+         border-bottom: 1px solid var(--border); transition: background .15s; min-width: 740px; }
+  .row:last-child { border-bottom: none; }
+  .row:hover { background: rgba(148,163,184,.06); }
+
+  /* ── Cells ── */
+  input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); }
+
+  .chip { background: var(--pill-bg); color: var(--accent); font-weight: 700; font-size: 12px;
+          padding: 3px 9px; border-radius: 6px; display: inline-block; }
+
+  .price { font-weight: 600; font-size: 13px; }
+  .chg.pos { color: var(--green); }
+  .chg.neg { color: var(--red); }
+
+  /* ── NEW: Earnings badge ── */
+  .earnings { display: flex; flex-direction: column; gap: 2px; }
+  .earn-date { font-size: 11px; color: var(--amber); font-weight: 600; }
+  .earn-label { font-size: 10px; color: var(--muted); }
+  .earn-none { font-size: 11px; color: var(--muted); }
+
+  /* ── NEW: Sentiment bar ── */
+  .sentiment { display: flex; flex-direction: column; gap: 3px; }
+  .sent-label { font-size: 10px; color: var(--muted); display: flex; justify-content: space-between; }
+  .sent-bar-bg { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .sent-bar { height: 100%; border-radius: 3px; }
+  .sent-bar.bullish  { background: var(--green); }
+  .sent-bar.bearish  { background: var(--red); }
+  .sent-bar.neutral  { background: var(--amber); }
+  .sent-score { font-size: 10px; }
+  .sent-score.bullish { color: var(--green); }
+  .sent-score.bearish { color: var(--red); }
+  .sent-score.neutral { color: var(--amber); }
+
+  /* ── NEW: SEC links ── */
+  .sec-links { display: flex; gap: 5px; flex-wrap: wrap; }
+  .sec-btn { font-size: 10px; font-weight: 600; padding: 3px 7px; border-radius: 5px;
+             border: 1px solid var(--border); color: var(--muted); text-decoration: none;
+             background: transparent; cursor: pointer; transition: all .15s; }
+  .sec-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .rpo-btn { font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 5px;
+             border: 1px solid var(--amber); color: var(--amber); text-decoration: none;
+             background: transparent; cursor: pointer; transition: all .15s; }
+  .rpo-btn:hover { background: var(--amber); color: #000; }
+  .rpo-btn.active { background: var(--amber); color: #000; }
+  .rpo-btn.loading { opacity: .6; cursor: wait; }
+
+  /* ── RPO panel ── */
+  .rpo-panel {
+    display: none;
+    margin: 0 12px 12px;
+    padding: 16px;
+    background: var(--bg);
+    border: 1px solid var(--amber);
+    border-radius: 8px;
+  }
+  .rpo-panel.visible { display: block; animation: fadeIn .2s ease; }
+
+  .rpo-steps { display: flex; flex-direction: column; gap: 14px; }
+  .rpo-step { display: flex; gap: 12px; }
+  .rpo-step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--amber);
+                  color: #000; font-size: 10px; font-weight: 800; display: flex;
+                  align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .rpo-step-body { flex: 1; }
+  .rpo-step-title { font-size: 11px; font-weight: 700; color: var(--amber); margin-bottom: 4px; }
+  .rpo-step-model { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .rpo-step-content { font-size: 12px; line-height: 1.6; color: var(--text); }
+  .rpo-step-content strong { color: var(--accent); }
+
+  .rpo-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+  .rpo-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--border); }
+  .rpo-table td { padding: 4px 8px 4px 0; border-bottom: 1px solid rgba(148,163,184,.1); }
+  .rpo-table td:first-child { color: var(--muted); font-size: 10px; }
+  .rpo-table td.val { font-weight: 700; color: var(--text); }
+  .rpo-table td.pos { color: var(--green); font-weight: 600; }
+  .rpo-table td.neg { color: var(--red); font-weight: 600; }
+
+  .verify-box { background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+                padding: 8px 10px; font-size: 11px; line-height: 1.6; color: var(--muted); margin-top: 4px; }
+  .verify-box em { color: var(--text); font-style: normal; }
+
+  /* ── NEW: TOS button ── */
+  .tos-btn { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px;
+             border: 1px solid var(--teal); color: var(--teal); text-decoration: none;
+             background: transparent; cursor: pointer; transition: all .15s; white-space: nowrap; display: inline-block; }
+  .tos-btn:hover { background: var(--teal); color: #fff; }
+
+  /* ── NEW: Research button ── */
+  .research-btn { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+                  border: 1px solid var(--purple); color: var(--purple); background: transparent;
+                  cursor: pointer; transition: all .15s; white-space: nowrap; }
+  .research-btn:hover { background: var(--purple); color: #fff; }
+  .research-btn.loading { opacity: .6; cursor: wait; }
+  .research-btn.active { background: var(--purple); color: #fff; }
+
+  /* ── Research panel ── */
+  .research-panel {
+    display: none;
+    margin: 0 12px 12px;
+    padding: 16px;
+    background: var(--bg);
+    border: 1px solid var(--purple);
+    border-radius: 8px;
+    position: relative;
+  }
+  .research-panel.visible { display: block; animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+
+  .rp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .rp-title { font-size: 12px; font-weight: 700; color: var(--purple); display: flex; align-items: center; gap: 6px; }
+  .rp-source { font-size: 10px; color: var(--muted); }
+  .rp-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; }
+  .rp-close:hover { color: var(--text); }
+
+  .rp-body { font-size: 12px; line-height: 1.7; color: var(--text); }
+  .rp-body p { margin-bottom: 8px; }
+  .rp-body strong { color: var(--accent); }
+
+  .rp-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .rp-tag { font-size: 10px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); }
+  .rp-tag.bull { border-color: var(--green); color: var(--green); }
+  .rp-tag.bear { border-color: var(--red); color: var(--red); }
+  .rp-tag.neut { border-color: var(--amber); color: var(--amber); }
+
+  .rp-footer { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+               padding-top: 10px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); }
+
+  /* ── Spinner ── */
+  .spinner { width: 12px; height: 12px; border: 2px solid var(--border);
+             border-top-color: var(--purple); border-radius: 50%; animation: spin .6s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Section label ── */
+  .section-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+                   letter-spacing: .08em; margin: 20px 0 8px; }
+
+  /* ── Comparison callout ── */
+  .callout { padding: 12px 16px; background: var(--surface); border-left: 3px solid var(--accent);
+             border-radius: 0 8px 8px 0; margin-bottom: 20px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+  .callout strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Streetwise <span class="badge-new">MOCKUP</span></h1>
+    <div style="font-size:11px;color:var(--muted);margin-top:3px">Research integration preview — Finnhub · Perplexity · SEC EDGAR</div>
+  </div>
+  <button class="theme-btn" onclick="toggleTheme()">Toggle light/dark</button>
+</div>
+
+<div class="callout">
+  <strong>What's new in each row:</strong>
+  &nbsp;① Earnings date from Finnhub &nbsp;·&nbsp;
+  ② News sentiment score from Finnhub &nbsp;·&nbsp;
+  ③ SEC 10-K / 10-Q direct links &nbsp;·&nbsp;
+  ④ TOS ↗ — one click opens the ticker chart in thinkorswim &nbsp;·&nbsp;
+  ⑤ RPO button (amber) — GPT-4o extracts, o1-mini verifies, o1 forecasts revenue bridge — software/SaaS tickers only &nbsp;·&nbsp;
+  ⑥ Perplexity "Research" button → expands analyst summary below the row
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="dot" style="background:var(--amber)"></div> Earnings date (Finnhub)</div>
+  <div class="legend-item"><div class="dot" style="background:var(--green)"></div> Bullish sentiment</div>
+  <div class="legend-item"><div class="dot" style="background:var(--red)"></div> Bearish sentiment</div>
+  <div class="legend-item"><div class="dot" style="background:var(--amber)"></div> Neutral sentiment</div>
+  <div class="legend-item"><div class="dot" style="background:#94a3b8"></div> SEC filing links</div>
+  <div class="legend-item"><div class="dot" style="background:var(--purple)"></div> Perplexity research</div>
+  <div class="legend-item"><div class="dot" style="background:var(--teal)"></div> Open in TOS (free, URL only)</div>
+  <div class="legend-item"><div class="dot" style="background:var(--amber)"></div> RPO extractor (GPT-4o → o1-mini → o1) — software/SaaS only</div>
+</div>
+
+<div class="section-label">Ticker rows — with research integration</div>
+
+<div class="table">
+
+  <div class="table-header">
+    <div></div>
+    <div>Ticker</div>
+    <div>Price</div>
+    <div>Change</div>
+    <div>Earnings</div>
+    <div>Sentiment</div>
+    <div>SEC</div>
+    <div>TOS</div>
+    <div></div>
+  </div>
+
+  <!-- Row 1: NVDA -->
+  <div id="row-NVDA">
+    <div class="row" id="rowcells-NVDA">
+      <input type="checkbox">
+      <div><span class="chip">NVDA</span></div>
+      <div class="price">$875.40</div>
+      <div class="chg pos">+2.3%</div>
+      <div class="earnings">
+        <div class="earn-date">May 28</div>
+        <div class="earn-label">Next EPS</div>
+      </div>
+      <div class="sentiment">
+        <div class="sent-label"><span class="sent-score bullish">Bullish</span><span>0.81</span></div>
+        <div class="sent-bar-bg"><div class="sent-bar bullish" style="width:81%"></div></div>
+      </div>
+      <div class="sec-links">
+        <a class="sec-btn" href="#" onclick="return false">10-K</a>
+        <a class="sec-btn" href="#" onclick="return false">10-Q</a>
+        <button class="rpo-btn" onclick="toggleRPO('NVDA', this)">RPO</button>
+      </div>
+      <a class="tos-btn" href="#" onclick="return false">TOS ↗</a>
+      <button class="research-btn" onclick="toggleResearch('NVDA', this)">Research</button>
+    </div>
+    <div class="rpo-panel" id="rpop-NVDA"></div>
+    <div class="research-panel" id="rp-NVDA"></div>
+  </div>
+
+  <!-- Row 2: XOM -->
+  <div id="row-XOM">
+    <div class="row" id="rowcells-XOM">
+      <input type="checkbox" checked>
+      <div><span class="chip">XOM</span></div>
+      <div class="price">$112.80</div>
+      <div class="chg neg">-0.8%</div>
+      <div class="earnings">
+        <div class="earn-date">Apr 25</div>
+        <div class="earn-label">Next EPS</div>
+      </div>
+      <div class="sentiment">
+        <div class="sent-label"><span class="sent-score neutral">Neutral</span><span>0.52</span></div>
+        <div class="sent-bar-bg"><div class="sent-bar neutral" style="width:52%"></div></div>
+      </div>
+      <div class="sec-links">
+        <a class="sec-btn" href="#" onclick="return false">10-K</a>
+        <a class="sec-btn" href="#" onclick="return false">10-Q</a>
+      </div>
+      <a class="tos-btn" href="#" onclick="return false">TOS ↗</a>
+      <button class="research-btn" onclick="toggleResearch('XOM', this)">Research</button>
+    </div>
+    <div class="research-panel" id="rp-XOM"></div>
+  </div>
+
+  <!-- Row 3: JPM -->
+  <div id="row-JPM">
+    <div class="row" id="rowcells-JPM">
+      <input type="checkbox">
+      <div><span class="chip">JPM</span></div>
+      <div class="price">$198.20</div>
+      <div class="chg pos">+0.4%</div>
+      <div class="earnings">
+        <div class="earn-date">Apr 11</div>
+        <div class="earn-label">Next EPS</div>
+      </div>
+      <div class="sentiment">
+        <div class="sent-label"><span class="sent-score bullish">Bullish</span><span>0.68</span></div>
+        <div class="sent-bar-bg"><div class="sent-bar bullish" style="width:68%"></div></div>
+      </div>
+      <div class="sec-links">
+        <a class="sec-btn" href="#" onclick="return false">10-K</a>
+        <a class="sec-btn" href="#" onclick="return false">10-Q</a>
+      </div>
+      <a class="tos-btn" href="#" onclick="return false">TOS ↗</a>
+      <button class="research-btn" onclick="toggleResearch('JPM', this)">Research</button>
+    </div>
+    <div class="research-panel" id="rp-JPM"></div>
+  </div>
+
+  <!-- Row 4: DVN -->
+  <div id="row-DVN">
+    <div class="row" id="rowcells-DVN">
+      <input type="checkbox">
+      <div><span class="chip">DVN</span></div>
+      <div class="price">$38.50</div>
+      <div class="chg neg">-1.9%</div>
+      <div class="earnings">
+        <div class="earn-none">—</div>
+      </div>
+      <div class="sentiment">
+        <div class="sent-label"><span class="sent-score bearish">Bearish</span><span>0.31</span></div>
+        <div class="sent-bar-bg"><div class="sent-bar bearish" style="width:31%"></div></div>
+      </div>
+      <div class="sec-links">
+        <a class="sec-btn" href="#" onclick="return false">10-K</a>
+        <a class="sec-btn" href="#" onclick="return false">10-Q</a>
+      </div>
+      <a class="tos-btn" href="#" onclick="return false">TOS ↗</a>
+      <button class="research-btn" onclick="toggleResearch('DVN', this)">Research</button>
+    </div>
+    <div class="research-panel" id="rp-DVN"></div>
+  </div>
+
+</div>
+
+<!-- ── Simulated research content per ticker ───────────────────── -->
+<script>
+const RESEARCH = {
+  NVDA: {
+    summary: `<p><strong>NVIDIA (NVDA)</strong> remains the dominant supplier of AI training and inference chips. The H100 and forthcoming B200 Blackwell GPUs face no credible competition in the data-centre segment for at least 12–18 months. Revenue guidance for FY2025 implies ~110% year-on-year growth.</p>
+              <p>Key risk: export restrictions to China (~20% of revenue) and potential supply-chain delays on CoWoS packaging at TSMC. Valuation is stretched at ~35× forward sales, pricing in continued hyper-scaler capex at current pace.</p>
+              <p>Analyst consensus: <strong>Buy</strong> — median price target $950 (18 buys, 3 holds, 0 sells).</p>`,
+    tags: [{t:'AI Infrastructure',c:'bull'},{t:'Data Centre',c:'bull'},{t:'Export Risk',c:'bear'},{t:'Valuation Premium',c:'bear'}],
+  },
+  XOM: {
+    summary: `<p><strong>ExxonMobil (XOM)</strong> benefits from the Pioneer Natural Resources acquisition completing its Permian Basin footprint. Management has guided to $20B+ in structural cost savings by 2027. Free cash flow yield ~7% at current Brent.</p>
+              <p>Near-term headwinds: Brent crude softening toward $75 on China demand concerns and OPEC+ production uncertainty. Refining margins have compressed 30% year-on-year.</p>
+              <p>Analyst consensus: <strong>Hold</strong> — median price target $118 (12 buys, 9 holds, 2 sells). Dividend yield 3.4% provides floor support.</p>`,
+    tags: [{t:'Permian Scale',c:'bull'},{t:'3.4% Dividend',c:'bull'},{t:'Oil Price Risk',c:'bear'},{t:'Refining Margin',c:'neut'}],
+  },
+  JPM: {
+    summary: `<p><strong>JPMorgan Chase (JPM)</strong> posted record profits in FY2024 driven by net interest income from the higher-rate environment. The firm leads peers in investment banking fee recovery and has taken market share in M&A advisory.</p>
+              <p>Jamie Dimon's cautionary tone on commercial real estate exposure and potential credit normalisation in consumer lending are key watch items. CET1 ratio of 15.3% is well above regulatory minimum.</p>
+              <p>Analyst consensus: <strong>Buy</strong> — median price target $220 (20 buys, 5 holds, 1 sell). Consensus sees 10–12% EPS growth in 2025.</p>`,
+    tags: [{t:'NII Tailwind',c:'bull'},{t:'IB Recovery',c:'bull'},{t:'CRE Exposure',c:'bear'},{t:'Rate Sensitivity',c:'neut'}],
+  },
+  DVN: {
+    summary: `<p><strong>Devon Energy (DVN)</strong> has seen its fixed-plus-variable dividend cut twice in the past year as WTI prices softened. Production growth is tracking below guidance due to well productivity headwinds in the Anadarko Basin.</p>
+              <p>The variable dividend model, which was a key bull thesis, now pays out materially less than peak 2022 levels. Management has indicated share buybacks as the preferred capital return mechanism going forward.</p>
+              <p>Analyst consensus: <strong>Hold</strong> — median price target $42 (8 buys, 11 holds, 4 sells). Sentiment has deteriorated since the dividend cut.</p>`,
+    tags: [{t:'Variable Div Cut',c:'bear'},{t:'Production Miss',c:'bear'},{t:'Buyback Pivot',c:'neut'},{t:'Oil Leverage',c:'neut'}],
+  },
+};
+
+const RPO_DATA = {
+  NVDA: {
+    extracted: {
+      total:    '$18.0B',
+      cRPO:     '$10.2B',   // due within 12 months
+      unbilled: '$7.8B',
+      source:   'Note 11 — Revenue, FY2025 10-K, p.94',
+    },
+    verified: `The $18.0B RPO figure <em>includes unbilled backlog</em>. Per Note 11: "Remaining performance obligations include both billed (deferred revenue of $3.1B) and unbilled amounts. The unbilled portion represents contractually committed future billings not yet invoiced." This confirms total RPO ≠ deferred revenue alone.`,
+    forecast: [
+      { q: 'Q1 FY26', rpo: '$18.0B', conv: '22%',  rev: '$3.96B', yoy: '+14%' },
+      { q: 'Q2 FY26', rpo: '$19.4B', conv: '23%',  rev: '$4.46B', yoy: '+18%' },
+      { q: 'Q3 FY26', rpo: '$20.8B', conv: '22%',  rev: '$4.58B', yoy: '+16%' },
+      { q: 'Q4 FY26', rpo: '$22.1B', conv: '24%',  rev: '$5.30B', yoy: '+21%' },
+    ],
+    note: 'Historical RPO-to-revenue conversion rate avg 22.8% over 8 quarters. Assumes stable contract mix and no large deal slippage.',
+  },
+};
+
+let openRPO = null;
+
+function toggleRPO(ticker, btn) {
+  const panel = document.getElementById('rpop-' + ticker);
+  if (!panel) return;
+  const isOpen = panel.classList.contains('visible');
+
+  if (openRPO && openRPO !== ticker) {
+    const prev = document.getElementById('rpop-' + openRPO);
+    if (prev) prev.classList.remove('visible');
+    const prevBtn = document.querySelector(`[onclick="toggleRPO('${openRPO}', this)"]`);
+    if (prevBtn) { prevBtn.classList.remove('active'); prevBtn.textContent = 'RPO'; }
+  }
+
+  if (isOpen) {
+    panel.classList.remove('visible');
+    btn.classList.remove('active');
+    btn.textContent = 'RPO';
+    openRPO = null;
+    return;
+  }
+
+  const data = RPO_DATA[ticker];
+  if (!data) {
+    panel.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--muted)">RPO analysis not available for <strong style="color:var(--text)">${ticker}</strong> — only applicable to software / SaaS stocks with multi-year subscription contracts.</div>`;
+    panel.classList.add('visible');
+    btn.classList.add('active');
+    openRPO = ticker;
+    return;
+  }
+
+  btn.classList.add('loading');
+  btn.textContent = 'Extracting…';
+  panel.innerHTML = `<div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;padding:4px 0">
+    <span class="spinner" style="border-top-color:var(--amber)"></span> Running GPT-4o → o1-mini → o1 pipeline on latest 10-K…
+  </div>`;
+  panel.classList.add('visible');
+
+  setTimeout(() => {
+    const rows = data.forecast.map(r =>
+      `<tr><td>${r.q}</td><td class="val">${r.rpo}</td><td>${r.conv}</td><td class="val">${r.rev}</td><td class="${r.yoy.startsWith('+') ? 'pos' : 'neg'}">${r.yoy}</td></tr>`
+    ).join('');
+
+    panel.innerHTML = `
+      <div class="rp-header">
+        <div class="rp-title" style="color:var(--amber)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          RPO Extractor — ${ticker}
+        </div>
+        <button class="rp-close" onclick="toggleRPO('${ticker}', document.querySelector('[onclick=\\'toggleRPO(\\\\\"${ticker}\\\\\", this)\\']'))">&times;</button>
+      </div>
+      <div class="rpo-steps">
+
+        <div class="rpo-step">
+          <div class="rpo-step-num">1</div>
+          <div class="rpo-step-body">
+            <div class="rpo-step-title">Extraction</div>
+            <div class="rpo-step-model">Claude Sonnet 4.6 — scanned Notes to Consolidated Financial Statements</div>
+            <table class="rpo-table">
+              <tr><th>Metric</th><th>Value</th><th>Source</th></tr>
+              <tr><td>Total RPO</td><td class="val">${data.extracted.total}</td><td style="font-size:10px;color:var(--muted)">${data.extracted.source}</td></tr>
+              <tr><td>cRPO (&lt;12 mo)</td><td class="val">${data.extracted.cRPO}</td><td></td></tr>
+              <tr><td>Unbilled backlog</td><td class="val">${data.extracted.unbilled}</td><td></td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="rpo-step">
+          <div class="rpo-step-num">2</div>
+          <div class="rpo-step-body">
+            <div class="rpo-step-title">Verification</div>
+            <div class="rpo-step-model">Claude Sonnet 4.6 — does RPO include unbilled backlog?</div>
+            <div class="verify-box">${data.verified}</div>
+          </div>
+        </div>
+
+        <div class="rpo-step">
+          <div class="rpo-step-num">3</div>
+          <div class="rpo-step-body">
+            <div class="rpo-step-title">Revenue Bridge Forecast</div>
+            <div class="rpo-step-model">Gemini 2.0 Flash — 8-quarter historical conversion rate → 12-month projection</div>
+            <table class="rpo-table">
+              <tr><th>Quarter</th><th>RPO Base</th><th>Conv Rate</th><th>Implied Rev</th><th>YoY</th></tr>
+              ${rows}
+            </table>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px">${data.note}</div>
+          </div>
+        </div>
+
+      </div>
+      <div class="rp-footer">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Generated ${new Date().toLocaleTimeString()} &nbsp;·&nbsp; Not financial advice &nbsp;·&nbsp; Claude Sonnet 4.6 + Gemini 2.0 Flash
+      </div>`;
+
+    btn.classList.remove('loading');
+    btn.classList.add('active');
+    btn.textContent = 'RPO ✓';
+    openRPO = ticker;
+  }, 1800);
+}
+
+let openTicker = null;
+
+function toggleResearch(ticker, btn) {
+  const panel = document.getElementById('rp-' + ticker);
+  const isOpen = panel.classList.contains('visible');
+
+  // Close any open panel
+  if (openTicker && openTicker !== ticker) {
+    document.getElementById('rp-' + openTicker).classList.remove('visible');
+    document.querySelector(`[onclick="toggleResearch('${openTicker}', this)"]`).classList.remove('active');
+  }
+
+  if (isOpen) {
+    panel.classList.remove('visible');
+    btn.classList.remove('active');
+    openTicker = null;
+    return;
+  }
+
+  // Show loading state
+  btn.classList.add('loading');
+  btn.textContent = 'Loading…';
+  panel.innerHTML = `<div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px">
+    <span class="spinner"></span> Fetching Perplexity research for ${ticker}…
+  </div>`;
+  panel.classList.add('visible');
+
+  // Simulate API delay
+  setTimeout(() => {
+    const data = RESEARCH[ticker];
+    const tagHtml = data.tags.map(t => `<span class="rp-tag ${t.c}">${t.t}</span>`).join('');
+    panel.innerHTML = `
+      <div class="rp-header">
+        <div class="rp-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Perplexity Research — ${ticker}
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="rp-source">sonar-pro · live web sources</span>
+          <button class="rp-close" onclick="toggleResearch('${ticker}', document.querySelector('[onclick=\\'toggleResearch(\\\\\"${ticker}\\\\\", this)\\']'))">&times;</button>
+        </div>
+      </div>
+      <div class="rp-body">${data.summary}</div>
+      <div class="rp-tags">${tagHtml}</div>
+      <div class="rp-footer">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Generated ${new Date().toLocaleTimeString()} &nbsp;·&nbsp; Not financial advice
+      </div>
+    `;
+    btn.classList.remove('loading');
+    btn.classList.add('active');
+    btn.textContent = 'Research ✓';
+    openTicker = ticker;
+  }, 1400);
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+}
+</script>
+
+</body>
+</html>

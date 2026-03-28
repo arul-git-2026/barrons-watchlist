@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Streetwise — Full Integration Mockup</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --accent:#1a73e8;--accent-light:#e8f0fe;
+  --bg:#f8f9fa;--card:#fff;
+  --up:#137333;--up-bg:#e6f4ea;
+  --down:#c5221f;--down-bg:#fce8e6;
+  --border:#dadce0;--text:#202124;--muted:#5f6368;
+  --font:'Google Sans',system-ui,sans-serif;--radius:8px;
+  --amber:#d97706;--purple:#7c3aed;--teal:#0d9488;--green:#16a34a;--red:#dc2626;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:14px}
+.layout{display:grid;grid-template-columns:420px 1fr;height:100vh}
+
+/* ── Sidebar ── */
+.sidebar{background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-header{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.sidebar-header h2{font-size:15px;font-weight:700}
+.logo-accent{color:var(--accent)}
+.sub{font-size:11px;margin-top:4px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dot-live{width:7px;height:7px;border-radius:50%;background:#34a853;animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hdr-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid var(--border);
+  border-radius:20px;cursor:pointer;background:var(--card);font-size:11px;color:var(--muted);font-weight:500}
+.sort-bar{display:flex;align-items:center;gap:2px;padding:5px 10px;border-bottom:1px solid var(--border);
+  font-size:11px;flex-shrink:0;background:var(--bg)}
+.sb{padding:4px 8px;border-radius:4px;cursor:pointer;color:var(--muted);border:none;background:none;font-size:11px;font-family:var(--font)}
+.sb.on{background:var(--accent-light);color:var(--accent);font-weight:600}
+.count-row{padding:3px 12px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg)}
+.table-scroll{flex:1;overflow-y:auto;background:var(--card)}
+table{width:100%;border-collapse:collapse}
+thead th{position:sticky;top:0;background:var(--bg);padding:6px 10px;font-size:10px;font-weight:600;
+  text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);text-align:left;z-index:10;letter-spacing:.04em}
+.row{border-bottom:1px solid #f1f3f4;cursor:pointer;transition:background .1s}
+.row:hover td{background:#f8f9ff}
+.row.active td{background:var(--accent-light)}
+.row.active td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.cell{padding:7px 10px;vertical-align:middle}
+.chip{display:inline-block;background:#202124;color:#fff;padding:2px 6px;border-radius:4px;
+  font-family:'Roboto Mono',monospace;font-weight:700;font-size:11px;white-space:nowrap;flex-shrink:0}
+.ticker-line{display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden}
+.ian-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:#ede9fe;color:#6d28d9;font-weight:600;flex-shrink:0}
+.earn-pill{font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#fef3c7;color:#92400e;white-space:nowrap;flex-shrink:0}
+.sent-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sent-dot.bull{background:var(--green)} .sent-dot.bear{background:var(--red)} .sent-dot.neut{background:var(--amber)}
+.sent-score{font-size:9px;color:var(--muted);flex-shrink:0}
+.co-name{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.price-val{font-size:13px;font-weight:500;text-align:right;white-space:nowrap}
+.change-val{font-size:10px;text-align:right;margin-top:1px}
+.pct{display:inline-flex;align-items:center;justify-content:center;padding:2px 6px;border-radius:4px;font-weight:600;font-size:11px;white-space:nowrap}
+.up{color:var(--up);background:var(--up-bg)} .down{color:var(--down);background:var(--down-bg)} .neu{color:var(--muted);background:var(--bg)}
+input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:13px;height:13px}
+
+/* ── Workspace ── */
+.workspace{padding:14px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;background:var(--bg)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:0 1px 2px rgba(60,64,67,.1)}
+
+/* filter bar */
+.top-filter-bar{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:10px 14px;box-shadow:0 1px 2px rgba(60,64,67,.1);display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+.top-filter-search{position:relative;display:flex;align-items:center}
+.top-filter-search svg{position:absolute;left:10px;width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:2}
+.top-filter-search input{width:100%;padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:20px;
+  font-size:12px;outline:none;color:var(--text);background:var(--bg);font-family:var(--font)}
+.top-filter-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.top-filter-row select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;
+  outline:none;color:var(--text);background:var(--bg);font-family:var(--font)}
+
+/* chart */
+.chart-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.chart-header h3{font-size:13px;font-weight:600;flex:1}
+.chart-mock{height:260px;background:#fafafa;border-radius:6px;border:1px solid var(--border);position:relative;overflow:hidden}
+.rb{padding:4px 10px;border:none;border-radius:20px;cursor:pointer;font-size:12px;background:none;color:var(--muted);font-weight:500;font-family:var(--font)}
+.rb.on{background:var(--accent-light);color:var(--accent);font-weight:600}
+
+/* ══ RESEARCH CARD ══ */
+.rc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+.rc-title-group{display:flex;flex-direction:column;gap:2px}
+.rc-title{font-size:13px;font-weight:600;color:var(--text)}
+.rc-subtitle{font-size:10px;color:var(--muted)}
+.rc-tickers{display:flex;gap:5px;flex-shrink:0}
+.rc-tick{padding:3px 10px;border-radius:4px;border:1px solid var(--border);font-size:11px;
+  font-weight:700;cursor:pointer;background:none;color:var(--muted);font-family:'Roboto Mono',monospace;transition:all .15s}
+.rc-tick.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+.rc-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;gap:0}
+.rctab{padding:7px 14px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;
+  border:none;border-bottom:2px solid transparent;margin-bottom:-1px;background:none;
+  font-family:var(--font);white-space:nowrap;transition:all .15s;display:flex;align-items:center;gap:5px}
+.rctab:hover{color:var(--text)}
+.rctab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+.tab-pane{display:none}
+.tab-pane.on{display:block}
+
+/* perplexity */
+.perp-body{font-size:12px;line-height:1.75;color:var(--text)}
+.perp-body p{margin-bottom:8px}
+.perp-ticker{color:var(--accent);font-weight:700}
+.perp-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.ptag{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid}
+.ptag.bull{border-color:var(--green);color:var(--green)}
+.ptag.bear{border-color:var(--red);color:var(--red)}
+.ptag.neut{border-color:var(--amber);color:var(--amber)}
+.ai-footer{font-size:10px;color:var(--muted);margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+
+/* rpo */
+.rpo-steps{display:flex;flex-direction:column;gap:14px}
+.rpo-step{display:flex;gap:12px}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--amber);color:#fff;font-size:10px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.step-body{flex:1}
+.step-title{font-size:11px;font-weight:700;color:var(--amber);margin-bottom:2px}
+.step-model{font-size:10px;color:var(--muted);margin-bottom:6px}
+.rpo-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:4px}
+.rpo-table th{text-align:left;color:var(--muted);font-weight:600;padding:3px 8px 3px 0;border-bottom:1px solid var(--border)}
+.rpo-table td{padding:4px 8px 4px 0;border-bottom:1px solid #f1f3f4}
+.rpo-table td:first-child{color:var(--muted);font-size:10px}
+.val{font-weight:700} .pos-c{color:var(--green);font-weight:600}
+.verify-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:11px;line-height:1.6;color:var(--muted)}
+.verify-box em{color:var(--text);font-style:normal}
+
+/* sec */
+.sec-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.sec-card{border:1px solid var(--border);border-radius:6px;padding:12px;background:var(--bg)}
+.sec-card h4{font-size:12px;font-weight:600;margin-bottom:3px}
+.sec-card p{font-size:11px;color:var(--muted);margin-bottom:8px}
+.sec-link-btn{font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;border:1px solid var(--border);
+  color:var(--muted);background:var(--card);cursor:pointer;text-decoration:none;display:inline-block;transition:all .15s}
+.sec-link-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* tos */
+.tos-card{border:1px solid #0d9488;border-radius:8px;padding:14px;background:#f0fdfa;margin-bottom:10px}
+.tos-card h4{font-size:12px;font-weight:600;color:#0f766e;margin-bottom:5px}
+.tos-card p{font-size:12px;color:#134e4a;line-height:1.6;margin-bottom:10px}
+.tos-open-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:6px;
+  background:var(--teal);color:#fff;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:var(--font)}
+.tos-tip{padding:9px 12px;background:#fff;border:1px solid #99f6e4;border-radius:6px;font-size:11px;color:#134e4a;line-height:1.6;margin-top:8px}
+.tos-tip strong{color:#0f766e}
+
+/* finnhub */
+.finn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.finn-card{border:1px solid var(--border);border-radius:6px;padding:12px;background:var(--bg)}
+.finn-card h4{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.finn-metric{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f1f3f4;font-size:12px}
+.finn-metric:last-child{border-bottom:none}
+.finn-metric label{color:var(--muted);font-size:11px}
+.finn-metric .mv{font-weight:600}
+.sent-bar-bg{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:6px}
+.sent-bar-fill{height:100%;border-radius:3px}
+
+/* ══ EXISTING DETAIL CARD ══ */
+.detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.detail-ticker{font-size:22px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:-.5px}
+.detail-name{font-size:14px;color:var(--muted);margin-left:8px}
+.edit-btn{background:none;border:none;cursor:pointer;font-size:13px;color:var(--muted);padding:0 4px}
+.meta-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;align-items:center}
+.pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
+.pill-yield{background:#e6f4ea;border-color:#a8d5b5;color:var(--up)}
+.st{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.s-hot{background:#fce8e6;color:var(--down)} .s-dip{background:#e8f0fe;color:var(--accent)}
+.s-rec{background:#e6f4ea;color:var(--up)} .s-flat{background:var(--bg);color:var(--muted)}
+.ep-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+.ep-tag{font-size:10px;padding:2px 8px;border-radius:4px;background:#f1f3f4;color:var(--muted);cursor:pointer}
+
+/* episode accordion */
+.ep-card{margin-top:10px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.ep-card-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+  background:var(--bg);cursor:pointer;font-size:12px;font-weight:500;gap:8px}
+.ep-card-header:hover{background:#f1f3f4}
+.ep-source{font-size:11px;color:var(--accent);font-weight:600;flex-shrink:0}
+.ep-title{color:var(--text);flex:1}
+.ep-chevron{color:var(--muted);font-size:14px;flex-shrink:0;transition:transform .2s}
+.ep-body{padding:12px 14px;border-top:1px solid var(--border);background:var(--card)}
+.ep-bullet{display:flex;gap:6px;margin-bottom:6px;font-size:12px;line-height:1.5}
+.ep-bullet-label{color:var(--accent);font-weight:600;white-space:nowrap;flex-shrink:0}
+.ep-bullet-text{color:var(--text)}
+
+/* scenarios */
+.scenarios-header{display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:10px}
+.scenarios-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.model-btns{display:flex;gap:4px;align-items:center}
+.model-btn{padding:3px 10px;border-radius:4px;border:1px solid var(--border);font-size:11px;
+  font-weight:600;cursor:pointer;background:none;color:var(--muted);font-family:var(--font);transition:all .15s}
+.model-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.model-btn-upgrade{padding:3px 10px;border-radius:4px;border:1px solid var(--accent);font-size:11px;
+  font-weight:600;cursor:pointer;background:none;color:var(--accent);font-family:var(--font)}
+.scenarios-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.scenario-card{border:1px solid var(--border);border-radius:6px;padding:12px;background:var(--bg)}
+.scenario-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.scenario-label.base{color:var(--muted)}
+.scenario-label.bear{color:var(--red)}
+.scenario-label.bull{color:var(--green)}
+.scenario-text{font-size:11px;line-height:1.6;color:var(--text)}
+
+/* ══ LIVE RESEARCH ══ */
+.live-research-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 16px;box-shadow:0 1px 2px rgba(60,64,67,.1)}
+.lr-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.lr-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.lr-title svg{width:14px;height:14px;stroke:var(--accent);fill:none;stroke-width:2}
+.lr-search-row{display:flex;gap:8px;align-items:center}
+.lr-input{flex:1;padding:8px 14px;border:1px solid var(--border);border-radius:6px;font-size:12px;
+  outline:none;color:var(--text);background:var(--bg);font-family:var(--font)}
+.lr-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,115,232,.1)}
+.lr-btn{padding:8px 18px;background:var(--accent);color:#fff;border:none;border-radius:6px;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap}
+.lr-results{margin-top:12px;min-height:48px;font-size:12px;color:var(--muted);text-align:center;
+  padding:16px;border:1px dashed var(--border);border-radius:6px}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ══ SIDEBAR ══ -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>Barrons<span class="logo-accent">Watchlists</span></h2>
+      <div class="sub">
+        <span class="dot-live"></span>
+        <span>Live · 5 tickers · 13:23:43</span>
+        <button class="hdr-btn">↺ Refresh (2)</button>
+        <button class="hdr-btn" style="border-color:var(--accent);color:var(--accent)">+ Add</button>
+      </div>
+    </div>
+    <div class="sort-bar">
+      <input type="checkbox" style="margin-right:4px;cursor:pointer;accent-color:var(--accent);width:13px;height:13px">
+      <button class="sb on">Day %</button>
+      <button class="sb">Ticker</button>
+      <button class="sb">Price</button>
+      <button class="sb">Episodes</button>
+      <button class="sb" style="margin-left:auto;font-size:10px">↓ CSV</button>
+    </div>
+    <div class="count-row">Showing 5 of 5 securities</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th width="28"></th>
+          <th>Symbol · EPS · Sentiment · Name</th>
+          <th style="text-align:right">Price</th>
+          <th style="text-align:right">Day %</th>
+        </tr></thead>
+        <tbody>
+          <tr class="row" onclick="selectRow('NVDA',this)">
+            <td class="cell" style="padding:8px 8px"><input type="checkbox" checked></td>
+            <td class="cell"><div class="ticker-line"><span class="chip">NVDA</span><span class="earn-pill">EPS May 28</span><span class="sent-dot bull"></span><span class="sent-score">0.81</span><span class="co-name">NVIDIA Corp</span></div></td>
+            <td class="cell" style="text-align:right"><div class="price-val">$875.40</div><div class="change-val" style="color:var(--up)">+$19.74</div></td>
+            <td class="cell" style="text-align:right"><span class="pct up">+2.3%</span></td>
+          </tr>
+          <tr class="row" onclick="selectRow('XOM',this)">
+            <td class="cell" style="padding:8px 8px"><input type="checkbox" checked></td>
+            <td class="cell"><div class="ticker-line"><span class="chip">XOM</span><span class="earn-pill">EPS Apr 25</span><span class="sent-dot neut"></span><span class="sent-score">0.52</span><span class="co-name">ExxonMobil Corp</span></div></td>
+            <td class="cell" style="text-align:right"><div class="price-val">$112.80</div><div class="change-val" style="color:var(--down)">-$0.91</div></td>
+            <td class="cell" style="text-align:right"><span class="pct down">-0.8%</span></td>
+          </tr>
+          <tr class="row" onclick="selectRow('JPM',this)">
+            <td class="cell" style="padding:8px 8px"><input type="checkbox"></td>
+            <td class="cell"><div class="ticker-line"><span class="chip">JPM</span><span class="ian-badge">Ian</span><span class="earn-pill">EPS Apr 11</span><span class="sent-dot bull"></span><span class="sent-score">0.68</span><span class="co-name">JPMorgan Chase</span></div></td>
+            <td class="cell" style="text-align:right"><div class="price-val">$198.20</div><div class="change-val" style="color:var(--up)">+$0.79</div></td>
+            <td class="cell" style="text-align:right"><span class="pct up">+0.4%</span></td>
+          </tr>
+          <tr class="row active" onclick="selectRow('LB',this)">
+            <td class="cell" style="padding:8px 8px"><input type="checkbox"></td>
+            <td class="cell"><div class="ticker-line"><span class="chip">LB</span><span class="ian-badge">Ian</span><span class="earn-pill">EPS May 8</span><span class="sent-dot bull"></span><span class="sent-score">0.74</span><span class="co-name">LandBridge Company</span></div></td>
+            <td class="cell" style="text-align:right"><div class="price-val">$77.41</div><div class="change-val" style="color:var(--up)">+$6.27</div></td>
+            <td class="cell" style="text-align:right"><span class="pct up">+8.81%</span></td>
+          </tr>
+          <tr class="row" onclick="selectRow('DVN',this)">
+            <td class="cell" style="padding:8px 8px"><input type="checkbox"></td>
+            <td class="cell"><div class="ticker-line"><span class="chip">DVN</span><span class="sent-dot bear"></span><span class="sent-score">0.31</span><span class="co-name">Devon Energy Corp</span></div></td>
+            <td class="cell" style="text-align:right"><div class="price-val">$38.50</div><div class="change-val" style="color:var(--down)">-$0.75</div></td>
+            <td class="cell" style="text-align:right"><span class="pct down">-1.9%</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ WORKSPACE ══ -->
+  <div class="workspace">
+
+    <!-- Filter bar -->
+    <div class="top-filter-bar">
+      <div class="top-filter-search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" placeholder="Search ticker or name…">
+      </div>
+      <div class="top-filter-row">
+        <select><option>All Sectors</option><option>Technology</option><option>Energy</option><option>Financials</option></select>
+        <select><option>ETF + Stock</option><option>ETF</option><option>Stock</option></select>
+        <select><option>All Status</option><option>Momentum</option><option>Dip Buy</option></select>
+        <select><option>All Movers</option><option>Up today</option><option>Down today</option></select>
+        <select><option>All Watchlists</option><option>Energy (3)</option><option>AI (5)</option></select>
+      </div>
+    </div>
+
+    <!-- Chart card — TradingView unchanged -->
+    <div class="card" style="padding:14px 16px">
+      <div class="chart-header">
+        <h3>Performance</h3>
+        <span style="font-size:11px;color:var(--muted)">NVDA · XOM</span>
+        <div style="display:flex;gap:1px;margin-left:auto">
+          <button class="rb">1D</button><button class="rb">5D</button>
+          <button class="rb on">1M</button><button class="rb">3M</button>
+          <button class="rb">6M</button><button class="rb">1Y</button>
+        </div>
+      </div>
+      <div class="chart-mock">
+        <svg width="100%" height="100%" viewBox="0 0 900 260" preserveAspectRatio="none">
+          <line x1="0" y1="65"  x2="900" y2="65"  stroke="#dadce0" stroke-width="1" stroke-dasharray="4"/>
+          <line x1="0" y1="130" x2="900" y2="130" stroke="#dadce0" stroke-width="1" stroke-dasharray="4"/>
+          <line x1="0" y1="195" x2="900" y2="195" stroke="#dadce0" stroke-width="1" stroke-dasharray="4"/>
+          <polyline points="0,210 120,180 240,150 360,120 480,90 600,65 720,75 840,40 900,28"
+            fill="none" stroke="#1a73e8" stroke-width="2.5"/>
+          <polyline points="0,190 120,198 240,185 360,195 480,190 600,205 720,195 840,210 900,200"
+            fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+        </svg>
+        <div style="position:absolute;top:8px;left:12px;display:flex;gap:12px;font-size:11px;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:4px">
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:2px;background:#1a73e8;display:inline-block;border-radius:1px"></span>NVDA +2.3%</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:2px;background:#f59e0b;display:inline-block;border-radius:1px"></span>XOM -0.8%</span>
+        </div>
+        <div style="position:absolute;bottom:8px;right:12px;font-size:10px;color:var(--muted)">TradingView widget — unchanged</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:1px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <button class="rb">1D</button><button class="rb">5D</button><button class="rb">1W</button>
+        <button class="rb on">1M</button><button class="rb">3M</button><button class="rb">6M</button>
+        <button class="rb">YTD</button><button class="rb">1Y</button><button class="rb">2Y</button><button class="rb">3Y</button>
+      </div>
+    </div>
+
+    <!-- ══ NEW: RESEARCH & ANALYSIS CARD ══ -->
+    <div class="card" style="padding:12px 16px">
+
+      <!-- Header: title+subtitle LEFT | ticker pills RIGHT -->
+      <div class="rc-header">
+        <div class="rc-title-group">
+          <span class="rc-title">Research &amp; Analysis</span>
+          <span class="rc-subtitle">Perplexity &nbsp;·&nbsp; RPO Extractor &nbsp;·&nbsp; SEC &nbsp;·&nbsp; TOS &nbsp;·&nbsp; Finnhub</span>
+        </div>
+        <div class="rc-tickers">
+          <button class="rc-tick on" onclick="setRCTicker('NVDA',this)">NVDA</button>
+          <button class="rc-tick" onclick="setRCTicker('XOM',this)">XOM</button>
+          <button class="rc-tick" onclick="setRCTicker('JPM',this)">JPM</button>
+          <button class="rc-tick" onclick="setRCTicker('DVN',this)">DVN</button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="rc-tabs">
+        <button class="rctab on" onclick="setTab('perplexity',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Perplexity Research
+        </button>
+        <button class="rctab" onclick="setTab('rpo',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          RPO Extractor
+        </button>
+        <button class="rctab" onclick="setTab('sec',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          SEC Filings
+        </button>
+        <button class="rctab" onclick="setTab('tos',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          TOS
+        </button>
+        <button class="rctab" onclick="setTab('finnhub',this)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Earnings &amp; Sentiment
+        </button>
+      </div>
+
+      <!-- Perplexity tab -->
+      <div class="tab-pane on" id="tab-perplexity">
+        <div class="perp-body">
+          <p><span class="perp-ticker">NVIDIA (NVDA)</span> remains the dominant supplier of AI training and inference chips. The H100 and B200 Blackwell GPUs face no credible competition in data-centre for 12–18 months. FY2025 guidance implies ~110% YoY revenue growth.</p>
+          <p>Key risk: export restrictions to China (~20% of revenue) and CoWoS packaging delays at TSMC. Valuation at ~35× forward sales prices in continued hyperscaler capex at current pace.</p>
+          <p>Analyst consensus: <strong>Buy</strong> — median target $950 (18 buys, 3 holds, 0 sells).</p>
+        </div>
+        <div class="perp-tags">
+          <span class="ptag bull">AI Infrastructure</span>
+          <span class="ptag bull">Data Centre</span>
+          <span class="ptag bear">Export Risk</span>
+          <span class="ptag bear">Valuation Premium</span>
+          <span class="ptag neut">TSMC Supply</span>
+        </div>
+        <div class="ai-footer">⏱ 09:14:33 · Perplexity sonar-pro · Not financial advice</div>
+      </div>
+
+      <!-- RPO tab -->
+      <div class="tab-pane" id="tab-rpo">
+        <div class="rpo-steps">
+          <div class="rpo-step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-title">Extraction</div>
+              <div class="step-model">Claude Sonnet 4.6 — Notes to Consolidated Financial Statements</div>
+              <table class="rpo-table">
+                <tr><th>Metric</th><th>Value</th><th>Source</th></tr>
+                <tr><td>Total RPO</td><td class="val">$18.0B</td><td style="font-size:10px;color:var(--muted)">Note 11, FY2025 10-K p.94</td></tr>
+                <tr><td>cRPO (&lt;12 mo)</td><td class="val">$10.2B</td><td></td></tr>
+                <tr><td>Unbilled backlog</td><td class="val">$7.8B</td><td></td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="rpo-step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-title">Verification</div>
+              <div class="step-model">Claude Sonnet 4.6 — does RPO include unbilled backlog?</div>
+              <div class="verify-box">The $18.0B figure <em>includes unbilled backlog</em>. Per Note 11: "RPO includes billed (deferred revenue $3.1B) and unbilled amounts." Total RPO ≠ deferred revenue alone.</div>
+            </div>
+          </div>
+          <div class="rpo-step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">Revenue Bridge Forecast</div>
+              <div class="step-model">Gemini 2.0 Flash — 8-quarter historical conversion → 12-month projection</div>
+              <table class="rpo-table">
+                <tr><th>Quarter</th><th>RPO Base</th><th>Conv</th><th>Implied Rev</th><th>YoY</th></tr>
+                <tr><td>Q1 FY26</td><td class="val">$18.0B</td><td>22%</td><td class="val">$3.96B</td><td class="pos-c">+14%</td></tr>
+                <tr><td>Q2 FY26</td><td class="val">$19.4B</td><td>23%</td><td class="val">$4.46B</td><td class="pos-c">+18%</td></tr>
+                <tr><td>Q3 FY26</td><td class="val">$20.8B</td><td>22%</td><td class="val">$4.58B</td><td class="pos-c">+16%</td></tr>
+                <tr><td>Q4 FY26</td><td class="val">$22.1B</td><td>24%</td><td class="val">$5.30B</td><td class="pos-c">+21%</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="ai-footer">⏱ 09:14:35 · Claude Sonnet 4.6 + Gemini 2.0 Flash · Not financial advice</div>
+      </div>
+
+      <!-- SEC tab -->
+      <div class="tab-pane" id="tab-sec">
+        <div class="sec-grid">
+          <div class="sec-card"><h4>Annual Report (10-K)</h4><p>FY2025 · Filed Feb 2025</p><a class="sec-link-btn" href="#" onclick="return false">Open on SEC EDGAR ↗</a></div>
+          <div class="sec-card"><h4>Quarterly Report (10-Q)</h4><p>Q3 FY2025 · Filed Nov 2024</p><a class="sec-link-btn" href="#" onclick="return false">Open on SEC EDGAR ↗</a></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);padding:10px 12px;background:var(--bg);border-radius:6px;line-height:1.6">
+          💡 Switch to <strong>RPO Extractor</strong> to have Claude automatically pull RPO, cRPO, and unbilled backlog from the 10-K notes.
+        </div>
+      </div>
+
+      <!-- TOS tab -->
+      <div class="tab-pane" id="tab-tos">
+        <div class="tos-card">
+          <h4>Open NVDA in thinkorswim</h4>
+          <p>Launch the NVDA chart directly in thinkorswim to set your RSI(14) &gt; 40 + Price alert or review the Fundamentals tab for deferred revenue.</p>
+          <button class="tos-open-btn">Open in thinkorswim ↗</button>
+        </div>
+        <div class="tos-tip"><strong>Free Benzinga Squawk:</strong> Gadgets → + → Audio News. Same feed as Benzinga Pro ($150/mo). Hear RPO announcements before the chart moves.</div>
+        <div class="tos-tip" style="margin-top:6px"><strong>Combined Alert:</strong> Right-click chart → Create Alert → Study tab → RSI(14) crosses above 40 AND Price above $488 → push notification to TOS mobile.</div>
+      </div>
+
+      <!-- Finnhub tab -->
+      <div class="tab-pane" id="tab-finnhub">
+        <div class="finn-grid">
+          <div class="finn-card">
+            <h4>Earnings Calendar</h4>
+            <div class="finn-metric"><label>Next EPS date</label><span class="mv" style="color:var(--amber)">May 28, 2026</span></div>
+            <div class="finn-metric"><label>EPS estimate</label><span class="mv">$5.84</span></div>
+            <div class="finn-metric"><label>Revenue estimate</label><span class="mv">$43.1B</span></div>
+            <div class="finn-metric"><label>Last Q surprise</label><span class="mv" style="color:var(--green)">+8.3%</span></div>
+          </div>
+          <div class="finn-card">
+            <h4>News Sentiment (7d)</h4>
+            <div class="finn-metric"><label>Signal</label><span class="mv" style="color:var(--green)">Bullish</span></div>
+            <div class="finn-metric"><label>Score</label><span class="mv">0.81 / 1.00</span></div>
+            <div class="finn-metric"><label>Articles</label><span class="mv">142</span></div>
+            <div style="font-size:10px;color:var(--muted);margin-top:8px">Sentiment</div>
+            <div class="sent-bar-bg"><div class="sent-bar-fill" style="width:81%;background:var(--green)"></div></div>
+          </div>
+        </div>
+        <div class="ai-footer">⏱ 09:14:31 · Finnhub API · Free tier</div>
+      </div>
+
+    </div><!-- end research card -->
+
+    <!-- ══ EXISTING DETAIL CARD — unchanged ══ -->
+    <div class="card">
+      <div class="detail-header">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+            <span class="detail-ticker">LB</span>
+            <span class="detail-name">LandBridge Company</span>
+            <button class="edit-btn">✏</button>
+          </div>
+          <div class="meta-pills">
+            <span class="pill">Stock</span>
+            <span class="pill">Energy</span>
+            <span class="st s-hot">Momentum</span>
+            <span class="pill">P/E 82.4</span>
+            <span class="pill pill-yield">Yield 0.54%</span>
+            <span class="pill">Mktcap $6.2B</span>
+            <span class="pill">52W $43.75 – $87.60</span>
+            <span class="pill">Analyst Buy</span>
+            <button class="edit-btn">✏</button>
+          </div>
+          <div class="ep-tags">
+            <span class="ep-tag">lbug:2026/3/17</span>
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:22px;font-weight:700">$77.41</div>
+          <div style="margin-top:4px;display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span class="pct up">+8.81%</span>
+            <span style="font-size:12px;color:var(--up)">+$6.27</span>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Updated 1:23:43</div>
+        </div>
+      </div>
+
+      <!-- Episode accordion -->
+      <div class="ep-card">
+        <div class="ep-card-header" onclick="toggleEp(this)">
+          <span class="ep-source">Barron's Doug</span>
+          <span class="ep-title">· 3/17/2026 — Oil Equipment Stocks Look to Rebound. What the Charts of Hamrick Payne and LandBridge Say.</span>
+          <span class="ep-chevron">▾</span>
+        </div>
+        <div class="ep-body">
+          <div class="ep-bullet"><span class="ep-bullet-label">Why mentioned:</span><span class="ep-bullet-text">Identified as another oil equipment play with a dazzling start to 2026.</span></div>
+          <div class="ep-bullet"><span class="ep-bullet-label">Analyst thesis:</span><span class="ep-bullet-text">The company's chart indicates an attractive technical setup for a rebound in oil equipment stocks.</span></div>
+          <div class="ep-bullet"><span class="ep-bullet-label">Key metrics:</span><span class="ep-bullet-text">Up more than 40% in 2026.</span></div>
+          <div class="ep-bullet"><span class="ep-bullet-label">Valuation:</span><span class="ep-bullet-text">N/A</span></div>
+          <div class="ep-bullet"><span class="ep-bullet-label">Price targets/EPS:</span><span class="ep-bullet-text">N/A</span></div>
+          <div class="ep-bullet"><span class="ep-bullet-label">Risks:</span><span class="ep-bullet-text">General market risks, oil price volatility, and specific risks related to land management for energy production.</span></div>
+          <div class="ep-bullet"><span class="ep-bullet-label">Macro tailwind:</span><span class="ep-bullet-text">Oil equipment companies, the "pick and shovels" of the energy sector, offer stable investment.</span></div>
+        </div>
+      </div>
+
+      <!-- Scenarios -->
+      <div class="scenarios-header">
+        <span class="scenarios-label">Scenarios</span>
+        <div class="model-btns">
+          <span style="font-size:11px;color:var(--muted);margin-right:4px">Claude</span>
+          <button class="model-btn on">Haiku</button>
+          <button class="model-btn">Sonnet</button>
+          <button class="model-btn-upgrade">+ Upgrade</button>
+        </div>
+      </div>
+      <div class="scenarios-grid">
+        <div class="scenario-card">
+          <div class="scenario-label base">Base Case</div>
+          <div class="scenario-text">LandBridge is anticipated to maintain its strong performance, benefiting from its attractive technical setup and the stable investment environment of the energy sector.</div>
+        </div>
+        <div class="scenario-card">
+          <div class="scenario-label bear">Bear Case</div>
+          <div class="scenario-text">A significant decline in energy exploration activities or adverse regulatory changes regarding land use could negatively impact LandBridge's operations and stock value.</div>
+        </div>
+        <div class="scenario-card">
+          <div class="scenario-label bull">Bull Case</div>
+          <div class="scenario-text">Continued expansion of energy production requiring land management services, coupled with favourable market conditions, could drive LandBridge's stock to new highs.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ LIVE RESEARCH ══ -->
+    <div class="live-research-card">
+      <div class="lr-header">
+        <div class="lr-title">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Live Research
+        </div>
+        <div class="model-btns">
+          <span style="font-size:11px;color:var(--muted);margin-right:4px">Claude</span>
+          <button class="model-btn on">Haiku</button>
+          <button class="model-btn">Sonnet</button>
+        </div>
+      </div>
+      <div class="lr-search-row">
+        <input class="lr-input" type="text" placeholder="Ask anything — or: build watchlist with 10 tech stocks…">
+        <button class="lr-btn">Search</button>
+      </div>
+      <div class="lr-results">Results will appear here…</div>
+    </div>
+
+  </div><!-- end workspace -->
+</div>
+
+<script>
+function setTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.rctab').forEach(b => b.classList.remove('on'));
+  document.getElementById('tab-' + name).classList.add('on');
+  btn.classList.add('on');
+}
+function setRCTicker(ticker, btn) {
+  document.querySelectorAll('.rc-tick').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
+function selectRow(ticker, row) {
+  document.querySelectorAll('.row').forEach(r => r.classList.remove('active'));
+  row.classList.add('active');
+}
+function toggleEp(header) {
+  const body = header.nextElementSibling;
+  const chev = header.querySelector('.ep-chevron');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  chev.style.transform = open ? 'rotate(-90deg)' : '';
+}
+</script>
+</body>
+</html>

@@ -38,3 +38,8 @@ ssh-key-*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ── Scratch / personal files ──────────────────────────────────────────────────
+*.pdf
+pdf_pages/
+how_to_server_oracle.txt
