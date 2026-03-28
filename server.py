@@ -2761,45 +2761,50 @@ def crisis_monitor():
     except Exception as ex:
         result["vix"] = {"label": "CBOE VIX", "symbol": "^VIX", "error": str(ex)}
 
-    # ── 2. CNN Fear & Greed ───────────────────────────────────────────────────
-    # URL accepts optional /YYYY-MM-DD suffix for historical range start date.
-    # CNN returns HTTP 418 on bare/minimal User-Agent — need a full browser header set.
+    # ── 2. CNN Fear & Greed + Put/Call Ratio ─────────────────────────────────
+    # Two calls to CNN:
+    #   BASE URL  → current score + greed_factors (PCR lives here only)
+    #   DATED URL → 90-day historical spark (greed_factors stripped for payload size)
+    import gzip as _gz
+    _CNN_HEADERS = {
+        "User-Agent":      ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/124.0.0.0 Safari/537.36"),
+        "Accept":          "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer":         "https://edition.cnn.com/markets/fear-and-greed",
+        "Origin":          "https://edition.cnn.com",
+        "Connection":      "keep-alive",
+        "Sec-Fetch-Dest":  "empty",
+        "Sec-Fetch-Mode":  "cors",
+        "Sec-Fetch-Site":  "same-site",
+    }
+
+    def _cnn_fetch(url):
+        rb = _ur.urlopen(_ur.Request(url, headers=_CNN_HEADERS), timeout=12).read()
+        try:
+            rb = _gz.decompress(rb)
+        except Exception:
+            pass
+        return json.loads(rb)
+
+    # ── Fear & Greed composite (dated URL for 90-day history) ────────────────
     try:
         start_90d = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
-        fg_url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{start_90d}"
-        req = _ur.Request(fg_url, headers={
-            "User-Agent":      ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                "Chrome/124.0.0.0 Safari/537.36"),
-            "Accept":          "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Referer":         "https://edition.cnn.com/markets/fear-and-greed",
-            "Origin":          "https://edition.cnn.com",
-            "Connection":      "keep-alive",
-            "Sec-Fetch-Dest":  "empty",
-            "Sec-Fetch-Mode":  "cors",
-            "Sec-Fetch-Site":  "same-site",
-        })
-        import gzip as _gz, io as _io
-        raw_bytes = _ur.urlopen(req, timeout=12).read()
-        try:
-            raw_bytes = _gz.decompress(raw_bytes)
-        except Exception:
-            pass  # not gzip-encoded, use as-is
-        fg_raw = json.loads(raw_bytes)
-        fg     = fg_raw.get("fear_and_greed", {})
-        score  = float(fg.get("score", 0))
-        rating = str(fg.get("rating", "unknown")).replace("_", " ").title()
-        # x = Unix ms timestamp, y = Fear & Greed score (0-100)
-        hist_pts = fg_raw.get("fear_and_greed_historical", {}).get("data", [])
-        spark    = [round(float(d["y"]), 1) for d in hist_pts[-30:]] if hist_pts else [score]
-        prev_s   = float(spark[-2]) if len(spark) >= 2 else score
+        fg_hist   = _cnn_fetch(
+            f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{start_90d}")
+        fg        = fg_hist.get("fear_and_greed", {})
+        score     = float(fg.get("score", 0))
+        rating    = str(fg.get("rating", "unknown")).replace("_", " ").title()
+        hist_pts  = fg_hist.get("fear_and_greed_historical", {}).get("data", [])
+        spark     = [round(float(d["y"]), 1) for d in hist_pts[-30:]] if hist_pts else [score]
+        prev_s    = float(spark[-2]) if len(spark) >= 2 else score
         result["fg"] = {
             "label": "Fear & Greed", "symbol": "CNN", "unit": "/100",
             "current":       round(score, 1),
             "rating":        rating,
-            "pct_day":       round(score - prev_s, 1),   # absolute pt change (not %)
+            "pct_day":       round(score - prev_s, 1),
             "pct_week":      None,
             "spark":         spark,
             "high_52w":      round(max(spark), 1),
@@ -2808,42 +2813,48 @@ def crisis_monitor():
             "signal_dir":    "above",
             "signal_note":   "Crisis over when F&G > 50 (neutral/greed)",
         }
-
-        # ── 2b. Put/Call Options ratio — extracted from same CNN response ──────
-        # greed_factors.put_call_options.data.score = actual P/C ratio (e.g. 0.77)
-        # greed_factors.put_call_options.score       = normalized 0-100 F&G component score
-        pcr_factor = fg_raw.get("greed_factors", {}).get("put_call_options", {})
-        pcr_ratio  = pcr_factor.get("data", {}).get("score")   # raw P/C ratio
-        pcr_score  = pcr_factor.get("score")                   # 0-100 normalized
-        pcr_rating = str(pcr_factor.get("rating", "unknown")).replace("_", " ").title()
-        if pcr_ratio is not None:
-            pcr_ratio = float(pcr_ratio)
-            # Build spark from composite F&G history as a proxy (inverted: high F&G ≈ low PCR)
-            # We don't have sub-indicator history, so use whatever we have
-            pcr_spark = [round(float(d["y"]), 1) for d in hist_pts[-30:]] if hist_pts else []
-            result["pcr"] = {
-                "label":         "Put/Call Ratio",
-                "symbol":        "CBOE PCR",
-                "unit":          " P/C",
-                "current":       round(pcr_ratio, 3),
-                "fg_score":      round(float(pcr_score), 1) if pcr_score is not None else None,
-                "rating":        pcr_rating,
-                "pct_day":       None,
-                "spark":         pcr_spark,   # composite F&G history proxy
-                "spark_note":    "sparkline = composite F&G (PCR sub-history not in public API)",
-                "high_52w":      None,
-                "low_52w":       None,
-                "signal_thresh": 0.70,
-                "signal_dir":    "below",
-                "signal_note":   "Crisis over when P/C ratio < 0.70",
-            }
-        else:
-            result["pcr"] = {"label": "Put/Call Ratio", "symbol": "CBOE PCR",
-                              "error": "not in CNN greed_factors response"}
-
     except Exception as ex:
-        result["fg"]  = {"label": "Fear & Greed",   "symbol": "CNN",      "error": str(ex)}
-        result["pcr"] = {"label": "Put/Call Ratio",  "symbol": "CBOE PCR", "error": str(ex)}
+        score    = None
+        hist_pts = []
+        result["fg"] = {"label": "Fear & Greed", "symbol": "CNN", "error": str(ex)}
+
+    # ── Put/Call Ratio (base URL — greed_factors only present here) ───────────
+    try:
+        fg_base    = _cnn_fetch(
+            "https://production.dataviz.cnn.io/index/fearandgreed/graphdata")
+        gf         = fg_base.get("greed_factors", {})
+        log.debug(f"  CNN greed_factors keys: {list(gf.keys())}")
+        pcr_factor = gf.get("put_call_options", {})
+        pcr_ratio  = pcr_factor.get("data", {}).get("score")
+        pcr_score  = pcr_factor.get("score")
+        pcr_rating = str(pcr_factor.get("rating", "unknown")).replace("_", " ").title()
+        if pcr_ratio is None:
+            # Log actual keys so we can find the right one if the structure changes
+            raise ValueError(
+                f"put_call_options.data.score missing; "
+                f"greed_factors keys={list(gf.keys())}; "
+                f"put_call_options={pcr_factor}"
+            )
+        pcr_ratio = float(pcr_ratio)
+        # Sparkline: use composite F&G history as proxy (sub-indicator history not public)
+        pcr_spark = [round(float(d["y"]), 1) for d in hist_pts[-30:]] if hist_pts else []
+        result["pcr"] = {
+            "label":         "Put/Call Ratio",
+            "symbol":        "CBOE PCR",
+            "unit":          " P/C",
+            "current":       round(pcr_ratio, 3),
+            "fg_score":      round(float(pcr_score), 1) if pcr_score is not None else None,
+            "rating":        pcr_rating,
+            "pct_day":       None,
+            "spark":         pcr_spark,
+            "high_52w":      None,
+            "low_52w":       None,
+            "signal_thresh": 0.70,
+            "signal_dir":    "below",
+            "signal_note":   "Crisis over when P/C ratio < 0.70",
+        }
+    except Exception as ex:
+        result["pcr"] = {"label": "Put/Call Ratio", "symbol": "CBOE PCR", "error": str(ex)}
 
     # ── 3. WTI M1–M3 Crude Spread (EIA API) ───────────────────────────────────
     eia_key = os.environ.get("EIA_API_KEY", "").strip()
