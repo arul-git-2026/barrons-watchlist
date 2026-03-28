@@ -149,25 +149,33 @@ _AUTH_TOKEN: str = os.environ.get("STREETWISE_TOKEN", "").strip()
 
 _AUTH_EXEMPT = {"/favicon.ico", "/health", "/api/costs"}
 
+# Cloudflare Access JWT header — presence means CF Access already authenticated the user
+_CF_JWT_HEADER = "Cf-Access-Jwt-Assertion"
+
 @app.before_request
 def _check_token():
     """Reject requests that don't carry the correct token (when auth is enabled).
 
     Auth passes if ANY of these are true:
-      1. STREETWISE_TOKEN env var is not set  → local dev, no auth
-      2. ?token=<value> matches               → first page load from URL
-      3. X-Streetwise-Token header matches    → programmatic access
-      4. session['auth'] == True              → browser already authenticated
-         (set on first successful token check, persists for the browser session)
+      1. STREETWISE_TOKEN env var is not set       → local dev, no auth
+      2. Path is in _AUTH_EXEMPT                   → public endpoints
+      3. Cf-Access-Jwt-Assertion header present    → Cloudflare Access already authed
+      4. ?token=<value> matches                    → direct URL access
+      5. X-Streetwise-Token header matches         → programmatic access
+      6. session['auth'] == True                   → browser session already authenticated
     """
     if not _AUTH_TOKEN:
         return  # auth disabled — local dev mode
     if request.path in _AUTH_EXEMPT:
         return
+    # Cloudflare Access JWT — if present, CF already verified the user's identity
+    if request.headers.get(_CF_JWT_HEADER):
+        session["auth"] = True
+        return
     # Already authenticated this browser session via cookie
     if session.get("auth"):
         return
-    # Check token in URL or header
+    # Check token in URL or header (direct access fallback)
     provided = (
         request.args.get("token", "")
         or request.headers.get("X-Streetwise-Token", "")
