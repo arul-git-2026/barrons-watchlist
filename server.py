@@ -2818,57 +2818,104 @@ def crisis_monitor():
         hist_pts = []
         result["fg"] = {"label": "Fear & Greed", "symbol": "CNN", "error": str(ex)}
 
-    # ── Put/Call Ratio — CBOE direct download (CSV) ──────────────────────────
-    # CNN greed_factors is now empty; use CBOE's public daily options stats CSV instead.
-    # CBOE publishes equity + total P/C ratio at:
-    #   https://www.cboe.com/us/options/market_statistics/daily/  (HTML)
-    # The underlying data file is available as a download — we fetch it directly.
-    try:
-        # CBOE total put/call ratio historical CSV (equity + index + total, daily)
-        cboe_url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/PC_History.json"
-        cboe_req = _ur.Request(cboe_url, headers={
+    # ── Put/Call Ratio — try 3 sources in order ──────────────────────────────
+    # 1. fear-greed-index PyPI package (wraps CNN, exposes individual indicators)
+    # 2. CBOE CDN JSON endpoints (same pattern as VIX_History.json)
+    # 3. CNN fear_and_greed object (previous_close as fallback, no sub-indicator)
+    _pcr_done = False
+
+    # Source 1: fear-greed-index package
+    if not _pcr_done:
+        try:
+            import fear_greed as _fg  # pip install fear-greed-index
+            _fgi = _fg.get()
+            # Package exposes .indicators dict with individual components
+            _ind  = getattr(_fgi, "indicators", None) or {}
+            _pco  = (_ind.get("put_call_options") or
+                     _ind.get("put_call")          or
+                     _ind.get("putCall")            or {})
+            # Some versions expose via index attributes directly
+            _pval = (getattr(_pco, "value", None) or
+                     (_pco.get("value") if isinstance(_pco, dict) else None))
+            if _pval is None:
+                raise ValueError(f"put_call not found; indicator keys={list(_ind.keys())}")
+            pcr_ratio = float(_pval)
+            pcr_spark = [round(float(d["y"]), 1) for d in hist_pts[-30:]] if hist_pts else []
+            result["pcr"] = {
+                "label": "Put/Call Ratio", "symbol": "CNN PCR", "unit": " P/C",
+                "current": round(pcr_ratio, 3), "fg_score": None, "rating": None,
+                "pct_day": None, "spark": pcr_spark,
+                "high_52w": None, "low_52w": None,
+                "signal_thresh": 0.70, "signal_dir": "below",
+                "signal_note": "Crisis over when P/C ratio < 0.70",
+            }
+            _pcr_done = True
+        except ImportError:
+            pass  # package not installed — try next source
+        except Exception as ex:
+            log.debug(f"  fear-greed-index package failed: {ex}")
+
+    # Source 2: CBOE CDN — try known endpoint patterns (same CDN as VIX_History.json)
+    if not _pcr_done:
+        _cboe_candidates = [
+            # (url, field_names_to_try)
+            ("https://cdn.cboe.com/api/global/us_indices/daily_prices/PCALL_History.json",
+             ["PCALL", "pcall", "PC_RATIO", "TOTAL_PC_RATIO"]),
+            ("https://cdn.cboe.com/api/global/us_indices/daily_prices/PC_History.json",
+             ["PC", "TOTAL_PC_RATIO", "PC_RATIO", "EQUITY_PC_RATIO"]),
+            ("https://cdn.cboe.com/api/global/us_indices/daily_prices/PCEQ_History.json",
+             ["PCEQ", "EQUITY_PC_RATIO", "PC_EQ"]),
+        ]
+        _cboe_hdr = {
             "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                            "AppleWebKit/537.36 (KHTML, like Gecko) "
                            "Chrome/124.0.0.0 Safari/537.36"),
-            "Accept":     "application/json, */*",
-            "Referer":    "https://www.cboe.com/",
-        })
-        cboe_raw  = json.loads(_ur.urlopen(cboe_req, timeout=12).read())
-        # Response: {"data": [{"Date":"2024-01-02","TOTAL_PC_RATIO":0.72,...}, ...]}
-        rows = cboe_raw.get("data", [])
-        if not rows:
-            raise ValueError(f"empty CBOE response; keys={list(cboe_raw.keys())}")
-        # Sort ascending by date (they may be newest-first or oldest-first)
-        rows.sort(key=lambda r: r.get("Date", r.get("date", "")))
-        # Find the P/C ratio field — try common field names
-        _pcr_fields = ["TOTAL_PC_RATIO", "PC_RATIO", "EQUITY_PC_RATIO",
-                        "total_pc_ratio", "pc_ratio", "equity_pc_ratio"]
-        _pcr_key = next((f for f in _pcr_fields if f in rows[-1]), None)
-        if _pcr_key is None:
-            raise ValueError(f"unknown P/C field; row keys={list(rows[-1].keys())}")
-        vals   = [float(r[_pcr_key]) for r in rows if r.get(_pcr_key) not in (None, "", ".")]
-        spark  = [round(v, 3) for v in vals[-30:]]
-        cur    = vals[-1]
-        prev   = vals[-2] if len(vals) >= 2 else cur
-        w_ago  = vals[-6] if len(vals) >= 6 else prev
-        result["pcr"] = {
-            "label":         "Put/Call Ratio",
-            "symbol":        "CBOE " + _pcr_key,
-            "unit":          " P/C",
-            "current":       round(cur, 3),
-            "fg_score":      None,
-            "rating":        None,
-            "pct_day":       round(cur - prev, 3),     # absolute change
-            "pct_week":      round(cur - w_ago, 3),
-            "spark":         spark,
-            "high_52w":      round(max(vals[-252:]), 3) if len(vals) >= 252 else round(max(vals), 3),
-            "low_52w":       round(min(vals[-252:]), 3) if len(vals) >= 252 else round(min(vals), 3),
-            "signal_thresh": 0.70,
-            "signal_dir":    "below",
-            "signal_note":   "Crisis over when P/C ratio < 0.70",
+            "Accept":  "application/json, */*",
+            "Referer": "https://www.cboe.com/",
         }
-    except Exception as ex:
-        result["pcr"] = {"label": "Put/Call Ratio", "symbol": "CBOE PCR", "error": str(ex)}
+        for _curl, _cfields in _cboe_candidates:
+            try:
+                _craw  = json.loads(
+                    _ur.urlopen(_ur.Request(_curl, headers=_cboe_hdr), timeout=10).read())
+                _rows  = _craw.get("data", [])
+                if not _rows:
+                    raise ValueError(f"empty; top keys={list(_craw.keys())}")
+                _rows.sort(key=lambda r: r.get("Date", r.get("date", "")))
+                _last  = _rows[-1]
+                _fld   = next((f for f in _cfields if _last.get(f) is not None), None)
+                if _fld is None:
+                    log.debug(f"  CBOE {_curl}: field not found; row keys={list(_last.keys())}")
+                    continue
+                _vals  = [float(r[_fld]) for r in _rows
+                          if r.get(_fld) not in (None, "", ".")]
+                _spark = [round(v, 3) for v in _vals[-30:]]
+                _cur   = _vals[-1]
+                _prev  = _vals[-2] if len(_vals) >= 2 else _cur
+                _w     = _vals[-6] if len(_vals) >= 6 else _prev
+                result["pcr"] = {
+                    "label": "Put/Call Ratio", "symbol": f"CBOE {_fld}",
+                    "unit": " P/C",
+                    "current":  round(_cur, 3),
+                    "fg_score": None, "rating": None,
+                    "pct_day":  round(_cur - _prev, 3),
+                    "pct_week": round(_cur - _w, 3),
+                    "spark":    _spark,
+                    "high_52w": round(max(_vals[-252:]), 3) if len(_vals) >= 252 else round(max(_vals), 3),
+                    "low_52w":  round(min(_vals[-252:]), 3) if len(_vals) >= 252 else round(min(_vals), 3),
+                    "signal_thresh": 0.70, "signal_dir": "below",
+                    "signal_note": "Crisis over when P/C ratio < 0.70",
+                }
+                _pcr_done = True
+                break
+            except Exception as ex:
+                log.debug(f"  CBOE candidate {_curl} failed: {ex}")
+
+    if not _pcr_done:
+        result["pcr"] = {
+            "label": "Put/Call Ratio", "symbol": "CBOE PCR",
+            "error": ("All sources failed. "
+                      "Install fear-greed-index: pip install fear-greed-index"),
+        }
 
     # ── 3. WTI M1–M3 Crude Spread (EIA API) ───────────────────────────────────
     eia_key = os.environ.get("EIA_API_KEY", "").strip()
