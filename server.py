@@ -2950,28 +2950,40 @@ def crisis_monitor():
             df["ttf_usd"] = df["ttf"] * df["eur"] / 3.41214
 
             # Resample to month-end, keep last value
+            # _jkm_map = TTF (European price) — the "expensive" benchmark
+            # _ttf_map = HH  (US Henry Hub)   — the "cheap" baseline
+            # Spread = TTF - HH = European gas premium over US (positive = crisis pressure)
             df_m = df.resample("ME").last().dropna()
             for dt, row in df_m.iterrows():
                 k = dt.strftime("%Y-%m")
-                _jkm_map[k] = round(float(row["ng"]), 3)
-                _ttf_map[k] = round(float(row["ttf_usd"]), 3)
-            _spread_source = "HH vs TTF proxy"
+                _jkm_map[k] = round(float(row["ttf_usd"]), 3)   # TTF in $/MMBtu
+                _ttf_map[k] = round(float(row["ng"]),      3)   # HH  in $/MMBtu
+            _spread_source = "TTF−HH proxy"
         except Exception as yf_ex:
             result["ttf"] = {
-                "label": "JKM vs TTF Spread", "symbol": "JKM−TTF",
+                "label": "EU Gas Premium (TTF−HH)", "symbol": "TTF−HH",
                 "error": f"yfinance: {yf_ex}",
             }
 
     if _jkm_map and _ttf_map and "ttf" not in result:
+        # spread = "JKM" (or TTF) minus "TTF_ref" (or HH) — positive = Europe/Asia at premium
         common   = sorted(set(_jkm_map) & set(_ttf_map))
         spreads  = {d: round(_jkm_map[d] - _ttf_map[d], 3) for d in common}
         dates    = sorted(spreads)
         spark    = [spreads[d] for d in dates[-12:]]
         cur      = spreads[dates[-1]]
         prev     = spreads[dates[-2]] if len(dates) >= 2 else cur
+        # Label adapts based on which source fired
+        is_proxy = "HH" in _spread_source or "proxy" in _spread_source
+        lbl      = "EU Gas Premium (TTF−HH)" if is_proxy else "JKM vs TTF Spread"
+        sym      = "TTF−HH"                  if is_proxy else "JKM−TTF"
+        thresh   = 8   if is_proxy else 0    # HH proxy: <$8 = TTF normalising; IMF: <$0
+        note     = ("Crisis over when EU premium < $8/MMBtu"
+                    if is_proxy else
+                    "Crisis over when JKM drops below TTF price")
         result["ttf"] = {
-            "label":         "JKM vs TTF Spread",
-            "symbol":        "JKM−TTF",
+            "label":         lbl,
+            "symbol":        sym,
             "unit":          "$/MMBtu",
             "current":       round(cur, 2),
             "jkm":           round(_jkm_map[dates[-1]], 2),
@@ -2983,9 +2995,9 @@ def crisis_monitor():
             "low_52w":       round(min(spreads[d] for d in dates[-12:]), 2),
             "last_date":     dates[-1],
             "data_source":   _spread_source,
-            "signal_thresh": 0,
+            "signal_thresh": thresh,
             "signal_dir":    "below",
-            "signal_note":   "Crisis over when JKM drops below TTF price",
+            "signal_note":   note,
         }
 
     # ── 5. Frontline FRO — VLCC freight rate proxy ────────────────────────────

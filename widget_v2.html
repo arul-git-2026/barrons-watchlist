@@ -4095,12 +4095,13 @@ function crisisRisk(key, d) {
     if (val < 8)   return {label:'ACUTE',       cls:'fear'};
     return             {label:'EXTREME',    cls:'extreme'};
   }
-  // JKM-TTF spread ($/MMBtu): positive = Asia paying premium over Europe
+  // Gas spread ($/MMBtu): positive = European/Asian premium over baseline
+  // Works for both JKM-TTF (IMF) and TTF-HH proxy (yfinance)
   if (key === 'ttf') {
-    if (val <= 0)   return {label:'NORMALISED',  cls:'calm'};
-    if (val < 2)    return {label:'NEAR PARITY', cls:'normal'};
-    if (val < 5)    return {label:'ELEVATED',    cls:'elevated'};
-    if (val < 10)   return {label:'ACUTE',       cls:'fear'};
+    if (val <= 3)   return {label:'NORMALISED',  cls:'calm'};
+    if (val <= 8)   return {label:'MODERATE',    cls:'normal'};
+    if (val <= 12)  return {label:'ELEVATED',    cls:'elevated'};
+    if (val <= 18)  return {label:'ACUTE',       cls:'fear'};
     return              {label:'EXTREME',    cls:'extreme'};
   }
   // Tanker (FRO): near 52w high = VLCC rates elevated = crisis ongoing
@@ -4201,13 +4202,15 @@ function renderCrisisGrid(data, grid) {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.rating || ''}</div>`;
     } else if (key === 'ttf') {
-      // JKM-TTF spread card — show the two underlying prices + data source
-      const jkm  = d.jkm     != null ? `JKM $${d.jkm}`     : '';
-      const ttfv = d.ttf_val != null ? `TTF $${d.ttf_val}` : '';
+      // Gas spread card — labels adapt to whichever source fired
+      const isProxy = (d.data_source || '').includes('HH') || (d.symbol||'').includes('HH');
+      const aLbl = isProxy ? 'TTF' : 'JKM';
+      const bLbl = isProxy ? 'HH'  : 'TTF';
+      const aVal = d.jkm     != null ? `${aLbl} $${d.jkm}`     : '';
+      const bVal = d.ttf_val != null ? `${bLbl} $${d.ttf_val}` : '';
       const ld   = d.last_date   ? ` · ${d.last_date.replace('M','-')}` : '';
-      const src  = d.data_source ? ` · ${d.data_source}`                : '';
-      valueDisplay = `<div class="cc-value">${d.current >= 0 ? '+' : ''}${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px;line-height:1.4">${jkm}  ${ttfv}${ld}${src}</div>`;
+      valueDisplay = `<div class="cc-value">+${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px;line-height:1.4">${aVal}  ${bVal}${ld}</div>`;
     } else if (key === 'pcr') {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">tail-risk / OTM put demand</div>`;
