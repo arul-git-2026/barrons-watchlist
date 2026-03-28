@@ -2706,87 +2706,181 @@ _CRISIS_TTL = 900  # 15 minutes
 @app.route("/api/crisis-monitor")
 def crisis_monitor():
     """
-    Global Crisis Monitor — VIX, Baltic Dry Index, Dutch TTF Gas, US Gas Price (FRED).
-    Cached 15 minutes.
+    Hormuz Crisis Monitor — 5 targeted indicators for detecting crisis resolution.
+      1. CBOE VIX            — broad fear gauge            (crisis over: VIX < 20)
+      2. CNN Fear & Greed     — sentiment score 0-100       (crisis over: score > 50)
+      3. WTI M1-M3 Spread    — crude backwardation proxy   (crisis over: spread < $2/bbl)
+      4. Dutch TTF Gas        — European LNG pressure       (crisis over: TTF < €30/MWh)
+      5. Frontline FRO stock  — VLCC freight rate proxy     (crisis over: FRO down >20% from 52w high)
+    Cached 15 min.
     """
     import urllib.request as _ur
 
-    now = time.time()
-    if _crisis_cache["data"] and now - _crisis_cache["ts"] < _CRISIS_TTL:
+    now   = time.time()
+    force = request.args.get("force") == "1"
+    if not force and _crisis_cache["data"] and now - _crisis_cache["ts"] < _CRISIS_TTL:
         return jsonify(_crisis_cache["data"])
 
     result: dict = {"ok": True}
 
-    # ── yfinance indicators ────────────────────────────────────────────────────
-    yf_map = {
-        "vix": ("^VIX",   "CBOE VIX",              None),
-        "bdi": ("^BDIY",  "Baltic Dry Index",       None),
-        "ttf": ("TTF=F",  "Dutch TTF Gas",          "€/MWh"),
-        "oil": ("BZ=F",   "Brent Crude",            "$/bbl"),
-    }
-    for key, (sym, label, unit) in yf_map.items():
-        try:
-            hist = yf.Ticker(sym).history(period="60d", interval="1d")
-            if hist.empty:
-                raise ValueError("no data")
-            closes = hist["Close"].dropna()
-            cur   = float(closes.iloc[-1])
-            prev  = float(closes.iloc[-2]) if len(closes) > 1 else cur
-            w_ago = float(closes.iloc[-6]) if len(closes) >= 6 else prev
-            m_ago = float(closes.iloc[0])
-            spark = [round(float(v), 2) for v in closes.tail(30).tolist()]
-            result[key] = {
-                "label":      label,
-                "symbol":     sym,
-                "current":    round(cur, 2),
-                "pct_day":    round((cur - prev) / prev * 100, 2) if prev else 0,
-                "pct_week":   round((cur - w_ago) / w_ago * 100, 2) if w_ago else 0,
-                "pct_month":  round((cur - m_ago) / m_ago * 100, 2) if m_ago else 0,
-                "high_52w":   round(float(closes.max()), 2),
-                "low_52w":    round(float(closes.min()), 2),
-                "spark":      spark,
-                "unit":       unit or "",
-            }
-        except Exception as ex:
-            result[key] = {"label": label, "symbol": sym, "error": str(ex)}
+    # ── Helper: fetch yfinance history ────────────────────────────────────────
+    def _yf_closes(sym, period="90d"):
+        h = yf.Ticker(sym).history(period=period, interval="1d")
+        if h.empty:
+            raise ValueError("no data")
+        return h["Close"].dropna()
 
-    # ── US Gas Price — FRED GASREGCOVW ────────────────────────────────────────
-    fred_key = os.environ.get("FRED_API_KEY", "").strip()
+    def _yf_block(sym, label, unit, closes, signal_thresh, signal_dir, signal_note, extra=None):
+        cur   = float(closes.iloc[-1])
+        prev  = float(closes.iloc[-2]) if len(closes) > 1 else cur
+        w_ago = float(closes.iloc[-6]) if len(closes) >= 6 else prev
+        m_ago = float(closes.iloc[0])
+        spark = [round(float(v), 2) for v in closes.tail(30).tolist()]
+        d = {
+            "label": label, "symbol": sym, "unit": unit,
+            "current":    round(cur, 2),
+            "pct_day":    round((cur - prev) / prev * 100, 2) if prev else 0,
+            "pct_week":   round((cur - w_ago) / w_ago * 100, 2) if w_ago else 0,
+            "pct_month":  round((cur - m_ago) / m_ago * 100, 2) if m_ago else 0,
+            "high_52w":   round(float(closes.max()), 2),
+            "low_52w":    round(float(closes.min()), 2),
+            "spark":      spark,
+            "signal_thresh": signal_thresh,
+            "signal_dir":    signal_dir,
+            "signal_note":   signal_note,
+        }
+        if extra:
+            d.update(extra)
+        return d
+
+    # ── 1. CBOE VIX ───────────────────────────────────────────────────────────
     try:
-        if not fred_key:
-            raise ValueError("FRED_API_KEY not set")
-        url = (f"https://api.stlouisfed.org/fred/series/observations"
-               f"?series_id=GASREGCOVW&api_key={fred_key}"
-               f"&limit=30&sort_order=desc&file_type=json")
-        raw  = json.loads(_ur.urlopen(_ur.Request(url), timeout=10).read())
-        obs  = [o for o in raw.get("observations", []) if o.get("value") not in (".", None)]
-        if not obs:
-            raise ValueError("empty response")
-        cur   = float(obs[0]["value"])
-        prev  = float(obs[1]["value"]) if len(obs) > 1 else cur
-        w4ago = float(obs[4]["value"]) if len(obs) > 4 else prev
-        spark = [round(float(o["value"]), 3) for o in reversed(obs[:30])]
-        result["gas"] = {
-            "label":     "US Avg Gas Price",
-            "symbol":    "GASREGCOVW",
-            "current":   round(cur, 3),
-            "pct_day":   round((cur - prev) / prev * 100, 2) if prev else 0,
-            "pct_month": round((cur - w4ago) / w4ago * 100, 2) if w4ago else 0,
-            "high_52w":  round(max(float(o["value"]) for o in obs), 3),
-            "low_52w":   round(min(float(o["value"]) for o in obs), 3),
-            "spark":     spark,
-            "unit":      "$/gal",
-            "date":      obs[0]["date"],
+        c = _yf_closes("^VIX")
+        result["vix"] = _yf_block("^VIX", "CBOE VIX", "", c, 20, "below",
+                                   "Crisis over when VIX < 20")
+    except Exception as ex:
+        result["vix"] = {"label": "CBOE VIX", "symbol": "^VIX", "error": str(ex)}
+
+    # ── 2. CNN Fear & Greed ───────────────────────────────────────────────────
+    try:
+        req    = _ur.Request(
+            "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+            headers={"User-Agent": "Mozilla/5.0"})
+        fg_raw = json.loads(_ur.urlopen(req, timeout=10).read())
+        fg     = fg_raw.get("fear_and_greed", {})
+        score  = float(fg.get("score", 0))
+        rating = str(fg.get("rating", "unknown")).replace("_", " ").title()
+        hist_pts = fg_raw.get("fear_and_greed_historical", {}).get("data", [])
+        spark    = [round(float(d["x"]), 1) for d in hist_pts[-30:]] if hist_pts else [score]
+        prev_s   = float(spark[-2]) if len(spark) >= 2 else score
+        result["fg"] = {
+            "label": "Fear & Greed", "symbol": "CNN", "unit": "/100",
+            "current":       round(score, 1),
+            "rating":        rating,
+            "pct_day":       round(score - prev_s, 1),   # absolute pt change
+            "pct_week":      None,
+            "spark":         spark,
+            "high_52w":      round(max(spark), 1),
+            "low_52w":       round(min(spark), 1),
+            "signal_thresh": 50,
+            "signal_dir":    "above",
+            "signal_note":   "Crisis over when F&G > 50 (neutral/greed)",
         }
     except Exception as ex:
-        result["gas"] = {"label": "US Avg Gas Price", "error": str(ex)}
+        result["fg"] = {"label": "Fear & Greed", "symbol": "CNN", "error": str(ex)}
+
+    # ── 3. WTI M1–M3 Crude Spread (EIA API) ───────────────────────────────────
+    eia_key = os.environ.get("EIA_API_KEY", "").strip()
+    try:
+        if not eia_key:
+            raise ValueError("EIA_API_KEY not set")
+        url = (
+            "https://api.eia.gov/v2/petroleum/pri/fut/data/"
+            f"?api_key={eia_key}&frequency=daily"
+            "&data[0]=value"
+            "&facets[series][]=RCLC1"
+            "&facets[series][]=RCLC3"
+            "&sort[0][column]=period&sort[0][direction]=desc"
+            "&length=90"
+        )
+        raw  = json.loads(_ur.urlopen(_ur.Request(url), timeout=15).read())
+        rows = raw.get("response", {}).get("data", [])
+        m1 = {r["period"]: float(r["value"])
+              for r in rows if r.get("series") == "RCLC1"
+              and r.get("value") not in (None, ".")}
+        m3 = {r["period"]: float(r["value"])
+              for r in rows if r.get("series") == "RCLC3"
+              and r.get("value") not in (None, ".")}
+        common = sorted(set(m1) & set(m3))
+        if not common:
+            raise ValueError("no overlapping dates for M1/M3")
+        spreads = {d: round(m1[d] - m3[d], 3) for d in common}
+        sorted_d = sorted(spreads)
+        spark    = [spreads[d] for d in sorted_d[-30:]]
+        cur      = spreads[sorted_d[-1]]
+        prev     = spreads[sorted_d[-2]] if len(sorted_d) >= 2 else cur
+        w_ago    = spreads[sorted_d[-6]] if len(sorted_d) >= 6 else prev
+        result["spread"] = {
+            "label": "WTI Backwardation", "symbol": "M1−M3", "unit": "$/bbl",
+            "current":       round(cur, 2),
+            "pct_day":       round(cur - prev, 2),    # absolute $/bbl change
+            "pct_week":      round(cur - w_ago, 2),
+            "pct_month":     None,
+            "high_52w":      round(max(spreads.values()), 2),
+            "low_52w":       round(min(spreads.values()), 2),
+            "spark":         spark,
+            "date":          sorted_d[-1],
+            "signal_thresh": 2,
+            "signal_dir":    "below",
+            "signal_note":   "Crisis over when spread < $2/bbl",
+        }
+    except Exception as ex:
+        result["spread"] = {"label": "WTI Backwardation", "symbol": "M1−M3", "error": str(ex)}
+
+    # ── 4. Dutch TTF Natural Gas ───────────────────────────────────────────────
+    try:
+        c = _yf_closes("TTF=F")
+        result["ttf"] = _yf_block("TTF=F", "TTF Natural Gas", "€/MWh", c, 30, "below",
+                                   "Crisis over when TTF < €30/MWh")
+    except Exception as ex:
+        result["ttf"] = {"label": "TTF Natural Gas", "symbol": "TTF=F", "error": str(ex)}
+
+    # ── 5. Frontline FRO — VLCC freight rate proxy ────────────────────────────
+    try:
+        c      = _yf_closes("FRO", period="365d")
+        cur    = float(c.iloc[-1])
+        prev   = float(c.iloc[-2]) if len(c) > 1 else cur
+        w_ago  = float(c.iloc[-6]) if len(c) >= 6 else prev
+        high52 = float(c.max())
+        low52  = float(c.min())
+        pct_peak = round((cur - high52) / high52 * 100, 1) if high52 else 0
+        spark  = [round(float(v), 2) for v in c.tail(30).tolist()]
+        result["tanker"] = {
+            "label": "VLCC Rates (FRO)", "symbol": "FRO", "unit": "$/sh",
+            "current":       round(cur, 2),
+            "pct_day":       round((cur - prev) / prev * 100, 2) if prev else 0,
+            "pct_week":      round((cur - w_ago) / w_ago * 100, 2) if w_ago else 0,
+            "pct_from_peak": pct_peak,
+            "high_52w":      round(high52, 2),
+            "low_52w":       round(low52, 2),
+            "spark":         spark,
+            "signal_thresh": -20,
+            "signal_dir":    "below_peak",   # pct_from_peak < -20 = crisis over
+            "signal_note":   "Crisis over when FRO down >20% from 52w high",
+        }
+    except Exception as ex:
+        result["tanker"] = {"label": "VLCC Rates (FRO)", "symbol": "FRO", "error": str(ex)}
 
     result["cached_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
     _crisis_cache["ts"]   = now
     _crisis_cache["data"] = result
-    log.info(f"  crisis-monitor: fetched VIX={result.get('vix',{}).get('current','?')} "
-             f"BDI={result.get('bdi',{}).get('current','?')} "
-             f"TTF={result.get('ttf',{}).get('current','?')}")
+    log.info(
+        f"  crisis-monitor: VIX={result.get('vix',{}).get('current','?')} "
+        f"F&G={result.get('fg',{}).get('current','?')} "
+        f"spread={result.get('spread',{}).get('current','?')} "
+        f"TTF={result.get('ttf',{}).get('current','?')} "
+        f"FRO={result.get('tanker',{}).get('current','?')}"
+    )
     return jsonify(result)
 
 

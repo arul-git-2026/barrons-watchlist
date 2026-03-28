@@ -825,15 +825,29 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 #crisis-panel{display:none;background:var(--card);border:1px solid var(--border);
   border-radius:var(--radius);padding:16px 18px;box-shadow:0 1px 2px rgba(60,64,67,.1)}
 #crisis-panel.on{display:block}
-.crisis-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.crisis-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .crisis-header h3{font-size:13px;font-weight:700;flex:1;color:var(--text)}
+/* Summary bar */
+#crisis-summary{display:flex;align-items:center;gap:10px;margin-bottom:12px;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px;flex-wrap:wrap}
+.cs-count{font-size:18px;font-weight:800;font-family:'Roboto Mono',monospace}
+.cs-count.c0{color:#c5221f}.cs-count.c1{color:#c5221f}.cs-count.c2{color:#f59e0b}
+.cs-count.c3{color:#f59e0b}.cs-count.c4{color:#137333}.cs-count.c5{color:#137333}
+.cs-label{font-size:11px;font-weight:600;color:var(--muted)}
+.cs-bar{flex:1;height:6px;background:var(--border);border-radius:3px;min-width:60px;overflow:hidden}
+.cs-bar-fill{height:100%;border-radius:3px;transition:width .4s ease}
+.cs-status{font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px}
+.cs-status.danger{background:#fce8e6;color:#c5221f}
+.cs-status.watch{background:#fef3c7;color:#92400e}
+.cs-status.easing{background:#e6f4ea;color:#137333}
+/* Cards */
 .crisis-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
 .crisis-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;
-  padding:12px 14px;display:flex;flex-direction:column;gap:3px;overflow:hidden}
+  padding:12px 14px;display:flex;flex-direction:column;gap:3px;overflow:hidden;position:relative}
 .cc-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.cc-value{font-size:22px;font-weight:700;color:var(--text);font-family:'Roboto Mono',monospace;line-height:1.2}
+.cc-value{font-size:20px;font-weight:700;color:var(--text);font-family:'Roboto Mono',monospace;line-height:1.2}
 .cc-unit{font-size:10px;color:var(--muted);margin-left:2px;font-family:var(--font)}
-.cc-change{font-size:12px;font-weight:600}
+.cc-change{font-size:11px;font-weight:600}
 .cc-change.up{color:var(--down)}.cc-change.dn{color:var(--up)}.cc-change.fl{color:var(--muted)}
 .cc-risk{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:2px}
 .cc-risk.calm{background:#e6f4ea;color:#137333}
@@ -841,8 +855,15 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 .cc-risk.elevated{background:#fef3c7;color:#92400e}
 .cc-risk.fear{background:#fce8e6;color:#c5221f}
 .cc-risk.extreme{background:#7f1d1d;color:#fff}
-.cc-spark{width:100%;height:38px;margin-top:6px;overflow:visible}
-.cc-range{font-size:9px;color:var(--muted);margin-top:2px}
+/* Crisis-end signal badge */
+.cc-signal{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;
+  margin-top:4px;display:inline-block;letter-spacing:.3px}
+.cc-signal.on{background:#e6f4ea;color:#137333;border:1px solid #34a853}
+.cc-signal.off{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+/* Sparkline */
+.cc-spark{width:100%;height:36px;margin-top:5px;overflow:visible}
+.cc-range{font-size:9px;color:var(--muted);margin-top:1px}
+/* Toggle button */
 #crisis-toggle-btn{padding:5px 12px;font-size:11px;font-weight:600;
   border:1px solid var(--border);background:var(--bg);border-radius:6px;
   cursor:pointer;display:flex;align-items:center;gap:5px;
@@ -1155,9 +1176,20 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
     <!-- ── Global Crisis Monitor Panel ───────────────────────────── -->
     <div id="crisis-panel">
       <div class="crisis-header">
-        <h3>🌍 Global Crisis Monitor</h3>
+        <h3>🌍 Hormuz Crisis Monitor</h3>
         <span class="crisis-ts" id="crisis-ts"></span>
         <button onclick="loadCrisisMonitor(true)" style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">↺ Refresh</button>
+      </div>
+      <!-- Summary bar -->
+      <div id="crisis-summary" style="display:none">
+        <div>
+          <span class="cs-count" id="cs-count">0</span>
+          <span style="font-size:13px;font-weight:700;color:var(--muted)">/5</span>
+        </div>
+        <div class="cs-label">CRISIS-END<br>SIGNALS</div>
+        <div class="cs-bar"><div class="cs-bar-fill" id="cs-bar-fill"></div></div>
+        <div class="cs-status" id="cs-status"></div>
+        <div style="font-size:10px;color:var(--muted);margin-left:auto;max-width:220px;line-height:1.4" id="cs-desc"></div>
       </div>
       <div class="crisis-grid" id="crisis-grid">
         <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading crisis data…</div>
@@ -4006,85 +4038,168 @@ async function loadCrisisMonitor(force = false) {
   }
 }
 
+// Returns true if this indicator has hit its "crisis over" threshold
+function crisisSignalOn(key, d) {
+  if (!d || d.error) return false;
+  const v = d.current;
+  const t = d.signal_thresh;
+  if (key === 'vix')    return v < t;             // VIX < 20
+  if (key === 'fg')     return v > t;             // F&G > 50
+  if (key === 'spread') return v < t;             // spread < $2
+  if (key === 'ttf')    return v < t;             // TTF < €30
+  if (key === 'tanker') return (d.pct_from_peak ?? 0) < t;  // FRO down >20% from peak
+  return false;
+}
+
 function crisisSparkSVG(values, color) {
   if (!values || values.length < 2) return '';
   const min = Math.min(...values), max = Math.max(...values);
   const range = max - min || 1;
-  const W = 100, H = 36, pad = 2;
+  const W = 100, H = 34, pad = 2;
   const pts = values.map((v, i) => {
     const x = pad + (i / (values.length - 1)) * (W - pad * 2);
     const y = H - pad - ((v - min) / range) * (H - pad * 2);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
+  const last = pts.split(' ').at(-1).split(',');
   return `<svg class="cc-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
     <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
-    <circle cx="${pts.split(' ').at(-1).split(',')[0]}" cy="${pts.split(' ').at(-1).split(',')[1]}" r="2.5" fill="${color}"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="2.5" fill="${color}"/>
   </svg>`;
 }
 
-function crisisRisk(key, val) {
-  // Returns {label, cls}
+function crisisRisk(key, d) {
+  const val = d.current;
+  // VIX: higher = worse
   if (key === 'vix') {
-    if (val < 15)  return {label:'CALM',     cls:'calm'};
-    if (val < 20)  return {label:'NORMAL',   cls:'normal'};
-    if (val < 30)  return {label:'ELEVATED', cls:'elevated'};
-    if (val < 40)  return {label:'FEAR',     cls:'fear'};
-    return             {label:'EXTREME',  cls:'extreme'};
+    if (val < 15)  return {label:'CALM',        cls:'calm'};
+    if (val < 20)  return {label:'LOW',         cls:'normal'};
+    if (val < 30)  return {label:'ELEVATED',    cls:'elevated'};
+    if (val < 40)  return {label:'FEAR',        cls:'fear'};
+    return             {label:'EXTREME',    cls:'extreme'};
   }
-  if (key === 'bdi') {
-    if (val < 1000) return {label:'WEAK',     cls:'fear'};
-    if (val < 1500) return {label:'LOW',      cls:'elevated'};
-    if (val < 2500) return {label:'NORMAL',   cls:'normal'};
-    return              {label:'STRONG',  cls:'calm'};
+  // Fear & Greed: higher = better (greed = calm)
+  if (key === 'fg') {
+    if (val >= 75)  return {label:'EXTREME GREED', cls:'calm'};
+    if (val >= 55)  return {label:'GREED',         cls:'normal'};
+    if (val >= 45)  return {label:'NEUTRAL',       cls:'normal'};
+    if (val >= 25)  return {label:'FEAR',          cls:'fear'};
+    return              {label:'EXTREME FEAR',  cls:'extreme'};
   }
+  // WTI Spread (M1−M3): higher positive = more backwardation = worse
+  if (key === 'spread') {
+    if (val < 0)   return {label:'CONTANGO',    cls:'calm'};
+    if (val < 2)   return {label:'FLAT',        cls:'normal'};
+    if (val < 5)   return {label:'BACKWARDATION',cls:'elevated'};
+    if (val < 8)   return {label:'ACUTE',       cls:'fear'};
+    return             {label:'EXTREME',    cls:'extreme'};
+  }
+  // TTF: higher = worse
   if (key === 'ttf') {
-    if (val < 25)  return {label:'CHEAP',    cls:'calm'};
-    if (val < 40)  return {label:'NORMAL',   cls:'normal'};
-    if (val < 60)  return {label:'ELEVATED', cls:'elevated'};
-    if (val < 90)  return {label:'HIGH',     cls:'fear'};
-    return             {label:'CRISIS',  cls:'extreme'};
+    if (val < 25)  return {label:'CHEAP',       cls:'calm'};
+    if (val < 40)  return {label:'NORMAL',      cls:'normal'};
+    if (val < 60)  return {label:'ELEVATED',    cls:'elevated'};
+    if (val < 90)  return {label:'HIGH',        cls:'fear'};
+    return             {label:'CRISIS',     cls:'extreme'};
   }
-  if (key === 'oil') {
-    if (val < 60)  return {label:'LOW',      cls:'calm'};
-    if (val < 80)  return {label:'NORMAL',   cls:'normal'};
-    if (val < 100) return {label:'HIGH',     cls:'elevated'};
-    return             {label:'SPIKE',   cls:'fear'};
-  }
-  if (key === 'gas') {
-    if (val < 3.0) return {label:'CHEAP',    cls:'calm'};
-    if (val < 3.5) return {label:'NORMAL',   cls:'normal'};
-    if (val < 4.0) return {label:'HIGH',     cls:'elevated'};
-    return             {label:'PAINFUL', cls:'fear'};
+  // Tanker (FRO): near 52w high = VLCC rates elevated = crisis ongoing
+  if (key === 'tanker') {
+    const p = d.pct_from_peak ?? 0;
+    if (p < -30)   return {label:'FALLING',     cls:'calm'};
+    if (p < -20)   return {label:'EASING',      cls:'normal'};
+    if (p < -10)   return {label:'NEAR PEAK',   cls:'elevated'};
+    return             {label:'AT PEAK',    cls:'fear'};
   }
   return {label:'N/A', cls:'normal'};
 }
 
 function renderCrisisGrid(data, grid) {
-  const keys = ['vix','bdi','ttf','oil','gas'];
-  const colors = {
-    calm:'#137333', normal:'#1a73e8', elevated:'#92400e', fear:'#c5221f', extreme:'#7f1d1d'
+  const KEYS = ['vix', 'fg', 'spread', 'ttf', 'tanker'];
+  const COLORS = {
+    calm:'#137333', normal:'#1a73e8', elevated:'#b45309', fear:'#c5221f', extreme:'#7f1d1d'
   };
-  grid.innerHTML = keys.map(key => {
+  const BAR_COLORS = ['#c5221f','#c5221f','#f59e0b','#f59e0b','#137333','#137333'];
+
+  // ── count active "crisis over" signals ──────────────────────────────────────
+  const signalCount = KEYS.filter(k => crisisSignalOn(k, data[k])).length;
+  const summaryEl = document.getElementById('crisis-summary');
+  if (summaryEl) {
+    summaryEl.style.display = 'flex';
+    const countEl  = document.getElementById('cs-count');
+    const fillEl   = document.getElementById('cs-bar-fill');
+    const statusEl = document.getElementById('cs-status');
+    const descEl   = document.getElementById('cs-desc');
+    if (countEl)  { countEl.textContent = signalCount; countEl.className = `cs-count c${signalCount}`; }
+    if (fillEl)   { fillEl.style.width = `${signalCount / 5 * 100}%`; fillEl.style.background = BAR_COLORS[signalCount]; }
+    const msgs = [
+      ['DANGER',  'danger',  'All indicators point to ongoing crisis. No de-escalation signals.'],
+      ['DANGER',  'danger',  'Crisis continues. Monitor for further signals.'],
+      ['WATCH',   'watch',   '2 signals active — early signs of easing. Watch closely.'],
+      ['WATCH',   'watch',   '3 signals active — momentum building. Crisis may be peaking.'],
+      ['EASING',  'easing',  '4 signals active — strong de-escalation signal. Prepare for reversal.'],
+      ['EASING',  'easing',  'All 5 signals active — crisis likely over. Market to reprice rapidly.'],
+    ];
+    const [sl, sc, sd] = msgs[signalCount];
+    if (statusEl)  { statusEl.textContent = sl; statusEl.className = `cs-status ${sc}`; }
+    if (descEl)    descEl.textContent = sd;
+  }
+
+  // ── render cards ────────────────────────────────────────────────────────────
+  grid.innerHTML = KEYS.map(key => {
     const d = data[key];
     if (!d || d.error) {
-      return `<div class="crisis-card">
-        <div class="cc-label">${key.toUpperCase()}</div>
-        <div style="font-size:11px;color:var(--down);padding:10px 0">${d?.error || 'No data'}</div>
+      return `<div class="crisis-card" style="border-left:3px solid #dadce0">
+        <div class="cc-label">${(d?.label || key).toUpperCase()}</div>
+        <div style="font-size:10px;color:var(--down);padding:8px 0;line-height:1.4">${d?.error || 'No data'}</div>
       </div>`;
     }
-    const risk   = crisisRisk(key, d.current);
-    const color  = colors[risk.cls] || '#5f6368';
-    const pct    = d.pct_day ?? 0;
-    const pctCls = pct > 0.5 ? 'up' : pct < -0.5 ? 'dn' : 'fl';
-    const arrow  = pct > 0.5 ? '▲' : pct < -0.5 ? '▼' : '—';
-    const fmt    = v => Math.abs(v) >= 1000 ? v.toLocaleString() : v;
+    const risk    = crisisRisk(key, d);
+    const color   = COLORS[risk.cls] || '#5f6368';
+    const signalOn = crisisSignalOn(key, d);
+
+    // Change display — F&G and spread use absolute pt change, others use %
+    let changeText;
+    const raw = d.pct_day ?? 0;
+    if (key === 'fg') {
+      const sign = raw > 0 ? '+' : '';
+      const cls  = raw > 1 ? 'dn' : raw < -1 ? 'up' : 'fl'; // greed up = good = green(dn class inverted)
+      changeText = `<div class="cc-change ${cls}">${sign}${raw.toFixed(1)} pts today</div>`;
+    } else if (key === 'spread') {
+      const sign = raw > 0 ? '+' : '';
+      const cls  = raw > 0.1 ? 'up' : raw < -0.1 ? 'dn' : 'fl';
+      changeText = `<div class="cc-change ${cls}">${sign}${raw.toFixed(2)} $/bbl today</div>`;
+    } else {
+      const cls  = raw > 0.5 ? 'up' : raw < -0.5 ? 'dn' : 'fl';
+      const arrow = raw > 0.5 ? '▲' : raw < -0.5 ? '▼' : '—';
+      changeText = `<div class="cc-change ${cls}">${arrow} ${Math.abs(raw).toFixed(2)}% today</div>`;
+    }
+
+    // Value display
+    const fmt = v => v == null ? '—' : (Math.abs(v) >= 1000 ? v.toLocaleString() : v);
+    let valueDisplay;
+    if (key === 'fg') {
+      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.rating || ''}</div>`;
+    } else if (key === 'tanker') {
+      const pfp = d.pct_from_peak ?? 0;
+      const sign = pfp > 0 ? '+' : '';
+      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px">${sign}${pfp.toFixed(1)}% from 52w high</div>`;
+    } else {
+      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>`;
+    }
+
+    const rangeTxt = (d.low_52w != null && d.high_52w != null)
+      ? `<div class="cc-range">52w: ${fmt(d.low_52w)} – ${fmt(d.high_52w)}</div>` : '';
+
     return `<div class="crisis-card" style="border-left:3px solid ${color}">
       <div class="cc-label">${d.label}</div>
-      <div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-      <div class="cc-change ${pctCls}">${arrow} ${Math.abs(pct).toFixed(2)}% today</div>
+      ${valueDisplay}
+      ${changeText}
       <span class="cc-risk ${risk.cls}">${risk.label}</span>
+      <span class="cc-signal ${signalOn ? 'on' : 'off'}">${signalOn ? '✓ CRISIS ENDING' : d.signal_note}</span>
       ${crisisSparkSVG(d.spark, color)}
-      <div class="cc-range">52w: ${fmt(d.low_52w)} – ${fmt(d.high_52w)}</div>
+      ${rangeTxt}
     </div>`;
   }).join('');
 }
