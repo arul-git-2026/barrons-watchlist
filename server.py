@@ -2737,12 +2737,30 @@ def get_dcf_analysis(ticker):
         shares_r  = info.get("sharesOutstanding", 0) or 0
         shares    = round(shares_r / 1e9, 3)            # billions
 
-        # ── WACC: CAPM + after-tax cost of debt (March 2026 calibration) ────────
-        # RF = 10Y UST 3.96% (March 2026); ERP = 4.4% (Damodaran consensus)
-        beta          = float(info.get("beta", 1.0) or 1.0)
-        beta          = max(0.5, min(2.5, beta))
-        rf            = 3.96                            # 10Y UST March 2026
-        erp           = 4.4                             # equity risk premium
+        # ── WACC: CAPM + after-tax cost of debt (late March 2026 calibration) ─────
+        # RF  = 4.44% (10Y UST late-March 2026, geopolitical risk premium)
+        # ERP = 5.0%  (standard US 2026 equity risk premium)
+        # Sector beta bounds — clamp yfinance beta to its GICS sector range
+        # so noisy/stale betas don't distort WACC
+        _SECTOR_BETA = {
+            "Technology":          (1.25, 1.40),
+            "Basic Materials":     (1.15, 1.25),
+            "Energy":              (1.10, 1.20),
+            "Financial Services":  (1.05, 1.15),
+            "Industrials":         (1.00, 1.10),
+            "Consumer Cyclical":   (1.00, 1.10),
+            "Communication Services": (0.95, 1.05),
+            "Real Estate":         (0.85, 0.95),
+            "Healthcare":          (0.75, 0.85),
+            "Consumer Defensive":  (0.60, 0.70),
+            "Utilities":           (0.55, 0.65),
+        }
+        raw_beta      = float(info.get("beta", 1.0) or 1.0)
+        _sec_tmp      = info.get("sector", "")
+        _b_lo, _b_hi  = _SECTOR_BETA.get(_sec_tmp, (0.5, 2.0))
+        beta          = round(max(_b_lo, min(_b_hi, raw_beta)), 2)
+        rf            = 4.44                            # 10Y UST late-March 2026
+        erp           = 5.0                             # US ERP 2026
         cost_equity   = rf + beta * erp
         equity_mv     = price * shares_r
         total_capital = equity_mv + debt
@@ -3041,7 +3059,8 @@ def get_dcf_analysis(ticker):
             "moat":          moat,
             "rating":        rating,
             "mos":           mos,
-            "beta":          round(beta, 2),
+            "beta":          beta,
+            "beta_raw":      round(raw_beta, 2),
             "gross_margins": round(gm * 100, 1),
             "risks":         risks,
             "cats":          cats,
