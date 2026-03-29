@@ -2699,6 +2699,180 @@ def rpo_extract(ticker):
     return jsonify(result)
 
 
+# ── /api/dcf/<ticker> ─────────────────────────────────────────────────────────
+
+_dcf_cache: dict = {}
+_DCF_TTL = 3600  # 1 hour — yfinance fundamentals don't change intraday
+
+@app.route("/api/dcf/<ticker>")
+def get_dcf_analysis(ticker):
+    """
+    Returns DCF inputs + computed intrinsic values (base/bull/bear) for a ticker.
+    Pulls real fundamentals from yfinance; narratives from streetwise_data.json.
+    """
+    sym = ticker.upper()
+
+    # ── Cache check ───────────────────────────────────────────────────────────
+    cached = _dcf_cache.get(sym)
+    if cached and (time.time() - cached["ts"]) < _DCF_TTL and not request.args.get("force"):
+        return jsonify(cached["data"])
+
+    try:
+        tk   = yf.Ticker(sym)
+        info = tk.info
+
+        # ── Prices & market data ──────────────────────────────────────────────
+        price     = float(info.get("currentPrice") or info.get("previousClose") or 0)
+        mktcap_r  = info.get("marketCap", 0) or 0
+        mktcap    = f"${mktcap_r/1e9:.1f}B" if mktcap_r >= 1e9 else f"${mktcap_r/1e6:.0f}M"
+
+        # ── Free cash flow & balance sheet ────────────────────────────────────
+        fcf_r     = info.get("freeCashflow", 0) or 0
+        fcf       = round(fcf_r / 1e9, 2)               # $B
+        debt      = info.get("totalDebt",  0) or 0
+        cash      = info.get("totalCash",  0) or 0
+        net_debt  = round((debt - cash) / 1e9, 1)       # $B
+        shares_r  = info.get("sharesOutstanding", 0) or 0
+        shares    = round(shares_r / 1e9, 3)            # billions
+
+        # ── WACC estimation from capital structure + beta ─────────────────────
+        beta          = float(info.get("beta", 1.0) or 1.0)
+        beta          = max(0.5, min(2.5, beta))
+        rf            = 4.5                             # ~current 10Y UST %
+        erp           = 5.5                             # equity risk premium %
+        cost_equity   = rf + beta * erp
+        equity_mv     = price * shares_r
+        total_capital = equity_mv + debt
+        dw            = (debt / total_capital) if total_capital > 0 else 0.25
+        ew            = 1.0 - dw
+        cost_debt_at  = 5.5 * (1 - 0.21)              # after-tax cost of debt
+        wacc_calc     = round(ew * cost_equity + dw * cost_debt_at, 1)
+        wacc          = max(6.0, min(14.0, wacc_calc))
+
+        # ── Growth rate estimation ────────────────────────────────────────────
+        eg   = float(info.get("earningsGrowth",  0) or 0) * 100
+        rg   = float(info.get("revenueGrowth",   0) or 0) * 100
+        g_raw = eg if abs(eg) > 0.5 else rg  # prefer earnings, fallback revenue
+        g1_base = round(max(-15.0, min(25.0, g_raw if g_raw != 0 else 3.0)), 1)
+        g1_bull = round(g1_base + 5.0, 1)
+        g1_bear = round(g1_base - 5.0, 1)
+        # Phase 2 mean-reverts toward sector average
+        g2_base = round(max(0.0, g1_base * 0.55), 1)
+        g2_bull = round(max(0.0, g1_bull * 0.55), 1)
+        g2_bear = round(g1_bear * 0.55, 1)
+        tgr      = 2.5
+
+        # ── Valuation multiples ───────────────────────────────────────────────
+        pe_v    = info.get("forwardPE") or info.get("trailingPE")
+        pe_str  = f"Fwd P/E: {pe_v:.1f}×" if pe_v else "P/E: N/A"
+        dy      = info.get("dividendYield", 0) or 0
+        div_str = f"{dy*100:.1f}%" if dy else "0%"
+        ev_r    = info.get("enterpriseValue", 0) or 0
+        evfcf_v = round(ev_r / fcf_r, 1) if fcf_r > 0 else None
+        evfcf_s = f"{evfcf_v}×" if evfcf_v else "N/A"
+        gm      = info.get("grossMargins", 0) or 0
+        moat    = "Wide" if (mktcap_r > 50e9 and gm > 0.40) else "Narrow"
+
+        # ── DCF computation ───────────────────────────────────────────────────
+        def _iv(f, g1, g2, tg, w, nd, sh):
+            if sh <= 0 or f <= 0:
+                return None
+            pv = 0.0
+            r  = w / 100.0
+            for y in range(1, 6):
+                f *= (1 + g1 / 100.0)
+                pv += f / (1 + r) ** y
+            for y in range(6, 11):
+                f *= (1 + g2 / 100.0)
+                pv += f / (1 + r) ** y
+            if r <= tg / 100.0:
+                return None
+            tv   = f * (1 + tg / 100.0) / (r - tg / 100.0)
+            pvtv = tv / (1 + r) ** 10
+            ev   = pv + pvtv - nd
+            return max(round(ev / sh, 0), 0)
+
+        iv_base = _iv(fcf, g1_base, g2_base, tgr, wacc,          net_debt, shares)
+        iv_bull = _iv(fcf, g1_bull, g2_bull, tgr, wacc * 0.90,   net_debt, shares)
+        iv_bear = _iv(fcf, g1_bear, g2_bear, tgr, wacc * 1.10,   net_debt, shares)
+
+        mos = round(((iv_base - price) / iv_base * 100)) if iv_base else None
+        rating = ("buy" if (mos or 0) > 25 else
+                  "hold" if (mos or 0) > 0 else "watch")
+
+        # ── Risks: data-driven from yfinance signals ───────────────────────────
+        risks = []
+        if fcf < 0:
+            risks.append({"level": "high",
+                          "text": f"Negative FCF (${fcf:.2f}B TTM) — cash burn risk"})
+        if dw > 0.5:
+            risks.append({"level": "high",
+                          "text": f"High leverage: debt {dw*100:.0f}% of capital; net debt ${net_debt:.1f}B"})
+        if beta > 1.3:
+            risks.append({"level": "mid",
+                          "text": f"Elevated beta ({beta:.2f}) — amplifies market drawdowns"})
+        if dy > 0.06:
+            risks.append({"level": "mid",
+                          "text": f"High dividend yield ({div_str}) — sustainability risk if FCF declines"})
+        if pe_v and pe_v > 25:
+            risks.append({"level": "mid",
+                          "text": f"P/E {pe_v:.1f}× — premium valuation leaves little margin for error"})
+        sector_s = info.get("sector", "")
+        if sector_s:
+            risks.append({"level": "low",
+                          "text": f"Sector exposure: {sector_s} — macro/regulatory cycle risk"})
+        if not risks:
+            risks.append({"level": "low",
+                          "text": "No significant risk flags detected — verify with latest 10-K"})
+
+        # ── Catalysts: pull narrative from streetwise_data.json ───────────────
+        db       = _load_db()
+        rec_db   = next((r for r in db if r.get("t","").upper() == sym), {})
+        cats     = []
+        if rec_db.get("bull"):
+            cats.append({"tag": "Bull", "text": rec_db["bull"]})
+        if rec_db.get("base"):
+            cats.append({"tag": "Base", "text": rec_db["base"]})
+        if rec_db.get("bear"):
+            cats.append({"tag": "Bear", "text": rec_db["bear"]})
+        if not cats:
+            cats.append({"tag": "N/A",
+                         "text": "No thesis data found. Add research notes via the sidebar."})
+
+        result = {
+            "ok":           True,
+            "ticker":       sym,
+            "name":         info.get("longName", sym),
+            "price":        round(price, 2),
+            "mktcap":       mktcap,
+            "fcf":          fcf,
+            "g1_base":      g1_base,  "g1_bull": g1_bull,  "g1_bear": g1_bear,
+            "g2_base":      g2_base,  "g2_bull": g2_bull,  "g2_bear": g2_bear,
+            "tgr":          tgr,
+            "wacc_default": wacc,
+            "net_debt":     net_debt,
+            "shares":       shares,
+            "iv_base":      iv_base,  "iv_bull": iv_bull,  "iv_bear": iv_bear,
+            "div":          div_str,
+            "pe":           pe_str,
+            "evfcf":        evfcf_s,
+            "moat":         moat,
+            "rating":       rating,
+            "mos":          mos,
+            "beta":         round(beta, 2),
+            "gross_margins": round(gm * 100, 1),
+            "risks":        risks,
+            "cats":         cats,
+        }
+        _dcf_cache[sym] = {"ts": time.time(), "data": result}
+        log.info(f"DCF {sym}: price={price} fcf={fcf}B iv_base={iv_base} wacc={wacc}%")
+        return jsonify(result)
+
+    except Exception as ex:
+        log.exception(f"DCF error for {sym}")
+        return jsonify({"ok": False, "error": str(ex)}), 500
+
+
 # ── /api/crisis-monitor ───────────────────────────────────────────────────────
 _crisis_cache: dict = {"ts": 0, "data": None}
 _CRISIS_TTL = 900  # 15 minutes

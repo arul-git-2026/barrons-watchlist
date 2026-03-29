@@ -1266,100 +1266,97 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
     <!-- ── DCF Analysis Panel ────────────────────────────────────── -->
     <div id="dcf-panel">
       <div class="crisis-header">
-        <h3>📊 Deep Value Pharma &amp; Healthcare — DCF Analysis</h3>
-        <span style="font-size:11px;color:var(--muted)">March 2026 · Base case, 10-yr FCF</span>
+        <h3>📊 DCF Analysis</h3>
+        <span style="font-size:11px;color:var(--muted)" id="dcf-subtitle">Select a stock from your database</span>
+        <button onclick="dcfRefresh()" style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">↺ Refresh</button>
       </div>
 
-      <!-- Stock selector tabs -->
-      <div class="dcf-stock-tabs" id="dcf-stock-tabs">
-        <button class="dcf-tab active" onclick="dcfSelectStock('BMY')">Bristol-Myers Squibb (BMY)</button>
-        <button class="dcf-tab" onclick="dcfSelectStock('PFE')">Pfizer (PFE)</button>
-        <button class="dcf-tab" onclick="dcfSelectStock('MRK')">Merck (MRK)</button>
-        <button class="dcf-tab" onclick="dcfSelectStock('CVS')">CVS Health (CVS)</button>
-        <button class="dcf-tab" onclick="dcfSelectStock('ABBV')">AbbVie (ABBV)</button>
+      <!-- Stock picker row -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--muted);white-space:nowrap">Analyse stock:</label>
+        <select id="dcf-picker" onchange="dcfSelectStock(this.value)"
+          style="flex:1;min-width:220px;max-width:380px;padding:6px 10px;border:1px solid var(--border);
+                 border-radius:var(--radius);font-size:13px;background:var(--card);color:var(--text);cursor:pointer">
+          <option value="">— pick a ticker —</option>
+        </select>
+        <span id="dcf-loading" style="display:none;font-size:11px;color:var(--muted)">⏳ Fetching fundamentals…</span>
+        <span id="dcf-error"   style="display:none;font-size:11px;color:var(--down)"></span>
       </div>
 
-      <!-- KPI cards -->
-      <div class="dcf-metrics-grid">
-        <div class="dcf-metric-card">
-          <div class="dcf-metric-label">Current price</div>
-          <div class="dcf-metric-value" id="dcf-kpi-price">—</div>
-          <div class="dcf-metric-sub" id="dcf-kpi-mktcap">—</div>
-        </div>
-        <div class="dcf-metric-card">
-          <div class="dcf-metric-label">DCF intrinsic value</div>
-          <div class="dcf-metric-value" id="dcf-kpi-iv">—</div>
-          <div class="dcf-metric-sub">Base case, 10yr FCF</div>
-        </div>
-        <div class="dcf-metric-card">
-          <div class="dcf-metric-label">Margin of safety</div>
-          <div class="dcf-metric-value" id="dcf-kpi-mos">—</div>
-          <div class="dcf-metric-sub" id="dcf-kpi-verdict">—</div>
-        </div>
-        <div class="dcf-metric-card">
-          <div class="dcf-metric-label">Dividend yield</div>
-          <div class="dcf-metric-value" id="dcf-kpi-div">—</div>
-          <div class="dcf-metric-sub" id="dcf-kpi-pe">—</div>
-        </div>
-      </div>
+      <!-- Content area — hidden until a stock is loaded -->
+      <div id="dcf-content" style="display:none">
 
-      <!-- DCF inputs + Scenario analysis -->
-      <div class="dcf-main-grid">
-        <div class="dcf-card">
-          <div class="dcf-card-title">DCF model inputs &amp; outputs</div>
-          <div class="dcf-row"><span class="dcf-key">FCF (TTM, $B)</span><span class="dcf-val" id="dcf-d-fcf">—</span></div>
-          <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 1 (yr 1–5)</span><span class="dcf-val" id="dcf-d-g1">—</span></div>
-          <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 2 (yr 6–10)</span><span class="dcf-val" id="dcf-d-g2">—</span></div>
-          <div class="dcf-row"><span class="dcf-key">Terminal growth rate</span><span class="dcf-val" id="dcf-d-tgr">—</span></div>
-          <div class="dcf-row"><span class="dcf-key">WACC</span><span class="dcf-val" id="dcf-d-wacc">—</span></div>
-          <div class="dcf-row"><span class="dcf-key">PV of FCFs ($B)</span><span class="dcf-val" id="dcf-d-pvfcf">—</span></div>
-          <div class="dcf-row"><span class="dcf-key">Terminal value ($B)</span><span class="dcf-val" id="dcf-d-tv">—</span></div>
-          <div class="dcf-row"><span class="dcf-key">Enterprise value ($B)</span><span class="dcf-val" id="dcf-d-ev">—</span></div>
-          <div class="dcf-row"><span class="dcf-key">Intrinsic value / share</span><span class="dcf-val" id="dcf-d-iv">—</span></div>
-          <div class="dcf-wacc-controls">
-            <span class="dcf-wacc-label">Adjust WACC</span>
-            <input type="range" id="dcf-wacc-slider" min="6" max="12" step="0.5" value="8"
-                   style="flex:1" oninput="dcfUpdateWACC(this.value)">
-            <span class="dcf-wacc-val" id="dcf-wacc-out">8.0%</span>
+        <!-- KPI cards -->
+        <div class="dcf-metrics-grid">
+          <div class="dcf-metric-card">
+            <div class="dcf-metric-label">Current price</div>
+            <div class="dcf-metric-value" id="dcf-kpi-price">—</div>
+            <div class="dcf-metric-sub" id="dcf-kpi-mktcap">—</div>
+          </div>
+          <div class="dcf-metric-card">
+            <div class="dcf-metric-label">DCF intrinsic value</div>
+            <div class="dcf-metric-value" id="dcf-kpi-iv">—</div>
+            <div class="dcf-metric-sub">Base case, 10yr FCF</div>
+          </div>
+          <div class="dcf-metric-card">
+            <div class="dcf-metric-label">Margin of safety</div>
+            <div class="dcf-metric-value" id="dcf-kpi-mos">—</div>
+            <div class="dcf-metric-sub" id="dcf-kpi-verdict">—</div>
+          </div>
+          <div class="dcf-metric-card">
+            <div class="dcf-metric-label">Dividend yield</div>
+            <div class="dcf-metric-value" id="dcf-kpi-div">—</div>
+            <div class="dcf-metric-sub" id="dcf-kpi-pe">—</div>
           </div>
         </div>
 
-        <div class="dcf-card">
-          <div class="dcf-card-title">Scenario analysis — intrinsic value / share</div>
-          <div id="dcf-scenario-bars"></div>
-          <div style="margin-top:14px;border-top:.5px solid var(--border);padding-top:12px">
-            <div class="dcf-card-title" style="margin-bottom:8px">Upside / downside to current price</div>
-            <div id="dcf-updown-rows"></div>
+        <!-- DCF inputs + Scenario analysis -->
+        <div class="dcf-main-grid">
+          <div class="dcf-card">
+            <div class="dcf-card-title">DCF model inputs &amp; outputs
+              <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:6px" id="dcf-data-source"></span>
+            </div>
+            <div class="dcf-row"><span class="dcf-key">FCF (TTM, $B)</span><span class="dcf-val" id="dcf-d-fcf">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Beta</span><span class="dcf-val" id="dcf-d-beta">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 1 (yr 1–5)</span><span class="dcf-val" id="dcf-d-g1">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 2 (yr 6–10)</span><span class="dcf-val" id="dcf-d-g2">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Terminal growth rate</span><span class="dcf-val" id="dcf-d-tgr">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">WACC (auto-estimated)</span><span class="dcf-val" id="dcf-d-wacc">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">PV of FCFs ($B)</span><span class="dcf-val" id="dcf-d-pvfcf">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Terminal value PV ($B)</span><span class="dcf-val" id="dcf-d-tv">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Enterprise value ($B)</span><span class="dcf-val" id="dcf-d-ev">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Intrinsic value / share</span><span class="dcf-val" id="dcf-d-iv">—</span></div>
+            <div class="dcf-wacc-controls">
+              <span class="dcf-wacc-label">Stress-test WACC</span>
+              <input type="range" id="dcf-wacc-slider" min="6" max="14" step="0.5" value="8"
+                     style="flex:1" oninput="dcfUpdateWACC(this.value)">
+              <span class="dcf-wacc-val" id="dcf-wacc-out">8.0%</span>
+            </div>
+          </div>
+
+          <div class="dcf-card">
+            <div class="dcf-card-title">Scenario analysis — intrinsic value / share</div>
+            <div id="dcf-scenario-bars"></div>
+            <div style="margin-top:14px;border-top:.5px solid var(--border);padding-top:12px">
+              <div class="dcf-card-title" style="margin-bottom:8px">Upside / downside to current price</div>
+              <div id="dcf-updown-rows"></div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Screener table -->
-      <div class="dcf-full-card">
-        <div class="dcf-card-title">Sector screener — pharma &amp; healthcare deep value (DCF ranked)</div>
-        <table class="dcf-screener-table">
-          <thead>
-            <tr>
-              <th>Ticker</th><th>Price</th><th>DCF IV (base)</th>
-              <th>Margin of safety</th><th>EV/FCF</th>
-              <th>Div yield</th><th>Moat</th><th>Rating</th>
-            </tr>
-          </thead>
-          <tbody id="dcf-screener-body"></tbody>
-        </table>
-      </div>
+        <!-- Risks + Catalysts -->
+        <div class="dcf-bottom-grid">
+          <div class="dcf-card">
+            <div class="dcf-card-title" id="dcf-risk-title">Key risks</div>
+            <div id="dcf-risk-list"></div>
+          </div>
+          <div class="dcf-card">
+            <div class="dcf-card-title" id="dcf-cat-title">Investment thesis</div>
+            <div id="dcf-cat-list"></div>
+          </div>
+        </div>
 
-      <!-- Risks + Catalysts -->
-      <div class="dcf-bottom-grid">
-        <div class="dcf-card">
-          <div class="dcf-card-title" id="dcf-risk-title">Key risks</div>
-          <div id="dcf-risk-list"></div>
-        </div>
-        <div class="dcf-card">
-          <div class="dcf-card-title" id="dcf-cat-title">Catalysts &amp; timeline</div>
-          <div id="dcf-cat-list"></div>
-        </div>
-      </div>
+      </div><!-- /dcf-content -->
     </div>
 
     <!-- Chart card — TradingView widget -->
@@ -2064,6 +2061,7 @@ function selectRow(ticker) {
   activeRow = ticker;
   showResearchCard(ticker);
   render();
+  dcfOnSidebarChange(ticker);   // notify DCF panel if open
   // Auto-fetch Finnhub in background so sidebar earn-pill + sentiment dot populate
   // immediately on row click (not only when Finnhub tab is opened manually)
   if (!_rcCache[ticker] || !_rcCache[ticker].finnhub) {
@@ -4460,260 +4458,201 @@ if (!document.querySelector('meta[name="viewport"]')) {
 }
 
 // ── DCF Analysis Panel ─────────────────────────────────────────────
-let _dcfInit = false;
+let _dcfData   = null;   // last API response
+let _dcfWACC   = null;   // current slider value
+let _dcfPanelOpen = false;
+
+// Populate the picker from allData whenever DCF panel opens
+function dcfPopulatePicker() {
+  const sel = document.getElementById('dcf-picker');
+  // Only rebuild if list changed
+  const tickers = allData.filter(d => d.y !== 'ETF').map(d => d.t);
+  if (sel.options.length - 1 === tickers.length) return;
+  sel.innerHTML = '<option value="">— pick a ticker —</option>';
+  // Sort: stocks in DB alphabetically; put activeRow first if set
+  const sorted = [...tickers].sort((a, b) => a.localeCompare(b));
+  sorted.forEach(t => {
+    const rec  = allData.find(d => d.t === t);
+    const name = rec ? ` – ${rec.n}` : '';
+    const opt  = document.createElement('option');
+    opt.value       = t;
+    opt.textContent = `${t}${name}`;
+    sel.appendChild(opt);
+  });
+}
 
 function toggleDCFPanel() {
   const panel = document.getElementById('dcf-panel');
   const btn   = document.getElementById('dcf-toggle-btn');
-  const on    = panel.classList.toggle('on');
-  btn.classList.toggle('on', on);
-  if (on && !_dcfInit) { _dcfInit = true; dcfSelectStock('BMY'); }
-}
-
-const DCF_STOCKS = {
-  BMY: {
-    name:'Bristol-Myers Squibb', price:53.5, mktcap:'115B',
-    fcf:12.4, g1_base:3, g1_bull:7, g1_bear:-2, g2_base:2, g2_bull:5, g2_bear:0,
-    tgr:2.0, wacc_default:8.0, net_debt:32, shares:2.0,
-    iv_base:71, iv_bull:98, iv_bear:42, div:'5.7%', pe:'Fwd P/E: 7.2×', evfcf:'9×', moat:'Wide', rating:'buy',
-    risks:[
-      {level:'high', text:'Eliquis LOE 2026 — ~$12B revenue at risk from biosimilar entry'},
-      {level:'high', text:'Debt load ~$48B post-Celgene; limits capital flexibility'},
-      {level:'mid',  text:'Opdivo faces Keytruda competition in key oncology indications'},
-      {level:'mid',  text:'Medicare drug price negotiation under IRA squeezes margins'},
-      {level:'low',  text:'Revlimid generic erosion largely priced in; ~80% erosion complete'},
-    ],
-    cats:[
-      {tag:'2026', text:'Breyanzi (CAR-T) label expansion — 2L DLBCL data readout Q2'},
-      {tag:'2026', text:'Cobenfy (schizophrenia) — first new MOA in 30yrs; commercial ramp'},
-      {tag:'2026', text:'Camzyos — obstructive HCM $1B+ trajectory underpriced by market'},
-      {tag:'2027', text:'Milvexian (oral FXIa inhibitor) — Ph3 readout; could replace Eliquis'},
-      {tag:'2027', text:'KarXT (mAChR agonist) neuroscience platform potential'},
-    ]
-  },
-  PFE: {
-    name:'Pfizer', price:24.5, mktcap:'139B',
-    fcf:8.2, g1_base:2, g1_bull:8, g1_bear:-4, g2_base:4, g2_bull:7, g2_bear:1,
-    tgr:2.0, wacc_default:8.5, net_debt:28, shares:5.7,
-    iv_base:34, iv_bull:52, iv_bear:18, div:'7.2%', pe:'Fwd P/E: 8.6×', evfcf:'16×', moat:'Wide', rating:'buy',
-    risks:[
-      {level:'high', text:'$17–18B annual revenue facing LOEs through 2030 (Eliquis, Xeljanz, others)'},
-      {level:'high', text:'COVID franchise ($8B peak) shrinking rapidly; single-digit run-rate'},
-      {level:'mid',  text:'Dividend payout > 100% of 2025 FCF — cut risk flagged by analysts'},
-      {level:'mid',  text:'$33B debt from Seagen acquisition; integration risk'},
-      {level:'low',  text:'Seagen ADC platform (Padcev, Adcetris, Tivdak) provides long-term offset'},
-    ],
-    cats:[
-      {tag:'2026', text:'Danuglipron (oral GLP-1) — obesity market entry; direct Novo/Lilly competition'},
-      {tag:'2026', text:'Seagen ADC pipeline readouts across 6+ cancer types'},
-      {tag:'2026', text:'Metsera collaboration — next-gen obesity asset for 2027+ launches'},
-      {tag:'2027', text:'RSV vaccine (Abrysvo) in 60+ adults — label expansion'},
-      {tag:'2027', text:'Cost optimization program — $4B savings target supports FCF recovery'},
-    ]
-  },
-  MRK: {
-    name:'Merck & Co.', price:87.5, mktcap:'222B',
-    fcf:16.8, g1_base:4, g1_bull:9, g1_bear:-1, g2_base:3, g2_bull:6, g2_bear:1,
-    tgr:2.5, wacc_default:8.0, net_debt:18, shares:2.54,
-    iv_base:122, iv_bull:165, iv_bear:74, div:'3.7%', pe:'Fwd P/E: 12.1×', evfcf:'13×', moat:'Wide', rating:'buy',
-    risks:[
-      {level:'high', text:'Keytruda (~$25B revenue) biosimilar entry expected 2028; patent cliff'},
-      {level:'high', text:'Gardasil China volume collapse — $1B+ shortfall in 2025/2026'},
-      {level:'mid',  text:'Sotatercept (PAH) competitive pressure from Janssen'},
-      {level:'mid',  text:'IRA negotiation — Januvia/Janumet price controls in effect'},
-      {level:'low',  text:'Merck Animal Health provides defensive non-pharma FCF'},
-    ],
-    cats:[
-      {tag:'2026', text:'Winrevair (sotatercept) — PAH, $3B+ peak sales trajectory; Phase 4 data'},
-      {tag:'2026', text:'MK-1654 (RSV mAb) — filing expected H2 2026'},
-      {tag:'2026', text:'Clesrovimab (RSV infant prevention) — 2026 launch'},
-      {tag:'2027', text:'Keytruda subcutaneous — extended patent protection strategy'},
-      {tag:'2028', text:'MK-7264 successors and TIGIT combinations in oncology'},
-    ]
-  },
-  CVS: {
-    name:'CVS Health', price:70.0, mktcap:'87B',
-    fcf:7.1, g1_base:2, g1_bull:6, g1_bear:-3, g2_base:3, g2_bull:5, g2_bear:0,
-    tgr:1.5, wacc_default:9.0, net_debt:40, shares:1.25,
-    iv_base:146, iv_bull:192, iv_bear:68, div:'4.9%', pe:'Fwd P/E: 9.1×', evfcf:'18×', moat:'Narrow', rating:'watch',
-    risks:[
-      {level:'high', text:'Medicare Advantage star ratings decline — reimbursement headwinds into 2026'},
-      {level:'high', text:'Aetna medical cost ratio elevated; underwriting losses in MA segment'},
-      {level:'mid',  text:'$40B debt load from Aetna/Signify acquisitions limits buybacks'},
-      {level:'mid',  text:'PBM reform legislation (IRA + Congress) — Caremark margin pressure'},
-      {level:'low',  text:'Pharmacy retail secular decline partially offset by MinuteClinics'},
-    ],
-    cats:[
-      {tag:'2026', text:'MA star ratings stabilization — could unlock $1B+ revenue tailwind'},
-      {tag:'2026', text:'Oak Street Health primary care — 700+ locations; Optum-like model scaling'},
-      {tag:'2026', text:'GLP-1 dispensing volume surge through Caremark PBM — fee income'},
-      {tag:'2027', text:'Debt reduction targets — leverage ratio below 3× enables dividend growth'},
-      {tag:'2027', text:'Signify Health home services integration — chronic disease management'},
-    ]
-  },
-  ABBV: {
-    name:'AbbVie', price:175.0, mktcap:'309B',
-    fcf:17.2, g1_base:6, g1_bull:11, g1_bear:1, g2_base:4, g2_bull:7, g2_bear:2,
-    tgr:2.5, wacc_default:7.5, net_debt:43, shares:1.77,
-    iv_base:221, iv_bull:298, iv_bear:132, div:'3.4%', pe:'Fwd P/E: 20.2×', evfcf:'21×', moat:'Wide', rating:'hold',
-    risks:[
-      {level:'mid', text:'Humira biosimilar erosion — bulk of decline behind, ~$14B residual base'},
-      {level:'mid', text:'Skyrizi/Rinvoq payer pushback as market share grows'},
-      {level:'mid', text:'Neuroscience pipeline (Cerevel) early stage; execution risk'},
-      {level:'low', text:'IRA negotiation — Imbruvica already negotiated; Skyrizi exposure later'},
-      {level:'low', text:'Higher debt from ImmunoGen acquisition adds modest leverage'},
-    ],
-    cats:[
-      {tag:'2026', text:"Skyrizi — IBD expansion (Crohn's + UC) driving $10B+ peak sales path"},
-      {tag:'2026', text:'Rinvoq — atopic dermatitis and RA share gains vs JAK peers'},
-      {tag:'2026', text:'ABBV-CLS-484 (PD-1/TIGIT) — early oncology data readout'},
-      {tag:'2027', text:'Emraclidine (D1/D2 partial agonist) — schizophrenia Ph3 data'},
-      {tag:'2027', text:'Telisotuzumab vedotin (ADC) — NSCLC filing expected'},
-    ]
+  _dcfPanelOpen = panel.classList.toggle('on');
+  btn.classList.toggle('on', _dcfPanelOpen);
+  if (_dcfPanelOpen) {
+    dcfPopulatePicker();
+    // Pre-select active sidebar row if available and no stock loaded yet
+    if (activeRow && !_dcfData) dcfSelectStock(activeRow);
   }
-};
-
-const DCF_SCREENER = [
-  {ticker:'BMY',  price:53.5,  iv:71,  evfcf:'9×',  div:'5.7%', moat:'Wide',   rating:'buy',   mos:25},
-  {ticker:'PFE',  price:24.5,  iv:34,  evfcf:'16×', div:'7.2%', moat:'Wide',   rating:'buy',   mos:28},
-  {ticker:'MRK',  price:87.5,  iv:122, evfcf:'13×', div:'3.7%', moat:'Wide',   rating:'buy',   mos:28},
-  {ticker:'CVS',  price:70.0,  iv:146, evfcf:'18×', div:'4.9%', moat:'Narrow', rating:'watch', mos:52},
-  {ticker:'ABBV', price:175.0, iv:221, evfcf:'21×', div:'3.4%', moat:'Wide',   rating:'hold',  mos:21},
-  {ticker:'TMO',  price:454,   iv:545, evfcf:'30×', div:'0.3%', moat:'Wide',   rating:'hold',  mos:17},
-  {ticker:'GILD', price:98.5,  iv:128, evfcf:'14×', div:'3.2%', moat:'Narrow', rating:'buy',   mos:23},
-  {ticker:'NVS',  price:96.0,  iv:133, evfcf:'16×', div:'3.0%', moat:'Wide',   rating:'buy',   mos:28},
-];
-
-let _dcfCurrentStock = 'BMY';
-let _dcfWACC = null;
-
-function dcfSelectStock(ticker) {
-  _dcfCurrentStock = ticker;
-  document.querySelectorAll('.dcf-tab').forEach(t => {
-    t.classList.toggle('active', t.textContent.includes(ticker));
-  });
-  const s = DCF_STOCKS[ticker];
-  _dcfWACC = s.wacc_default;
-  document.getElementById('dcf-wacc-slider').value = s.wacc_default;
-  document.getElementById('dcf-wacc-out').textContent = s.wacc_default.toFixed(1) + '%';
-  dcfRenderAll();
 }
 
-function dcfComputeDCF(s, wacc) {
+// Called when sidebar row changes — auto-load if DCF panel is open
+function dcfOnSidebarChange(ticker) {
+  if (!_dcfPanelOpen) return;
+  const sel = document.getElementById('dcf-picker');
+  if (sel) sel.value = ticker;
+  dcfSelectStock(ticker);
+}
+
+async function dcfSelectStock(ticker) {
+  if (!ticker) return;
+  const loadEl = document.getElementById('dcf-loading');
+  const errEl  = document.getElementById('dcf-error');
+  const content= document.getElementById('dcf-content');
+  const sub    = document.getElementById('dcf-subtitle');
+
+  // Update picker to match
+  const sel = document.getElementById('dcf-picker');
+  if (sel && sel.value !== ticker) sel.value = ticker;
+
+  loadEl.style.display = 'inline';
+  errEl.style.display  = 'none';
+  content.style.display= 'none';
+
+  try {
+    const res  = await fetch(`/api/dcf/${ticker}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'API error');
+    _dcfData = data;
+    _dcfWACC = data.wacc_default;
+    document.getElementById('dcf-wacc-slider').value = _dcfWACC;
+    document.getElementById('dcf-wacc-out').textContent = _dcfWACC.toFixed(1) + '%';
+    if (sub) sub.textContent = `${data.name} (${ticker}) · yfinance fundamentals · 10-yr FCF`;
+    dcfRenderAll();
+    content.style.display = 'block';
+  } catch(e) {
+    errEl.textContent    = `⚠ ${e.message}`;
+    errEl.style.display  = 'inline';
+  } finally {
+    loadEl.style.display = 'none';
+  }
+}
+
+function dcfRefresh() {
+  if (_dcfData) dcfSelectStock(_dcfData.ticker + '?force=1'.replace('?force=1',''));
+  const t = document.getElementById('dcf-picker').value;
+  if (t) {
+    _dcfData = null;
+    fetch(`/api/dcf/${t}?force=1`).then(() => dcfSelectStock(t));
+  }
+}
+
+// Local DCF re-computation for WACC slider (no API call needed)
+function dcfComputeLocal(s, wacc) {
+  if (!s || s.fcf <= 0 || s.shares <= 0) return null;
   let pv = 0, fcf = s.fcf;
-  const g1 = s.g1_base / 100, g2 = s.g2_base / 100, r = wacc / 100;
-  for (let y = 1; y <= 5; y++)  { fcf *= (1 + g1); pv += fcf / Math.pow(1 + r, y); }
-  for (let y = 6; y <= 10; y++) { fcf *= (1 + g2); pv += fcf / Math.pow(1 + r, y); }
-  const tv   = (fcf * (1 + s.tgr / 100)) / (r - s.tgr / 100);
-  const pvtv = tv / Math.pow(1 + r, 10);
+  const r = wacc / 100;
+  for (let y = 1; y <= 5; y++)  { fcf *= (1 + s.g1_base / 100); pv += fcf / (1+r)**y; }
+  for (let y = 6; y <= 10; y++) { fcf *= (1 + s.g2_base / 100); pv += fcf / (1+r)**y; }
+  if (r <= s.tgr / 100) return null;
+  const tv   = fcf * (1 + s.tgr/100) / (r - s.tgr/100);
+  const pvtv = tv / (1+r)**10;
   const ev   = pv + pvtv - s.net_debt;
   const iv   = Math.max(ev / s.shares, 0);
-  return { pv: pv.toFixed(1), tv: tv.toFixed(1), pvtv: pvtv.toFixed(1), ev: ev.toFixed(1), iv: iv.toFixed(0) };
+  return { pv: pv.toFixed(1), pvtv: pvtv.toFixed(1), ev: ev.toFixed(1), iv: Math.round(iv) };
 }
 
 function dcfUpdateWACC(val) {
   _dcfWACC = parseFloat(val);
-  document.getElementById('dcf-wacc-out').textContent = parseFloat(val).toFixed(1) + '%';
-  dcfRenderDCF();
+  document.getElementById('dcf-wacc-out').textContent = _dcfWACC.toFixed(1) + '%';
+  if (_dcfData) dcfRenderDCF();
 }
 
 function dcfRenderDCF() {
-  const s    = DCF_STOCKS[_dcfCurrentStock];
-  const wacc = _dcfWACC || s.wacc_default;
-  const res  = dcfComputeDCF(s, wacc);
-  document.getElementById('dcf-d-fcf').textContent   = '$' + s.fcf + 'B';
-  document.getElementById('dcf-d-g1').textContent    = s.g1_base + '% / yr';
-  document.getElementById('dcf-d-g2').textContent    = s.g2_base + '% / yr';
-  document.getElementById('dcf-d-tgr').textContent   = s.tgr + '%';
-  document.getElementById('dcf-d-wacc').textContent  = wacc.toFixed(1) + '%';
-  document.getElementById('dcf-d-pvfcf').textContent = '$' + res.pv + 'B';
-  document.getElementById('dcf-d-tv').textContent    = '$' + res.pvtv + 'B';
-  document.getElementById('dcf-d-ev').textContent    = '$' + res.ev + 'B';
-  document.getElementById('dcf-d-iv').textContent    = '$' + res.iv;
-  document.getElementById('dcf-kpi-iv').textContent  = '$' + res.iv;
-  const mos   = Math.round(((parseFloat(res.iv) - s.price) / parseFloat(res.iv)) * 100);
+  const s   = _dcfData;
+  const res = dcfComputeLocal(s, _dcfWACC);
+  if (!res) {
+    ['dcf-d-pvfcf','dcf-d-tv','dcf-d-ev','dcf-d-iv','dcf-kpi-iv'].forEach(id => {
+      document.getElementById(id).textContent = 'N/A (neg. FCF)';
+    });
+    return;
+  }
+  document.getElementById('dcf-d-fcf').textContent    = `$${s.fcf}B`;
+  document.getElementById('dcf-d-beta').textContent   = s.beta;
+  document.getElementById('dcf-d-g1').textContent     = `${s.g1_base}% / yr`;
+  document.getElementById('dcf-d-g2').textContent     = `${s.g2_base}% / yr`;
+  document.getElementById('dcf-d-tgr').textContent    = `${s.tgr}%`;
+  document.getElementById('dcf-d-wacc').textContent   = `${_dcfWACC.toFixed(1)}%`;
+  document.getElementById('dcf-d-pvfcf').textContent  = `$${res.pv}B`;
+  document.getElementById('dcf-d-tv').textContent     = `$${res.pvtv}B`;
+  document.getElementById('dcf-d-ev').textContent     = `$${res.ev}B`;
+  document.getElementById('dcf-d-iv').textContent     = `$${res.iv}`;
+  document.getElementById('dcf-kpi-iv').textContent   = `$${res.iv}`;
+  const mos   = res.iv > 0 ? Math.round((res.iv - s.price) / res.iv * 100) : null;
   const mosEl = document.getElementById('dcf-kpi-mos');
-  mosEl.textContent  = mos > 0 ? '+' + mos + '%' : mos + '%';
-  mosEl.style.color  = mos > 20 ? '#1D9E75' : mos > 0 ? '#1a73e8' : '#D85A30';
+  if (mos === null) { mosEl.textContent = 'N/A'; mosEl.style.color = 'var(--muted)'; }
+  else {
+    mosEl.textContent = mos > 0 ? `+${mos}%` : `${mos}%`;
+    mosEl.style.color = mos > 20 ? '#1D9E75' : mos > 0 ? '#1a73e8' : '#D85A30';
+  }
   document.getElementById('dcf-kpi-verdict').textContent =
-    mos > 30 ? 'Deep value' : mos > 15 ? 'Undervalued' : mos > 0 ? 'Slight discount' : 'Overvalued';
+    (mos||0) > 30 ? 'Deep value' : (mos||0) > 15 ? 'Undervalued' :
+    (mos||0) > 0  ? 'Slight discount' : 'Overvalued / no FCF';
+  const src = document.getElementById('dcf-data-source');
+  if (src) src.textContent = `beta ${s.beta} · gross margin ${s.gross_margins}%`;
 }
 
 function dcfRenderScenarios() {
-  const s = DCF_STOCKS[_dcfCurrentStock];
+  const s = _dcfData;
+  const maxIV = Math.max(s.iv_bull || 0, s.iv_base || 0, s.iv_bear || 0, 1);
   const scenarios = [
-    {label:'Bull case', iv:s.iv_bull, cls:'dcf-bull-fill', color:'#1D9E75'},
-    {label:'Base case', iv:s.iv_base, cls:'dcf-base-fill', color:'#1a73e8'},
-    {label:'Bear case', iv:s.iv_bear, cls:'dcf-bear-fill', color:'#D85A30'},
+    {label:'Bull case', iv: s.iv_bull, cls:'dcf-bull-fill', color:'#1D9E75'},
+    {label:'Base case', iv: s.iv_base, cls:'dcf-base-fill', color:'#1a73e8'},
+    {label:'Bear case', iv: s.iv_bear, cls:'dcf-bear-fill', color:'#D85A30'},
   ];
-  let html = '';
+  let bars = '', ud = '';
   scenarios.forEach(sc => {
-    const pct  = Math.round(((sc.iv - s.price) / s.price) * 100);
+    if (sc.iv == null) return;
+    const pct  = Math.round((sc.iv - s.price) / s.price * 100);
     const sign = pct >= 0 ? '+' : '';
-    html += `<div class="dcf-bar-wrap">
+    bars += `<div class="dcf-bar-wrap">
       <div class="dcf-bar-slabel">
         <span style="color:var(--muted)">${sc.label}</span>
-        <span style="font-weight:500">$${sc.iv} <span style="color:${sc.color};font-size:11px">(${sign}${pct}%)</span></span>
+        <span style="font-weight:500">$${sc.iv}
+          <span style="color:${sc.color};font-size:11px">(${sign}${pct}%)</span>
+        </span>
       </div>
-      <div class="dcf-bar-track"><div class="dcf-bar-fill ${sc.cls}" style="width:${Math.round((sc.iv/s.iv_bull)*100)}%"></div></div>
+      <div class="dcf-bar-track">
+        <div class="dcf-bar-fill ${sc.cls}" style="width:${Math.round(sc.iv/maxIV*100)}%"></div>
+      </div>
     </div>`;
-  });
-  document.getElementById('dcf-scenario-bars').innerHTML = html;
-  let ud = '';
-  [['Bull', s.iv_bull],['Base', s.iv_base],['Bear', s.iv_bear]].forEach(([name, iv]) => {
-    const pct = Math.round(((iv - s.price) / s.price) * 100);
-    const col = pct >= 0 ? '#1D9E75' : '#D85A30';
-    const sign = pct >= 0 ? '+' : '';
-    ud += `<div class="dcf-row"><span class="dcf-key">${name} scenario</span>
-      <span style="color:${col};font-weight:500">${sign}${pct}% (target: $${iv})</span></div>`;
+    ud += `<div class="dcf-row"><span class="dcf-key">${sc.label}</span>
+      <span style="color:${sc.color};font-weight:500">${sign}${pct}% (target: $${sc.iv})</span></div>`;
   });
   ud += `<div class="dcf-row"><span class="dcf-key">Current price</span>
-    <span class="dcf-val">$${DCF_STOCKS[_dcfCurrentStock].price}</span></div>`;
-  document.getElementById('dcf-updown-rows').innerHTML = ud;
+    <span class="dcf-val">$${s.price}</span></div>`;
+  document.getElementById('dcf-scenario-bars').innerHTML = bars;
+  document.getElementById('dcf-updown-rows').innerHTML   = ud;
 }
 
 function dcfRenderKPIs() {
-  const s = DCF_STOCKS[_dcfCurrentStock];
-  document.getElementById('dcf-kpi-price').textContent  = '$' + s.price;
-  document.getElementById('dcf-kpi-mktcap').textContent = 'Mkt cap: $' + s.mktcap;
+  const s = _dcfData;
+  document.getElementById('dcf-kpi-price').textContent  = `$${s.price}`;
+  document.getElementById('dcf-kpi-mktcap').textContent = `Mkt cap: ${s.mktcap}`;
   document.getElementById('dcf-kpi-div').textContent    = s.div;
   document.getElementById('dcf-kpi-pe').textContent     = s.pe;
 }
 
-function dcfRenderScreener() {
-  const sorted = [...DCF_SCREENER].sort((a, b) => b.mos - a.mos);
-  let html = '';
-  sorted.forEach(r => {
-    const upside  = Math.round(((r.iv - r.price) / r.price) * 100);
-    const sign    = upside >= 0 ? '+' : '';
-    const mosCls  = r.mos > 35 ? 'dcf-mos-high' : r.mos > 20 ? 'dcf-mos-mid' : 'dcf-mos-low';
-    const rCls    = r.rating === 'buy' ? 'dcf-badge-buy' : r.rating === 'hold' ? 'dcf-badge-hold' : 'dcf-badge-watch';
-    const hilight = r.ticker === _dcfCurrentStock ? 'background:var(--bg)' : '';
-    html += `<tr style="${hilight}">
-      <td style="font-weight:500">${r.ticker}</td>
-      <td>$${r.price}</td>
-      <td>$${r.iv} <span style="font-size:10px;color:var(--muted)">(${sign}${upside}%)</span></td>
-      <td><span class="dcf-mos-pill ${mosCls}">${r.mos}%</span></td>
-      <td>${r.evfcf}</td><td>${r.div}</td><td>${r.moat}</td>
-      <td><span class="dcf-badge ${rCls}">${r.rating.toUpperCase()}</span></td>
-    </tr>`;
-  });
-  document.getElementById('dcf-screener-body').innerHTML = html;
-}
-
 function dcfRenderRisks() {
-  const s = DCF_STOCKS[_dcfCurrentStock];
-  document.getElementById('dcf-risk-title').textContent = 'Key risks — ' + _dcfCurrentStock;
+  const s = _dcfData;
+  document.getElementById('dcf-risk-title').textContent = `Key risks — ${s.ticker}`;
   document.getElementById('dcf-risk-list').innerHTML = s.risks.map(r => {
-    const cls = r.level === 'high' ? 'dcf-risk-high' : r.level === 'mid' ? 'dcf-risk-mid' : 'dcf-risk-low';
+    const cls = r.level==='high' ? 'dcf-risk-high' : r.level==='mid' ? 'dcf-risk-mid' : 'dcf-risk-low';
     return `<div class="dcf-risk-item"><div class="dcf-risk-dot ${cls}"></div>
       <span style="color:var(--muted)">${r.text}</span></div>`;
   }).join('');
 }
 
 function dcfRenderCatalysts() {
-  const s = DCF_STOCKS[_dcfCurrentStock];
-  document.getElementById('dcf-cat-title').textContent = 'Catalysts — ' + _dcfCurrentStock;
+  const s = _dcfData;
+  document.getElementById('dcf-cat-title').textContent = `Investment thesis — ${s.ticker}`;
   document.getElementById('dcf-cat-list').innerHTML = s.cats.map(c =>
     `<div class="dcf-catalyst-item"><span class="dcf-cat-tag">${c.tag}</span>
       <span style="color:var(--muted)">${c.text}</span></div>`
@@ -4724,7 +4663,6 @@ function dcfRenderAll() {
   dcfRenderKPIs();
   dcfRenderDCF();
   dcfRenderScenarios();
-  dcfRenderScreener();
   dcfRenderRisks();
   dcfRenderCatalysts();
 }
