@@ -4658,8 +4658,6 @@ function dcfRenderDCF() {
   document.getElementById('dcf-kpi-verdict').textContent =
     (mos||0) > 30 ? 'Deep value' : (mos||0) > 15 ? 'Undervalued' :
     (mos||0) > 0  ? 'Slight discount' : 'Overvalued / no FCF';
-  const src = document.getElementById('dcf-data-source');
-  if (src) src.textContent = `beta ${s.beta} · gross margin ${s.gross_margins}%`;
 }
 
 function dcfRenderScenarios() {
