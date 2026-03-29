@@ -2826,7 +2826,7 @@ def get_dcf_analysis(ticker):
                           "text": "No significant risk flags detected — verify with latest 10-K"})
 
         # ── Catalysts: pull narrative from streetwise_data.json ───────────────
-        db       = _load_db()
+        db       = load_data_raw()
         rec_db   = next((r for r in db if r.get("t","").upper() == sym), {})
         cats     = []
         if rec_db.get("bull"):
