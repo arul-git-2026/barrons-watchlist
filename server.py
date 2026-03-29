@@ -2737,37 +2737,49 @@ def get_dcf_analysis(ticker):
         shares_r  = info.get("sharesOutstanding", 0) or 0
         shares    = round(shares_r / 1e9, 3)            # billions
 
-        # ── WACC: CAPM + after-tax cost of debt (late March 2026 calibration) ─────
-        # RF  = 4.44% (10Y UST late-March 2026, geopolitical risk premium)
-        # ERP = 5.0%  (standard US 2026 equity risk premium)
-        # Sector beta bounds — clamp yfinance beta to its GICS sector range
-        # so noisy/stale betas don't distort WACC
-        _SECTOR_BETA = {
-            "Technology":          (1.25, 1.40),
-            "Basic Materials":     (1.15, 1.25),
-            "Energy":              (1.10, 1.20),
-            "Financial Services":  (1.05, 1.15),
-            "Industrials":         (1.00, 1.10),
-            "Consumer Cyclical":   (1.00, 1.10),
-            "Communication Services": (0.95, 1.05),
-            "Real Estate":         (0.85, 0.95),
-            "Healthcare":          (0.75, 0.85),
-            "Consumer Defensive":  (0.60, 0.70),
-            "Utilities":           (0.55, 0.65),
+        # ── WACC: Hamada re-levering + CAPM (late March 2026) ────────────────────
+        # Method: Pure Play approach (Damodaran Jan 2026 unlevered betas)
+        #   Step 1 — take sector unlevered beta (business risk only, no leverage noise)
+        #   Step 2 — re-lever with this stock's actual D/E → stock-specific levered beta
+        #   Step 3 — CAPM: Cost of Equity = RF + β_L × ERP
+        # RF = 4.44% (10Y UST March 2026) · ERP = 5.0% · Tax = 21%
+        _SECTOR_U_BETA = {
+            "Technology":             1.15,
+            "Healthcare":             0.82,
+            "Financial Services":     0.45,
+            "Energy":                 0.58,
+            "Consumer Cyclical":      0.88,
+            "Consumer Defensive":     0.65,
+            "Basic Materials":        0.96,
+            "Industrials":            0.89,
+            "Real Estate":            0.40,
+            "Communication Services": 0.85,
+            "Utilities":              0.35,
         }
-        raw_beta      = float(info.get("beta", 1.0) or 1.0)
-        _sec_tmp      = info.get("sector", "")
-        _b_lo, _b_hi  = _SECTOR_BETA.get(_sec_tmp, (0.5, 2.0))
-        beta          = round(max(_b_lo, min(_b_hi, raw_beta)), 2)
-        rf            = 4.44                            # 10Y UST late-March 2026
-        erp           = 5.0                             # US ERP 2026
-        cost_equity   = rf + beta * erp
-        equity_mv     = price * shares_r
-        total_capital = equity_mv + debt
-        dw            = (debt / total_capital) if total_capital > 0 else 0.25
-        ew            = 1.0 - dw
-        cost_debt_at  = 5.0 * (1 - 0.21)              # after-tax @ 21% corp tax
-        wacc_raw      = ew * cost_equity + dw * cost_debt_at
+        TAX            = 0.21
+        rf             = 4.44
+        erp            = 5.0
+        _sec_tmp       = info.get("sector", "")
+        raw_beta       = float(info.get("beta", 1.0) or 1.0)
+        equity_mv      = price * shares_r
+        de_ratio       = (debt / equity_mv) if equity_mv > 0 else 0.25
+
+        if _sec_tmp in _SECTOR_U_BETA:
+            # Hamada: β_L = β_U × (1 + (1-T) × D/E)
+            u_beta = _SECTOR_U_BETA[_sec_tmp]
+            beta   = round(u_beta * (1 + (1 - TAX) * de_ratio), 2)
+            beta   = max(0.20, min(3.0, beta))          # hard floor/cap for extreme leverage
+        else:
+            # Fallback: use raw yfinance beta, bounded to reasonable range
+            u_beta = None
+            beta   = round(max(0.5, min(2.5, raw_beta)), 2)
+
+        cost_equity    = rf + beta * erp
+        total_capital  = equity_mv + debt
+        dw             = (debt / total_capital) if total_capital > 0 else 0.25
+        ew             = 1.0 - dw
+        cost_debt_at   = 5.0 * (1 - TAX)               # after-tax cost of debt
+        wacc_raw       = ew * cost_equity + dw * cost_debt_at
 
         # ── Growth rate estimation from analyst estimates ─────────────────────
         eg    = float(info.get("earningsGrowth",  0) or 0) * 100
@@ -3061,6 +3073,8 @@ def get_dcf_analysis(ticker):
             "mos":           mos,
             "beta":          beta,
             "beta_raw":      round(raw_beta, 2),
+            "beta_u":        round(u_beta, 2) if u_beta else None,
+            "de_ratio":      round(de_ratio, 2),
             "gross_margins": round(gm * 100, 1),
             "risks":         risks,
             "cats":          cats,

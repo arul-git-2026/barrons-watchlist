@@ -4637,8 +4637,12 @@ function dcfRenderDCF() {
   document.getElementById('dcf-d-g1').textContent       = `${s.g1_base}% / yr`;
   document.getElementById('dcf-d-g2').textContent       = `${s.g2_base}% / yr  (phase 2, yr 6–${s.tv_horizon || 10})`;
   document.getElementById('dcf-d-tvmethod').textContent = s.tv_label || '—';
-  const betaNote = s.beta_raw !== s.beta ? ` · raw β ${s.beta_raw} → clamped to sector range` : '';
-  document.getElementById('dcf-d-wacc').textContent = `${_dcfWACC.toFixed(1)}%  (RF ${s.wacc_rf}% + β${s.beta}×${s.wacc_erp}%${betaNote})`;
+  const betaNote = s.beta_u != null
+    ? `β_U ${s.beta_u} × (1 + 0.79 × D/E ${s.de_ratio}) = β_L ${s.beta}`
+    : `β ${s.beta} (yfinance raw)`;
+  document.getElementById('dcf-d-wacc').textContent = `${_dcfWACC.toFixed(1)}%`;
+  const src = document.getElementById('dcf-data-source');
+  if (src) src.textContent = `Hamada re-levered · ${betaNote} · RF ${s.wacc_rf}% + β×${s.wacc_erp}% ERP`;
   document.getElementById('dcf-d-pvfcf').textContent  = `$${res.pv}B`;
   document.getElementById('dcf-d-tv').textContent     = `$${res.pvtv}B`;
   document.getElementById('dcf-d-ev').textContent     = `$${res.ev}B`;
