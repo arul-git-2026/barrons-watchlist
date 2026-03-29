@@ -1359,6 +1359,55 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         </div>
 
       </div><!-- /dcf-content -->
+
+      <!-- ── Portfolio DCF Screener ─────────────────────────────────── -->
+      <div style="margin-top:14px;border:.5px solid var(--border);border-radius:12px;padding:16px;background:var(--card)">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <span style="font-size:13px;font-weight:500;color:var(--text)">Portfolio Screener</span>
+          <span style="font-size:11px;color:var(--muted)">Margin of safety</span>
+          <select id="dcf-mos-op" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--text)">
+            <option value="gte">≥</option>
+            <option value="lte">≤</option>
+            <option value="eq">≈</option>
+          </select>
+          <input type="number" id="dcf-mos-val" value="20" min="-100" max="200" step="5"
+            style="width:64px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:right">
+          <span style="font-size:12px;color:var(--muted)">%</span>
+          <button id="dcf-run-btn" onclick="dcfRunScreener()"
+            style="padding:5px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">
+            ▶ Run
+          </button>
+          <button onclick="dcfFilterScreener()" title="Re-apply filter to cached results"
+            style="padding:5px 10px;border:1px solid var(--border);background:var(--bg);border-radius:6px;font-size:12px;cursor:pointer">
+            Filter
+          </button>
+          <span id="dcf-scr-progress" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
+          <span style="font-size:11px;color:var(--muted);margin-left:auto" id="dcf-scr-count"></span>
+        </div>
+
+        <!-- Results table -->
+        <div style="overflow-x:auto">
+          <table class="dcf-screener-table" id="dcf-scr-tbl" style="display:none">
+            <thead>
+              <tr>
+                <th>Ticker</th><th>Name</th><th>Sector</th>
+                <th>Price</th><th>DCF IV (base)</th>
+                <th>Margin of Safety</th>
+                <th>EV/EBITDA</th><th>Div</th><th>Beta</th>
+                <th>TV method</th><th>Rating</th>
+              </tr>
+            </thead>
+            <tbody id="dcf-scr-body"></tbody>
+          </table>
+        </div>
+        <div id="dcf-scr-empty" style="display:none;font-size:12px;color:var(--muted);padding:8px 0">
+          No stocks match the filter.
+        </div>
+        <div id="dcf-scr-hint" style="font-size:11px;color:var(--muted);line-height:1.6">
+          Click <strong>▶ Run</strong> to scan all stocks in your database.<br>
+          Results are cached — subsequent runs are instant. Click a row to load the full DCF.
+        </div>
+      </div>
     </div>
 
     <!-- Chart card — TradingView widget -->
@@ -4669,6 +4718,100 @@ function dcfRenderAll() {
   dcfRenderScenarios();
   dcfRenderRisks();
   dcfRenderCatalysts();
+}
+
+// ── DCF Portfolio Screener ─────────────────────────────────────────
+const _scrCache = {};      // ticker → API result (persists across runs)
+let   _scrRunning = false;
+
+async function dcfRunScreener() {
+  if (_scrRunning) return;
+  _scrRunning = true;
+
+  const btn      = document.getElementById('dcf-run-btn');
+  const progress = document.getElementById('dcf-scr-progress');
+  const hint     = document.getElementById('dcf-scr-hint');
+  if (hint) hint.style.display = 'none';
+  btn.disabled    = true;
+  btn.textContent = '⏳ Scanning…';
+
+  const tickers = allData.filter(d => d.y !== 'ETF').map(d => d.t);
+  let done = 0;
+
+  for (const t of tickers) {
+    progress.textContent = `${done} / ${tickers.length} — ${t}`;
+    if (!_scrCache[t]) {
+      try {
+        const res  = await fetch(`/api/dcf/${t}`);
+        const data = await res.json();
+        if (data.ok) _scrCache[t] = data;
+      } catch (_) {}
+    }
+    done++;
+    // Refresh table every 5 tickers so user sees live progress
+    if (done % 5 === 0) dcfFilterScreener();
+  }
+
+  dcfFilterScreener();
+  progress.textContent = `${done} stocks scanned · click Filter to change threshold`;
+  btn.disabled    = false;
+  btn.textContent = '▶ Run';
+  _scrRunning = false;
+}
+
+function dcfFilterScreener() {
+  const op     = document.getElementById('dcf-mos-op').value;
+  const thresh = parseFloat(document.getElementById('dcf-mos-val').value) || 0;
+  const tbl    = document.getElementById('dcf-scr-tbl');
+  const body   = document.getElementById('dcf-scr-body');
+  const empty  = document.getElementById('dcf-scr-empty');
+  const count  = document.getElementById('dcf-scr-count');
+
+  const all = Object.values(_scrCache).filter(d => d.mos != null);
+
+  const rows = all.filter(d => {
+    const m = d.mos;
+    if (op === 'gte') return m >= thresh;
+    if (op === 'lte') return m <= thresh;
+    if (op === 'eq')  return Math.abs(m - thresh) <= 5;
+    return true;
+  }).sort((a, b) => (b.mos || 0) - (a.mos || 0));
+
+  count.textContent = rows.length
+    ? `${rows.length} of ${all.length} stocks`
+    : '';
+
+  if (!rows.length) {
+    tbl.style.display   = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  tbl.style.display   = '';
+  empty.style.display = 'none';
+
+  body.innerHTML = rows.map(r => {
+    const mos    = r.mos || 0;
+    const sign   = mos >= 0 ? '+' : '';
+    const mosCls = mos >= 30 ? 'dcf-mos-high' : mos >= 10 ? 'dcf-mos-mid' : 'dcf-mos-low';
+    const rCls   = r.rating === 'buy'  ? 'dcf-badge-buy'
+                 : r.rating === 'hold' ? 'dcf-badge-hold' : 'dcf-badge-watch';
+    const tvShort = r.tv_method === 'perpetuity' ? `Perp. ${r.tgr}%`
+                  : `Exit ${r.exit_mult}×`;
+    const deep   = mos >= 30 ? 'background:var(--bg)' : '';
+    return `<tr onclick="dcfSelectStock('${r.ticker}')" style="cursor:pointer;${deep}" title="Click to load full DCF">
+      <td style="font-weight:600">${r.ticker}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${r.name}</td>
+      <td style="font-size:11px;color:var(--muted)">${r.sector || '—'}</td>
+      <td>$${r.price}</td>
+      <td style="font-weight:500">${r.iv_base != null ? '$' + r.iv_base : '—'}</td>
+      <td><span class="dcf-mos-pill ${mosCls}">${sign}${mos}%</span></td>
+      <td style="font-size:11px">${r.ev_ebitda || '—'}</td>
+      <td style="font-size:11px">${r.div}</td>
+      <td style="font-size:11px">${r.beta}</td>
+      <td style="font-size:10px;color:var(--muted)">${tvShort}</td>
+      <td><span class="dcf-badge ${rCls}">${(r.rating || '').toUpperCase()}</span></td>
+    </tr>`;
+  }).join('');
 }
 
 // ── Boot ───────────────────────────────────────────────────────────

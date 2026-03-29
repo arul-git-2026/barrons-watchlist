@@ -3037,6 +3037,7 @@ def get_dcf_analysis(ticker):
             "pe":            pe_str,
             "evfcf":         evfcf_s,
             "ev_ebitda":     ev_ebitda_s,
+            "sector":        sector,
             "moat":          moat,
             "rating":        rating,
             "mos":           mos,
