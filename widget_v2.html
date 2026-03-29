@@ -1382,7 +1382,12 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
             Filter
           </button>
           <span id="dcf-scr-progress" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
-          <span style="font-size:11px;color:var(--muted);margin-left:auto" id="dcf-scr-count"></span>
+          <button id="dcf-csv-btn" onclick="dcfDownloadCSV()" style="display:none;margin-left:auto;
+            padding:5px 12px;border:1px solid var(--border);background:var(--bg);
+            border-radius:6px;font-size:12px;cursor:pointer" title="Download filtered list as CSV">
+            ⬇ CSV
+          </button>
+          <span style="font-size:11px;color:var(--muted)" id="dcf-scr-count"></span>
         </div>
 
         <!-- Results table -->
@@ -4788,6 +4793,8 @@ function dcfFilterScreener() {
   }
   tbl.style.display   = '';
   empty.style.display = 'none';
+  const csvBtn = document.getElementById('dcf-csv-btn');
+  if (csvBtn) csvBtn.style.display = '';
 
   body.innerHTML = rows.map(r => {
     const mos    = r.mos || 0;
@@ -4812,6 +4819,46 @@ function dcfFilterScreener() {
       <td><span class="dcf-badge ${rCls}">${(r.rating || '').toUpperCase()}</span></td>
     </tr>`;
   }).join('');
+}
+
+function dcfDownloadCSV() {
+  const op     = document.getElementById('dcf-mos-op').value;
+  const thresh = parseFloat(document.getElementById('dcf-mos-val').value) || 0;
+  const all    = Object.values(_scrCache).filter(d => d.mos != null);
+  const rows   = all.filter(d => {
+    const m = d.mos;
+    if (op === 'gte') return m >= thresh;
+    if (op === 'lte') return m <= thresh;
+    if (op === 'eq')  return Math.abs(m - thresh) <= 5;
+    return true;
+  }).sort((a, b) => (b.mos || 0) - (a.mos || 0));
+
+  if (!rows.length) return;
+
+  const headers = ['Ticker','Name','Sector','Price','DCF IV (Base)','Margin of Safety %',
+                   'EV/EBITDA','Div Yield','Beta','WACC %','TV Method','Exit Multiple',
+                   'FCF ($B)','EBITDA ($B)','Net Debt ($B)','Rating'];
+  const escape  = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines   = [headers.join(',')];
+
+  rows.forEach(r => {
+    lines.push([
+      r.ticker, r.name, r.sector || '',
+      r.price, r.iv_base ?? '', r.mos ?? '',
+      r.ev_ebitda || '', r.div, r.beta,
+      r.wacc_default, r.tv_method === 'perpetuity' ? `Perpetuity ${r.tgr}% TGR` : `Exit ${r.exit_mult}x EBITDA`,
+      r.exit_mult ?? '', r.fcf, r.ebitda ?? '', r.net_debt,
+      r.rating
+    ].map(escape).join(','));
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `dcf_screener_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── Boot ───────────────────────────────────────────────────────────
