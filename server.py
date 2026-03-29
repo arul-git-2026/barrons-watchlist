@@ -3000,7 +3000,49 @@ def crisis_monitor():
             "signal_note":   note,
         }
 
-    # ── 5. Frontline FRO — VLCC freight rate proxy ────────────────────────────
+    # ── 5. MOVE Index — bond market implied volatility ────────────────────────
+    # ICE BofA MOVE = bond market's VIX. Normal 70-80, crisis >100.
+    # At 111.95 (Mar 2026) = stagflation fear; Fed rate-cut expectations collapsing.
+    # Crisis-end signal: MOVE drops back below 80 (bond market calming).
+    # Source 1: ^MOVE via yfinance (works on some builds of yfinance)
+    # Source 2: 21-day rolling vol of ^TNX (10y Treasury yield) as proxy
+    try:
+        c = _yf_closes("^MOVE")
+        result["move"] = _yf_block("^MOVE", "MOVE Index", "", c, 80, "below",
+                                   "Crisis over when MOVE < 80")
+        result["move"]["sublabel"] = "Bond mkt implied vol"
+    except Exception:
+        # Fallback: annualised 21-day rolling σ of daily TNX changes (bps)
+        try:
+            tnx = _yf_closes("^TNX", period="90d")   # 10y yield in %
+            bps = tnx.diff().dropna() * 100           # daily change in basis points
+            vol = bps.rolling(21).std().dropna() * (252 ** 0.5)  # annualise
+            if vol.empty:
+                raise ValueError("TNX rolling vol empty")
+            cur   = float(vol.iloc[-1])
+            prev  = float(vol.iloc[-2]) if len(vol) > 1 else cur
+            w_ago = float(vol.iloc[-6]) if len(vol) >= 6 else prev
+            spark = [round(float(v), 1) for v in vol.tail(30).tolist()]
+            result["move"] = {
+                "label":      "MOVE (TNX proxy)",
+                "symbol":     "^TNX vol",
+                "unit":       " bp/yr",
+                "current":    round(cur, 1),
+                "pct_day":    round((cur - prev) / prev * 100, 2) if prev else 0,
+                "pct_week":   round((cur - w_ago) / w_ago * 100, 2) if w_ago else 0,
+                "high_52w":   round(float(vol.max()), 1),
+                "low_52w":    round(float(vol.min()), 1),
+                "spark":      spark,
+                "sublabel":   "21d realised TNX vol",
+                "signal_thresh": 40,    # proxy equivalent of MOVE ~80
+                "signal_dir":    "below",
+                "signal_note":   "Crisis over when bond vol < 40 bp/yr",
+            }
+        except Exception as ex2:
+            result["move"] = {"label": "MOVE Index", "symbol": "^MOVE",
+                              "error": str(ex2)}
+
+    # ── 6. Frontline FRO — VLCC freight rate proxy ────────────────────────────
     try:
         c      = _yf_closes("FRO", period="365d")
         cur    = float(c.iloc[-1])
@@ -3032,6 +3074,7 @@ def crisis_monitor():
     log.info(
         f"  crisis-monitor: VIX={result.get('vix',{}).get('current','?')} "
         f"F&G={result.get('fg',{}).get('current','?')} "
+        f"MOVE={result.get('move',{}).get('current','?')} "
         f"spread={result.get('spread',{}).get('current','?')} "
         f"TTF={result.get('ttf',{}).get('current','?')} "
         f"FRO={result.get('tanker',{}).get('current','?')}"

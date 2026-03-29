@@ -841,7 +841,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 .cs-status.watch{background:#fef3c7;color:#92400e}
 .cs-status.easing{background:#e6f4ea;color:#137333}
 /* Cards */
-.crisis-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.crisis-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
 .crisis-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;
   padding:12px 14px;display:flex;flex-direction:column;gap:3px;overflow:hidden;position:relative}
 .cc-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
@@ -870,7 +870,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
   font-family:var(--font);color:var(--text);white-space:nowrap}
 #crisis-toggle-btn.on{background:#7f1d1d;color:#fff;border-color:#7f1d1d}
 .crisis-ts{font-size:10px;color:var(--muted)}
-@media(max-width:1100px){.crisis-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1300px){.crisis-grid{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:900px){.crisis-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.crisis-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:400px){.crisis-grid{grid-template-columns:1fr}}
 </style>
@@ -1184,7 +1185,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       <div id="crisis-summary" style="display:none">
         <div>
           <span class="cs-count" id="cs-count">0</span>
-          <span style="font-size:13px;font-weight:700;color:var(--muted)">/6</span>
+          <span style="font-size:13px;font-weight:700;color:var(--muted)">/7</span>
         </div>
         <div class="cs-label">CRISIS-END<br>SIGNALS</div>
         <div class="cs-bar"><div class="cs-bar-fill" id="cs-bar-fill"></div></div>
@@ -4048,7 +4049,8 @@ function crisisSignalOn(key, d) {
   if (key === 'spread') return v < t;                        // spread < $2
   if (key === 'ttf')    return v <= t;                       // JKM-TTF spread ≤ 0
   if (key === 'tanker') return (d.pct_from_peak ?? 0) < t;  // FRO down >20% from peak
-  if (key === 'pcr')    return v < t;                        // P/C ratio < 0.70
+  if (key === 'pcr')    return v < t;                        // SKEW < 130
+  if (key === 'move')   return v < t;                        // MOVE < 80 (or proxy < 40)
   return false;
 }
 
@@ -4121,15 +4123,23 @@ function crisisRisk(key, d) {
     if (val >= 115) return {label:'NORMAL',       cls:'normal'};
     return              {label:'CALM',        cls:'calm'};
   }
+  // MOVE Index: bond market implied vol. Normal 70-80, crisis >100
+  if (key === 'move') {
+    if (val >= 120) return {label:'EXTREME',   cls:'extreme'};
+    if (val >= 100) return {label:'CRISIS',    cls:'fear'};
+    if (val >= 80)  return {label:'ELEVATED',  cls:'elevated'};
+    if (val >= 60)  return {label:'NORMAL',    cls:'normal'};
+    return              {label:'CALM',     cls:'calm'};
+  }
   return {label:'N/A', cls:'normal'};
 }
 
 function renderCrisisGrid(data, grid) {
-  const KEYS = ['vix', 'fg', 'pcr', 'spread', 'ttf', 'tanker'];
+  const KEYS = ['vix', 'fg', 'move', 'pcr', 'spread', 'ttf', 'tanker'];
   const COLORS = {
     calm:'#137333', normal:'#1a73e8', elevated:'#b45309', fear:'#c5221f', extreme:'#7f1d1d'
   };
-  const BAR_COLORS = ['#c5221f','#c5221f','#c5221f','#f59e0b','#f59e0b','#137333','#137333'];
+  const BAR_COLORS = ['#c5221f','#c5221f','#c5221f','#f59e0b','#f59e0b','#f59e0b','#137333','#137333'];
 
   // ── count active "crisis over" signals ──────────────────────────────────────
   const signalCount = KEYS.filter(k => crisisSignalOn(k, data[k])).length;
@@ -4141,7 +4151,7 @@ function renderCrisisGrid(data, grid) {
     const statusEl = document.getElementById('cs-status');
     const descEl   = document.getElementById('cs-desc');
     if (countEl)  { countEl.textContent = signalCount; countEl.className = `cs-count c${signalCount}`; }
-    if (fillEl)   { fillEl.style.width = `${signalCount / 6 * 100}%`; fillEl.style.background = BAR_COLORS[signalCount]; }
+    if (fillEl)   { fillEl.style.width = `${signalCount / 7 * 100}%`; fillEl.style.background = BAR_COLORS[signalCount]; }
     const msgs = [
       ['DANGER',  'danger',  'All indicators point to ongoing crisis. No de-escalation signals.'],
       ['DANGER',  'danger',  'Crisis continues. Monitor for further signals.'],
@@ -4149,7 +4159,8 @@ function renderCrisisGrid(data, grid) {
       ['WATCH',   'watch',   '3 signals active — early de-escalation signs. Watch closely.'],
       ['WATCH',   'watch',   '4 signals active — momentum building. Crisis may be peaking.'],
       ['EASING',  'easing',  '5 signals active — strong de-escalation. Prepare for reversal.'],
-      ['EASING',  'easing',  'All 6 signals active — crisis likely over. Market to reprice rapidly.'],
+      ['EASING',  'easing',  '6 signals active — crisis likely over. Markets repricing.'],
+      ['EASING',  'easing',  'All 7 signals active — crisis over. Expect sharp market reversal.'],
     ];
     const [sl, sc, sd] = msgs[signalCount];
     if (statusEl)  { statusEl.textContent = sl; statusEl.className = `cs-status ${sc}`; }
@@ -4201,6 +4212,9 @@ function renderCrisisGrid(data, grid) {
     if (key === 'fg') {
       valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
         <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.rating || ''}</div>`;
+    } else if (key === 'move') {
+      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.sublabel||'bond implied vol'}</div>`;
     } else if (key === 'ttf') {
       // Gas spread card — labels adapt to whichever source fired
       const isProxy = (d.data_source || '').includes('HH') || (d.symbol||'').includes('HH');
