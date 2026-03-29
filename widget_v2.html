@@ -1317,11 +1317,13 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
               <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:6px" id="dcf-data-source"></span>
             </div>
             <div class="dcf-row"><span class="dcf-key">FCF (TTM, $B)</span><span class="dcf-val" id="dcf-d-fcf">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">EBITDA (TTM, $B)</span><span class="dcf-val" id="dcf-d-ebitda">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">EV / EBITDA (live)</span><span class="dcf-val" id="dcf-d-eveb">—</span></div>
             <div class="dcf-row"><span class="dcf-key">Beta</span><span class="dcf-val" id="dcf-d-beta">—</span></div>
             <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 1 (yr 1–5)</span><span class="dcf-val" id="dcf-d-g1">—</span></div>
-            <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 2 (yr 6–10)</span><span class="dcf-val" id="dcf-d-g2">—</span></div>
-            <div class="dcf-row"><span class="dcf-key">Terminal growth rate</span><span class="dcf-val" id="dcf-d-tgr">—</span></div>
-            <div class="dcf-row"><span class="dcf-key">WACC (auto-estimated)</span><span class="dcf-val" id="dcf-d-wacc">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 2</span><span class="dcf-val" id="dcf-d-g2">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Terminal value method</span><span class="dcf-val" id="dcf-d-tvmethod">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">WACC (RF 3.96% + β×4.4%)</span><span class="dcf-val" id="dcf-d-wacc">—</span></div>
             <div class="dcf-row"><span class="dcf-key">PV of FCFs ($B)</span><span class="dcf-val" id="dcf-d-pvfcf">—</span></div>
             <div class="dcf-row"><span class="dcf-key">Terminal value PV ($B)</span><span class="dcf-val" id="dcf-d-tv">—</span></div>
             <div class="dcf-row"><span class="dcf-key">Enterprise value ($B)</span><span class="dcf-val" id="dcf-d-ev">—</span></div>
@@ -4574,12 +4576,14 @@ function dcfRenderDCF() {
     });
     return;
   }
-  document.getElementById('dcf-d-fcf').textContent    = `$${s.fcf}B`;
-  document.getElementById('dcf-d-beta').textContent   = s.beta;
-  document.getElementById('dcf-d-g1').textContent     = `${s.g1_base}% / yr`;
-  document.getElementById('dcf-d-g2').textContent     = `${s.g2_base}% / yr`;
-  document.getElementById('dcf-d-tgr').textContent    = `${s.tgr}%`;
-  document.getElementById('dcf-d-wacc').textContent   = `${_dcfWACC.toFixed(1)}%`;
+  document.getElementById('dcf-d-fcf').textContent      = `$${s.fcf}B`;
+  document.getElementById('dcf-d-ebitda').textContent   = s.ebitda ? `$${s.ebitda}B` : 'N/A';
+  document.getElementById('dcf-d-eveb').textContent     = s.ev_ebitda || 'N/A';
+  document.getElementById('dcf-d-beta').textContent     = s.beta;
+  document.getElementById('dcf-d-g1').textContent       = `${s.g1_base}% / yr`;
+  document.getElementById('dcf-d-g2').textContent       = `${s.g2_base}% / yr  (phase 2, yr 6–${s.tv_horizon || 10})`;
+  document.getElementById('dcf-d-tvmethod').textContent = s.tv_label || '—';
+  document.getElementById('dcf-d-wacc').textContent     = `${_dcfWACC.toFixed(1)}%  (RF ${s.wacc_rf}% + β${s.beta}×${s.wacc_erp}%)`;
   document.getElementById('dcf-d-pvfcf').textContent  = `$${res.pv}B`;
   document.getElementById('dcf-d-tv').textContent     = `$${res.pvtv}B`;
   document.getElementById('dcf-d-ev').textContent     = `$${res.ev}B`;

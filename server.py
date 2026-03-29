@@ -2726,75 +2726,249 @@ def get_dcf_analysis(ticker):
         mktcap_r  = info.get("marketCap", 0) or 0
         mktcap    = f"${mktcap_r/1e9:.1f}B" if mktcap_r >= 1e9 else f"${mktcap_r/1e6:.0f}M"
 
-        # ── Free cash flow & balance sheet ────────────────────────────────────
+        # ── Free cash flow, EBITDA & balance sheet ────────────────────────────
         fcf_r     = info.get("freeCashflow", 0) or 0
         fcf       = round(fcf_r / 1e9, 2)               # $B
+        ebitda_r  = info.get("ebitda", 0) or 0
+        ebitda    = round(ebitda_r / 1e9, 2)             # $B
         debt      = info.get("totalDebt",  0) or 0
         cash      = info.get("totalCash",  0) or 0
         net_debt  = round((debt - cash) / 1e9, 1)       # $B
         shares_r  = info.get("sharesOutstanding", 0) or 0
         shares    = round(shares_r / 1e9, 3)            # billions
 
-        # ── WACC estimation from capital structure + beta ─────────────────────
+        # ── WACC: CAPM + after-tax cost of debt (March 2026 calibration) ────────
+        # RF = 10Y UST 3.96% (March 2026); ERP = 4.4% (Damodaran consensus)
         beta          = float(info.get("beta", 1.0) or 1.0)
         beta          = max(0.5, min(2.5, beta))
-        rf            = 4.5                             # ~current 10Y UST %
-        erp           = 5.5                             # equity risk premium %
+        rf            = 3.96                            # 10Y UST March 2026
+        erp           = 4.4                             # equity risk premium
         cost_equity   = rf + beta * erp
         equity_mv     = price * shares_r
         total_capital = equity_mv + debt
         dw            = (debt / total_capital) if total_capital > 0 else 0.25
         ew            = 1.0 - dw
-        cost_debt_at  = 5.5 * (1 - 0.21)              # after-tax cost of debt
-        wacc_calc     = round(ew * cost_equity + dw * cost_debt_at, 1)
-        wacc          = max(6.0, min(14.0, wacc_calc))
+        cost_debt_at  = 5.0 * (1 - 0.21)              # after-tax @ 21% corp tax
+        wacc_raw      = ew * cost_equity + dw * cost_debt_at
 
-        # ── Growth rate estimation ────────────────────────────────────────────
-        eg   = float(info.get("earningsGrowth",  0) or 0) * 100
-        rg   = float(info.get("revenueGrowth",   0) or 0) * 100
-        g_raw = eg if abs(eg) > 0.5 else rg  # prefer earnings, fallback revenue
+        # ── Growth rate estimation from analyst estimates ─────────────────────
+        eg    = float(info.get("earningsGrowth",  0) or 0) * 100
+        rg    = float(info.get("revenueGrowth",   0) or 0) * 100
+        g_raw = eg if abs(eg) > 0.5 else rg
         g1_base = round(max(-15.0, min(25.0, g_raw if g_raw != 0 else 3.0)), 1)
         g1_bull = round(g1_base + 5.0, 1)
         g1_bear = round(g1_base - 5.0, 1)
-        # Phase 2 mean-reverts toward sector average
-        g2_base = round(max(0.0, g1_base * 0.55), 1)
+        g2_base = round(max(0.0, g1_base * 0.55), 1)   # phase 2 mean-reverts
         g2_bull = round(max(0.0, g1_bull * 0.55), 1)
         g2_bear = round(g1_bear * 0.55, 1)
-        tgr      = 2.5
 
-        # ── Valuation multiples ───────────────────────────────────────────────
-        pe_v    = info.get("forwardPE") or info.get("trailingPE")
-        pe_str  = f"Fwd P/E: {pe_v:.1f}×" if pe_v else "P/E: N/A"
-        dy      = info.get("dividendYield", 0) or 0
-        div_str = f"{dy*100:.1f}%" if dy else "0%"
-        ev_r    = info.get("enterpriseValue", 0) or 0
-        evfcf_v = round(ev_r / fcf_r, 1) if fcf_r > 0 else None
-        evfcf_s = f"{evfcf_v}×" if evfcf_v else "N/A"
-        gm      = info.get("grossMargins", 0) or 0
-        moat    = "Wide" if (mktcap_r > 50e9 and gm > 0.40) else "Narrow"
+        # ── Valuation multiples (live market data) ───────────────────────────────
+        pe_v         = info.get("forwardPE") or info.get("trailingPE")
+        pe_str       = f"Fwd P/E: {pe_v:.1f}×" if pe_v else "P/E: N/A"
+        dy           = info.get("dividendYield", 0) or 0
+        div_str      = f"{dy*100:.1f}%" if dy else "0%"
+        ev_r         = info.get("enterpriseValue", 0) or 0
+        evfcf_v      = round(ev_r / fcf_r, 1)    if fcf_r    > 0 else None
+        ev_ebitda_v  = round(ev_r / ebitda_r, 1) if ebitda_r > 0 else None
+        evfcf_s      = f"{evfcf_v}×"    if evfcf_v    else "N/A"
+        ev_ebitda_s  = f"{ev_ebitda_v}×" if ev_ebitda_v else "N/A"
+        gm           = info.get("grossMargins", 0) or 0
+        moat         = "Wide" if (mktcap_r > 50e9 and gm > 0.40) else "Narrow"
 
-        # ── DCF computation ───────────────────────────────────────────────────
-        def _iv(f, g1, g2, tg, w, nd, sh):
-            if sh <= 0 or f <= 0:
+        # ── Terminal value method — full GICS sector table (March 2026) ──────────
+        # Source: user-provided sector calibration + Damodaran 2026 data
+        # RF = 3.96% (10Y UST), ERP = 4.4%
+        # Each sector: (wacc_lo, wacc_hi, tv_method, tv_horizon, tgr, mult_base, mult_bull, mult_bear)
+        sector   = info.get("sector", "")
+        industry = info.get("industry", "")
+
+        # Ticker-level overrides for mega-cap Big Tech
+        _BIGTECH_TICKERS = {"AMZN","GOOGL","GOOG","META","MSFT","NVDA"}
+        _FINTECH_TICKERS = {"PYPL","SQ","GPN","FIS"}
+        _FINTECH_INDS    = {"Payment","Credit Services","Capital Markets","Insurance"}
+
+        ev_ebitda_live = ev_ebitda_v or 9.0
+
+        if sym in _BIGTECH_TICKERS or (
+            sector == "Technology" and mktcap_r > 500e9
+        ):
+            # Big Tech — perpetuity, WACC 9.0–10.5%, long reinvestment runway
+            wacc           = round(max(9.0, min(10.5, wacc_raw)), 1)
+            tv_method      = "perpetuity"
+            tv_horizon     = 10
+            tgr            = 3.0 if sym == "AMZN" else 2.5
+            exit_mult_base = exit_mult_bull = exit_mult_bear = None
+            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%"
+
+        elif sector == "Technology":
+            # Mid-cap Tech — perpetuity, slightly higher WACC
+            wacc           = round(max(9.0, min(10.5, wacc_raw)), 1)
+            tv_method      = "perpetuity"
+            tv_horizon     = 10
+            tgr            = 2.5
+            exit_mult_base = exit_mult_bull = exit_mult_bear = None
+            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%"
+
+        elif sector == "Healthcare":
+            # Pharma/Healthcare — 5yr EBITDA exit; patent cliffs limit visibility
+            wacc           = round(max(7.5, min(8.5, wacc_raw)), 1)
+            tv_method      = "exit_multiple"
+            tv_horizon     = 5
+            tgr            = None
+            exit_mult_base = 13.0 if ev_ebitda_live >= 12 else 9.5
+            exit_mult_bull = exit_mult_base + 2.0
+            exit_mult_bear = max(exit_mult_base - 2.0, 5.0)
+            tv_label       = f"{exit_mult_base}× EV/EBITDA exit yr 5  ·  WACC {wacc}%"
+
+        elif sector == "Financial Services" or sym in _FINTECH_TICKERS or any(k in industry for k in _FINTECH_INDS):
+            # Fintech/Payments — FCF multiple, high regulatory WACC
+            wacc           = round(max(9.5, min(11.0, wacc_raw)), 1)
+            tv_method      = "exit_multiple"
+            tv_horizon     = 10
+            tgr            = None
+            exit_mult_base = 12.0
+            exit_mult_bull = 17.0
+            exit_mult_bear =  9.0
+            tv_label       = f"12× FCF exit yr 10  ·  WACC {wacc}%  (fintech)"
+
+        elif sector == "Energy":
+            # Energy — commodity-linked, high WACC, EBITDA exit
+            wacc           = round(max(10.0, min(12.0, wacc_raw)), 1)
+            tv_method      = "exit_multiple"
+            tv_horizon     = 10
+            tgr            = None
+            exit_mult_base = 6.0
+            exit_mult_bull = 7.0
+            exit_mult_bear = 5.0
+            tv_label       = f"6× EV/EBITDA exit yr 10  ·  WACC {wacc}%  (energy)"
+
+        elif sector == "Real Estate":
+            # REITs — use NOI cap-rate; approximated as exit multiple on EBITDA
+            wacc           = round(max(7.0, min(8.0, wacc_raw)), 1)
+            tv_method      = "exit_multiple"
+            tv_horizon     = 10
+            tgr            = None
+            exit_mult_base = 15.0  # ~6.5% cap rate ≈ 15× NOI
+            exit_mult_bull = 18.0
+            exit_mult_bear = 13.0
+            tv_label       = f"~6.5% cap rate (15× NOI)  ·  WACC {wacc}%  (REIT)"
+
+        elif sector == "Industrials":
+            # Cyclical industrials — GDP-linked, EBITDA exit
+            wacc           = round(max(8.5, min(9.5, wacc_raw)), 1)
+            tv_method      = "exit_multiple"
+            tv_horizon     = 10
+            tgr            = None
+            exit_mult_base = 13.0
+            exit_mult_bull = 15.0
+            exit_mult_bear = 10.0
+            tv_label       = f"13× EV/EBITDA exit yr 10  ·  WACC {wacc}%  (industrials)"
+
+        elif sector == "Consumer Cyclical":
+            # Consumer discretionary — spend-sensitive
+            wacc           = round(max(9.0, min(11.0, wacc_raw)), 1)
+            tv_method      = "exit_multiple"
+            tv_horizon     = 10
+            tgr            = None
+            exit_mult_base = 12.0
+            exit_mult_bull = 14.0
+            exit_mult_bear =  9.0
+            tv_label       = f"12× EV/EBITDA exit yr 10  ·  WACC {wacc}%  (cons. cyclical)"
+
+        elif sector == "Consumer Defensive":
+            # Staples — low vol, perpetuity appropriate
+            wacc           = round(max(7.0, min(8.0, wacc_raw)), 1)
+            tv_method      = "perpetuity"
+            tv_horizon     = 10
+            tgr            = 2.0
+            exit_mult_base = exit_mult_bull = exit_mult_bear = None
+            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%  (cons. defensive)"
+
+        elif sector == "Basic Materials":
+            # Asset-heavy, commodity-linked, highest WACC
+            wacc           = round(max(10.5, min(12.5, wacc_raw)), 1)
+            tv_method      = "exit_multiple"
+            tv_horizon     = 10
+            tgr            = None
+            exit_mult_base = 7.0
+            exit_mult_bull = 9.0
+            exit_mult_bear = 5.0
+            tv_label       = f"7× EV/EBITDA exit yr 10  ·  WACC {wacc}%  (materials)"
+
+        elif sector == "Communication Services":
+            # High capex, utility-like — perpetuity
+            wacc           = round(max(8.5, min(10.0, wacc_raw)), 1)
+            tv_method      = "perpetuity"
+            tv_horizon     = 10
+            tgr            = 2.0
+            exit_mult_base = exit_mult_bull = exit_mult_bear = None
+            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%  (comm. services)"
+
+        elif sector == "Utilities":
+            # Rate-sensitive, dividend-driven — low WACC, perpetuity
+            wacc           = round(max(6.5, min(8.0, wacc_raw)), 1)
+            tv_method      = "perpetuity"
+            tv_horizon     = 10
+            tgr            = 1.5
+            exit_mult_base = exit_mult_bull = exit_mult_bear = None
+            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%  (utilities)"
+
+        else:
+            # Fallback
+            wacc           = round(max(7.0, min(12.0, wacc_raw)), 1)
+            tv_method      = "perpetuity"
+            tv_horizon     = 10
+            tgr            = 2.5
+            exit_mult_base = exit_mult_bull = exit_mult_bear = None
+            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%"
+
+        # ── DCF helpers ───────────────────────────────────────────────────────
+        def _project(fcf_b, ebitda_b, g1, g2, horizon):
+            """Project FCFs and EBITDA over `horizon` years (2-phase growth)."""
+            h1   = min(5, horizon)
+            h2   = max(0, horizon - h1)
+            fcfs = []
+            f, e = fcf_b, ebitda_b
+            for _ in range(h1):
+                f *= (1 + g1 / 100.0); e *= (1 + g1 / 100.0); fcfs.append(f)
+            for _ in range(h2):
+                f *= (1 + g2 / 100.0); e *= (1 + g2 / 100.0); fcfs.append(f)
+            return fcfs, e
+
+        def _pv(fcfs, r):
+            return sum(f / (1 + r) ** (y + 1) for y, f in enumerate(fcfs))
+
+        def _iv_perpetuity(fcf_b, ebitda_b, g1, g2, tg, w, nd, sh, horizon):
+            if sh <= 0 or fcf_b <= 0 or w / 100.0 <= tg / 100.0:
                 return None
-            pv = 0.0
-            r  = w / 100.0
-            for y in range(1, 6):
-                f *= (1 + g1 / 100.0)
-                pv += f / (1 + r) ** y
-            for y in range(6, 11):
-                f *= (1 + g2 / 100.0)
-                pv += f / (1 + r) ** y
-            if r <= tg / 100.0:
-                return None
-            tv   = f * (1 + tg / 100.0) / (r - tg / 100.0)
-            pvtv = tv / (1 + r) ** 10
-            ev   = pv + pvtv - nd
+            r            = w / 100.0
+            fcfs, _      = _project(fcf_b, ebitda_b, g1, g2, horizon)
+            pv_fcfs      = _pv(fcfs, r)
+            terminal_fcf = fcfs[-1]
+            tv           = terminal_fcf * (1 + tg / 100.0) / (r - tg / 100.0)
+            ev           = pv_fcfs + tv / (1 + r) ** horizon - nd
             return max(round(ev / sh, 0), 0)
 
-        iv_base = _iv(fcf, g1_base, g2_base, tgr, wacc,          net_debt, shares)
-        iv_bull = _iv(fcf, g1_bull, g2_bull, tgr, wacc * 0.90,   net_debt, shares)
-        iv_bear = _iv(fcf, g1_bear, g2_bear, tgr, wacc * 1.10,   net_debt, shares)
+        def _iv_exit_multiple(fcf_b, ebitda_b, g1, g2, mult, w, nd, sh, horizon):
+            if sh <= 0 or fcf_b <= 0 or ebitda_b <= 0:
+                return None
+            r              = w / 100.0
+            fcfs, ebitda_n = _project(fcf_b, ebitda_b, g1, g2, horizon)
+            pv_fcfs        = _pv(fcfs, r)
+            tv             = mult * ebitda_n           # exit mult × EBITDA at horizon
+            ev             = pv_fcfs + tv / (1 + r) ** horizon - nd
+            return max(round(ev / sh, 0), 0)
+
+        # ── Compute base / bull / bear intrinsic values ───────────────────────
+        _args = (fcf, ebitda, net_debt, shares, tv_horizon)
+        if tv_method == "perpetuity":
+            iv_base = _iv_perpetuity(*_args[:2], g1_base, g2_base, tgr, wacc,        *_args[2:])
+            iv_bull = _iv_perpetuity(*_args[:2], g1_bull, g2_bull, tgr, wacc * 0.90, *_args[2:])
+            iv_bear = _iv_perpetuity(*_args[:2], g1_bear, g2_bear, tgr, wacc * 1.10, *_args[2:])
+        else:
+            iv_base = _iv_exit_multiple(*_args[:2], g1_base, g2_base, exit_mult_base, wacc,        *_args[2:])
+            iv_bull = _iv_exit_multiple(*_args[:2], g1_bull, g2_bull, exit_mult_bull, wacc * 0.90, *_args[2:])
+            iv_bear = _iv_exit_multiple(*_args[:2], g1_bear, g2_bear, exit_mult_bear, wacc * 1.10, *_args[2:])
 
         mos = round(((iv_base - price) / iv_base * 100)) if iv_base else None
         rating = ("buy" if (mos or 0) > 25 else
@@ -2840,29 +3014,36 @@ def get_dcf_analysis(ticker):
                          "text": "No thesis data found. Add research notes via the sidebar."})
 
         result = {
-            "ok":           True,
-            "ticker":       sym,
-            "name":         info.get("longName", sym),
-            "price":        round(price, 2),
-            "mktcap":       mktcap,
-            "fcf":          fcf,
-            "g1_base":      g1_base,  "g1_bull": g1_bull,  "g1_bear": g1_bear,
-            "g2_base":      g2_base,  "g2_bull": g2_bull,  "g2_bear": g2_bear,
-            "tgr":          tgr,
-            "wacc_default": wacc,
-            "net_debt":     net_debt,
-            "shares":       shares,
-            "iv_base":      iv_base,  "iv_bull": iv_bull,  "iv_bear": iv_bear,
-            "div":          div_str,
-            "pe":           pe_str,
-            "evfcf":        evfcf_s,
-            "moat":         moat,
-            "rating":       rating,
-            "mos":          mos,
-            "beta":         round(beta, 2),
+            "ok":            True,
+            "ticker":        sym,
+            "name":          info.get("longName", sym),
+            "price":         round(price, 2),
+            "mktcap":        mktcap,
+            "fcf":           fcf,
+            "ebitda":        ebitda,
+            "g1_base":       g1_base,  "g1_bull": g1_bull,  "g1_bear": g1_bear,
+            "g2_base":       g2_base,  "g2_bull": g2_bull,  "g2_bear": g2_bear,
+            "tgr":           tgr,
+            "wacc_default":  wacc,
+            "wacc_rf":       rf,       "wacc_erp": erp,
+            "net_debt":      net_debt,
+            "shares":        shares,
+            "iv_base":       iv_base,  "iv_bull": iv_bull,  "iv_bear": iv_bear,
+            "tv_method":     tv_method,
+            "tv_horizon":    tv_horizon,
+            "tv_label":      tv_label,
+            "exit_mult":     exit_mult_base,
+            "div":           div_str,
+            "pe":            pe_str,
+            "evfcf":         evfcf_s,
+            "ev_ebitda":     ev_ebitda_s,
+            "moat":          moat,
+            "rating":        rating,
+            "mos":           mos,
+            "beta":          round(beta, 2),
             "gross_margins": round(gm * 100, 1),
-            "risks":        risks,
-            "cats":         cats,
+            "risks":         risks,
+            "cats":          cats,
         }
         _dcf_cache[sym] = {"ts": time.time(), "data": result}
         log.info(f"DCF {sym}: price={price} fcf={fcf}B iv_base={iv_base} wacc={wacc}%")
