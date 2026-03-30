@@ -2743,11 +2743,19 @@ def get_dcf_analysis(ticker):
         _OCF_TICKERS = {"AMZN","GOOGL","GOOG","META","MSFT","NVDA","AAPL","NFLX"}
         _use_ocf = (_sector_early == "Technology") or (sym in _OCF_TICKERS)
 
-        fcf_r      = info.get("freeCashflow", 0) or 0
+        # TTM freeCashflow — if missing, compute from cashflow statement (common for ADRs)
+        fcf_r      = info.get("freeCashflow") or 0
         fcf_source = "TTM"
         try:
             cf_df = tk.cashflow
             if cf_df is not None and not cf_df.empty:
+                # If info.freeCashflow was missing, compute TTM as OCF - CapEx
+                if fcf_r == 0 and "Operating Cash Flow" in cf_df.index and "Capital Expenditure" in cf_df.index:
+                    ocf_ttm = float(cf_df.loc["Operating Cash Flow"].dropna().iloc[0])
+                    capex_ttm = float(cf_df.loc["Capital Expenditure"].dropna().iloc[0])
+                    fcf_r = ocf_ttm + capex_ttm  # CapEx is negative in yfinance
+                    fcf_source = "TTM (OCF−CapEx)"
+
                 if _use_ocf and "Operating Cash Flow" in cf_df.index:
                     # Tech: OCF is the analyst-grade "normalized" FCF
                     ocf_hist = cf_df.loc["Operating Cash Flow"].dropna()
@@ -2768,7 +2776,7 @@ def get_dcf_analysis(ticker):
                         fcf_r = float(fcf_hist.iloc[:n].median())
                         fcf_source = f"{n}-yr median FCF"
         except Exception:
-            pass  # fall back to TTM
+            pass  # fall back to TTM or OCF−CapEx computed above
 
         ebitda_r  = info.get("ebitda", 0) or 0
         debt      = info.get("totalDebt",  0) or 0
