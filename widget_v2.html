@@ -1233,9 +1233,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <button id="crisis-toggle-btn" onclick="toggleCrisisPanel()" title="Global Crisis Monitor">
           🌍 Crisis Monitor
         </button>
-        <button id="dcf-toggle-btn" onclick="toggleDCFPanel()" title="Deep Value DCF Analysis">
-          📊 DCF Analysis
-        </button>
         <button id="wl-manage-btn" onclick="openWlModal()" title="Manage watchlist" style="display:none;border:1px solid #dadce0;background:#f8f9fa;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;white-space:nowrap">✏ Manage</button>
       </div>
     </div>
@@ -1263,8 +1260,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       </div>
     </div>
 
-    <!-- ── DCF Analysis Panel ────────────────────────────────────── -->
-    <div id="dcf-panel">
+    <!-- ── DCF Analysis Panel (hidden — temporarily removed) ─────── -->
+    <div id="dcf-panel" style="display:none!important">
       <div class="crisis-header">
         <h3>📊 DCF Analysis</h3>
         <span style="font-size:11px;color:var(--muted)" id="dcf-subtitle">Select a stock from your database</span>
