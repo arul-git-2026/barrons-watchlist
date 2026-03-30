@@ -2931,6 +2931,10 @@ def get_dcf_analysis(ticker):
         pe_v         = info.get("forwardPE") or info.get("trailingPE")
         pe_str       = f"Fwd P/E: {pe_v:.1f}×" if pe_v else "P/E: N/A"
         dy           = info.get("dividendYield", 0) or 0
+        # For ADRs, yfinance computes dividendYield = TWD_dividend / USD_price (mixed currencies)
+        # Apply FX correction: multiply by fx_rate to bring numerator to USD
+        if currency_converted and dy > 0:
+            dy = dy * fx_rate
         div_str      = f"{dy*100:.1f}%" if dy else "0%"
         ev_r         = info.get("enterpriseValue", 0) or 0
         evfcf_v      = round(ev_r / fcf_r, 1)    if fcf_r    > 0 else None
