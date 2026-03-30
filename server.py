@@ -2740,8 +2740,12 @@ def get_dcf_analysis(ticker):
         # Big Tech tickers that are NOT classified as "Technology" in yfinance
         # (e.g. AMZN = Consumer Cyclical, GOOGL = Communication Services)
         # but whose CapEx is primarily growth investment → use OCF like Tech
-        _OCF_TICKERS = {"AMZN","GOOGL","GOOG","META","MSFT","NVDA","AAPL","NFLX"}
-        _use_ocf = (_sector_early == "Technology") or (sym in _OCF_TICKERS)
+        # OCF (Operating Cash Flow) is used ONLY for software/platform Big Tech whose CapEx
+        # is discretionary growth investment (cloud infra, data centres).
+        # Semiconductor fabs (TSM, INTC, ASML), hardware (AAPL manufacturing), and all other
+        # sectors use FCF (OCF − CapEx) which reflects real cash generation after maintenance spend.
+        _OCF_TICKERS = {"AMZN","GOOGL","GOOG","META","MSFT","NFLX"}
+        _use_ocf = sym in _OCF_TICKERS
 
         # TTM freeCashflow — if missing, compute from cashflow statement (common for ADRs)
         fcf_r      = info.get("freeCashflow") or 0
