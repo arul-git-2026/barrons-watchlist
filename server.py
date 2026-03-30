@@ -2973,8 +2973,23 @@ def get_dcf_analysis(ticker):
             exit_mult_base = exit_mult_bull = exit_mult_bear = None
             tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%"
 
+        elif sector == "Technology" and industry in (
+            "Semiconductors", "Semiconductor Equipment & Materials",
+            "Electronic Components", "Electronic Manufacturing Services",
+        ):
+            # Semiconductor / hardware foundry — exit multiple, not perpetuity.
+            # Cyclical capex-heavy businesses; EV/EBITDA is the market's valuation language.
+            wacc           = round(max(9.0, min(11.0, wacc_raw)), 1)
+            tv_method      = "exit_multiple"
+            tv_horizon     = 5
+            tgr            = None
+            exit_mult_base = 15.0
+            exit_mult_bull = 18.0
+            exit_mult_bear = 12.0
+            tv_label       = f"15× EV/EBITDA exit yr 5  ·  WACC {wacc}%  (semiconductor)"
+
         elif sector == "Technology":
-            # Mid-cap Tech — perpetuity, slightly higher WACC
+            # Mid-cap software/platform Tech — perpetuity, long reinvestment runway
             wacc           = round(max(9.0, min(10.5, wacc_raw)), 1)
             tv_method      = "perpetuity"
             tv_horizon     = 10
