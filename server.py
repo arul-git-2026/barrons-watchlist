@@ -2781,19 +2781,32 @@ def get_dcf_analysis(ticker):
         trading_currency   = info.get("currency", "USD") or "USD"
         fx_rate = 1.0
         currency_converted = False
-        if financial_currency != "USD" and trading_currency == "USD":
+        # Fallback rates for common ADR pairs if yfinance FX fetch fails
+        _FX_FALLBACKS = {
+            "TWDUSD=X": 0.031,   # Taiwan Dollar
+            "HKDUSD=X": 0.128,   # Hong Kong Dollar
+            "BRLUSD=X": 0.200,   # Brazilian Real
+            "CNHUSD=X": 0.138,   # Chinese Yuan (offshore)
+            "KRWUSD=X": 0.00072, # Korean Won
+            "INRUSD=X": 0.012,   # Indian Rupee
+            "JPYUSD=X": 0.0067,  # Japanese Yen
+        }
+        if financial_currency != trading_currency:
+            pair = f"{financial_currency}{trading_currency}=X"
             try:
-                fx_ticker = yf.Ticker(f"{financial_currency}USD=X")
+                fx_ticker = yf.Ticker(pair)
                 fx_info   = fx_ticker.info
                 fx_rate   = float(
                     fx_info.get("regularMarketPrice")
                     or fx_info.get("previousClose")
-                    or 1.0
+                    or _FX_FALLBACKS.get(pair, 1.0)
                 )
-                if fx_rate > 0:
+                if fx_rate > 0 and fx_rate != 1.0:
                     currency_converted = True
             except Exception:
-                fx_rate = 1.0
+                fx_rate = _FX_FALLBACKS.get(pair, 1.0)
+                if fx_rate != 1.0:
+                    currency_converted = True
         # Apply FX conversion to all financial statement figures (shares stay as-is)
         fcf_r    *= fx_rate
         ebitda_r *= fx_rate
