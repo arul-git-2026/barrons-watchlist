@@ -2815,6 +2815,45 @@ def get_dcf_analysis(ticker):
                 fx_rate = _FX_FALLBACKS.get(pair, 1.0)
                 if fx_rate != 1.0:
                     currency_converted = True
+        # EBITDA fallback: if info.ebitda missing, approximate as operatingIncome + D&A
+        if ebitda_r == 0:
+            try:
+                op_inc = info.get("operatingIncome", 0) or 0
+                da = 0
+                if cf_df is not None and not cf_df.empty:
+                    for da_key in ("Depreciation And Amortization", "Depreciation Amortization Depletion"):
+                        if da_key in cf_df.index:
+                            da = float(cf_df.loc[da_key].dropna().iloc[0])
+                            break
+                if op_inc != 0:
+                    ebitda_r = op_inc + da
+            except Exception:
+                pass
+
+        # Debt fallback: try balance sheet if info.totalDebt missing
+        if debt == 0:
+            try:
+                bs = tk.balance_sheet
+                if bs is not None and not bs.empty:
+                    for dk in ("Total Debt", "Long Term Debt"):
+                        if dk in bs.index:
+                            debt = float(bs.loc[dk].dropna().iloc[0])
+                            break
+            except Exception:
+                pass
+
+        # Cash fallback: try balance sheet if info.totalCash missing
+        if cash == 0:
+            try:
+                bs = tk.balance_sheet if 'bs' in dir() else tk.balance_sheet
+                if bs is not None and not bs.empty:
+                    for ck in ("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"):
+                        if ck in bs.index:
+                            cash = float(bs.loc[ck].dropna().iloc[0])
+                            break
+            except Exception:
+                pass
+
         # Apply FX conversion to all financial statement figures (shares stay as-is)
         fcf_r    *= fx_rate
         ebitda_r *= fx_rate
