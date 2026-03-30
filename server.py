@@ -3135,6 +3135,34 @@ def get_dcf_analysis(ticker):
             iv_bull = _iv_exit_multiple(*_args[:2], g1_bull, g2_bull, exit_mult_bull, wacc * 0.90, *_args[2:])
             iv_bear = _iv_exit_multiple(*_args[:2], g1_bear, g2_bear, exit_mult_bear, wacc * 1.10, *_args[2:])
 
+        # ── Red Flag #1: FCF ≤ 0 → Revenue Multiple fallback ─────────────────
+        # Standard DCF breaks with negative FCF. Switch to P/S-based valuation.
+        # Sector P/S multiples (2026 calibration, conservative)
+        iv_method_used = tv_method
+        if fcf <= 0 and shares > 0:
+            rev_r = info.get("totalRevenue", 0) or 0
+            rev_r *= fx_rate   # apply same FX conversion
+            rev   = rev_r / 1e9
+            _PS_MULT = {
+                "Technology": 7.0, "Healthcare": 3.5,
+                "Financial Services": 2.5, "Consumer Cyclical": 1.5,
+                "Consumer Defensive": 1.2, "Industrials": 1.5,
+                "Energy": 1.2, "Basic Materials": 1.2,
+                "Communication Services": 3.0, "Utilities": 2.0,
+                "Real Estate": 5.0,
+            }
+            ps = _PS_MULT.get(sector, 2.0)
+            if rev > 0:
+                iv_base = max(round((rev * ps - net_debt) / shares, 0), 0)
+                iv_bull = max(round((rev * ps * 1.25 - net_debt) / shares, 0), 0)
+                iv_bear = max(round((rev * ps * 0.75 - net_debt) / shares, 0), 0)
+                iv_method_used = f"revenue_multiple"
+                tv_label = f"{ps}× Revenue  ·  FCF negative — P/S method"
+                fcf_source += " ⚠ negative"
+
+        # ── Red Flag #2: Beta > 2.0 → Value Trap warning ─────────────────────
+        # High beta amplifies losses in downturns; deep value requires stability.
+
         mos = round(((iv_base - price) / iv_base * 100)) if iv_base else None
         rating = ("buy" if (mos or 0) > 25 else
                   "hold" if (mos or 0) > 0 else "watch")
@@ -3143,11 +3171,14 @@ def get_dcf_analysis(ticker):
         risks = []
         if fcf < 0:
             risks.append({"level": "high",
-                          "text": f"Negative FCF (${fcf:.2f}B {fcf_source}) — cash burn risk"})
+                          "text": f"Negative FCF (${fcf:.2f}B {fcf_source}) — DCF switched to {iv_method_used}"})
         if dw > 0.5:
             risks.append({"level": "high",
                           "text": f"High leverage: debt {dw*100:.0f}% of capital; net debt ${net_debt:.1f}B"})
-        if beta > 1.3:
+        if beta > 2.0:
+            risks.append({"level": "high",
+                          "text": f"Value Trap warning: beta {beta:.2f} > 2.0 — high volatility undermines 'Deep Value' thesis"})
+        elif beta > 1.3:
             risks.append({"level": "mid",
                           "text": f"Elevated beta ({beta:.2f}) — amplifies market drawdowns"})
         if dy > 0.06:
@@ -3194,7 +3225,7 @@ def get_dcf_analysis(ticker):
             "net_debt":      net_debt,
             "shares":        shares,
             "iv_base":       iv_base,  "iv_bull": iv_bull,  "iv_bear": iv_bear,
-            "tv_method":     tv_method,
+            "tv_method":     iv_method_used,
             "tv_horizon":    tv_horizon,
             "tv_label":      tv_label,
             "exit_mult":     exit_mult_base,
