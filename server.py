@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from flask import Flask, jsonify, send_file, request, session, make_response
 import yfinance as yf
+import pandas as pd
 import sqlite3
 import json
 import os
@@ -2727,15 +2728,82 @@ def get_dcf_analysis(ticker):
         mktcap    = f"${mktcap_r/1e9:.1f}B" if mktcap_r >= 1e9 else f"${mktcap_r/1e6:.0f}M"
 
         # ── Free cash flow, EBITDA & balance sheet ────────────────────────────
-        fcf_r     = info.get("freeCashflow", 0) or 0
-        fcf       = round(fcf_r / 1e9, 2)               # $B
+        # Normalization strategy (sector-aware):
+        #   Tech sector  → use Operating Cash Flow (3-yr median).
+        #     Rationale: Big Tech CapEx is growth investment (AWS infra, data centres).
+        #     yfinance FCF = OCF − total CapEx incl. finance leases → severely understates
+        #     earning power (AMZN FY2022 FCF was −$19B; OCF was +$46B).
+        #   All others   → use Free Cash Flow (3-yr median) to cap one-time TTM spikes
+        #     (e.g. OMC FCF > EBITDA anomaly).
+        #   Fallback: TTM freeCashflow from info if cashflow statement unavailable.
+        _sector_early = info.get("sector", "")
+        # Big Tech tickers that are NOT classified as "Technology" in yfinance
+        # (e.g. AMZN = Consumer Cyclical, GOOGL = Communication Services)
+        # but whose CapEx is primarily growth investment → use OCF like Tech
+        _OCF_TICKERS = {"AMZN","GOOGL","GOOG","META","MSFT","NVDA","AAPL","NFLX"}
+        _use_ocf = (_sector_early == "Technology") or (sym in _OCF_TICKERS)
+
+        fcf_r      = info.get("freeCashflow", 0) or 0
+        fcf_source = "TTM"
+        try:
+            cf_df = tk.cashflow
+            if cf_df is not None and not cf_df.empty:
+                if _use_ocf and "Operating Cash Flow" in cf_df.index:
+                    # Tech: OCF is the analyst-grade "normalized" FCF
+                    ocf_hist = cf_df.loc["Operating Cash Flow"].dropna()
+                    if len(ocf_hist) >= 2:
+                        n = min(len(ocf_hist), 3)
+                        fcf_r = float(ocf_hist.iloc[:n].median())
+                        fcf_source = f"{n}-yr median OCF"
+                else:
+                    # Non-Tech: derive FCF, median to cap one-time spikes
+                    if "Free Cash Flow" in cf_df.index:
+                        fcf_hist = cf_df.loc["Free Cash Flow"].dropna()
+                    elif "Operating Cash Flow" in cf_df.index and "Capital Expenditure" in cf_df.index:
+                        fcf_hist = (cf_df.loc["Operating Cash Flow"] + cf_df.loc["Capital Expenditure"]).dropna()
+                    else:
+                        fcf_hist = pd.Series(dtype=float)
+                    if len(fcf_hist) >= 2:
+                        n = min(len(fcf_hist), 3)
+                        fcf_r = float(fcf_hist.iloc[:n].median())
+                        fcf_source = f"{n}-yr median FCF"
+        except Exception:
+            pass  # fall back to TTM
+
         ebitda_r  = info.get("ebitda", 0) or 0
-        ebitda    = round(ebitda_r / 1e9, 2)             # $B
         debt      = info.get("totalDebt",  0) or 0
         cash      = info.get("totalCash",  0) or 0
-        net_debt  = round((debt - cash) / 1e9, 1)       # $B
         shares_r  = info.get("sharesOutstanding", 0) or 0
-        shares    = round(shares_r / 1e9, 3)            # billions
+
+        # Fix 2: ADR currency conversion — financials are in local currency, price in USD
+        # e.g. TSM: financialCurrency=TWD, currency=USD → FCF/EBITDA/debt in TWD, price in USD
+        financial_currency = info.get("financialCurrency", "USD") or "USD"
+        trading_currency   = info.get("currency", "USD") or "USD"
+        fx_rate = 1.0
+        currency_converted = False
+        if financial_currency != "USD" and trading_currency == "USD":
+            try:
+                fx_ticker = yf.Ticker(f"{financial_currency}USD=X")
+                fx_info   = fx_ticker.info
+                fx_rate   = float(
+                    fx_info.get("regularMarketPrice")
+                    or fx_info.get("previousClose")
+                    or 1.0
+                )
+                if fx_rate > 0:
+                    currency_converted = True
+            except Exception:
+                fx_rate = 1.0
+        # Apply FX conversion to all financial statement figures (shares stay as-is)
+        fcf_r    *= fx_rate
+        ebitda_r *= fx_rate
+        debt     *= fx_rate
+        cash     *= fx_rate
+
+        fcf       = round(fcf_r / 1e9, 2)               # $B (USD)
+        ebitda    = round(ebitda_r / 1e9, 2)             # $B (USD)
+        net_debt  = round((debt - cash) / 1e9, 1)        # $B (USD)
+        shares    = round(shares_r / 1e9, 3)             # billions
 
         # ── WACC: Hamada re-levering + CAPM (late March 2026) ────────────────────
         # Method: Pure Play approach (Damodaran Jan 2026 unlevered betas)
@@ -2784,8 +2852,15 @@ def get_dcf_analysis(ticker):
         # ── Growth rate estimation from analyst estimates ─────────────────────
         eg    = float(info.get("earningsGrowth",  0) or 0) * 100
         rg    = float(info.get("revenueGrowth",   0) or 0) * 100
-        g_raw = eg if abs(eg) > 0.5 else rg
-        g1_base = round(max(-15.0, min(25.0, g_raw if g_raw != 0 else 3.0)), 1)
+        # For Big Tech, earnings growth is volatile (quarterly EPS noise).
+        # Use max(earningsGrowth, revenueGrowth) — revenue is more stable — with an 8% floor.
+        if sym in _OCF_TICKERS:
+            g_raw = max(eg, rg)
+            g_floor = 8.0
+        else:
+            g_raw = eg if abs(eg) > 0.5 else rg
+            g_floor = -15.0
+        g1_base = round(max(g_floor, min(25.0, g_raw if g_raw != 0 else 3.0)), 1)
         g1_bull = round(g1_base + 5.0, 1)
         g1_bear = round(g1_base - 5.0, 1)
         g2_base = round(max(0.0, g1_base * 0.55), 1)   # phase 2 mean-reverts
@@ -3008,7 +3083,7 @@ def get_dcf_analysis(ticker):
         risks = []
         if fcf < 0:
             risks.append({"level": "high",
-                          "text": f"Negative FCF (${fcf:.2f}B TTM) — cash burn risk"})
+                          "text": f"Negative FCF (${fcf:.2f}B {fcf_source}) — cash burn risk"})
         if dw > 0.5:
             risks.append({"level": "high",
                           "text": f"High leverage: debt {dw*100:.0f}% of capital; net debt ${net_debt:.1f}B"})
@@ -3075,9 +3150,12 @@ def get_dcf_analysis(ticker):
             "beta_raw":      round(raw_beta, 2),
             "beta_u":        round(u_beta, 2) if u_beta else None,
             "de_ratio":      round(de_ratio, 2),
-            "gross_margins": round(gm * 100, 1),
-            "risks":         risks,
-            "cats":          cats,
+            "gross_margins":      round(gm * 100, 1),
+            "fcf_source":         fcf_source,
+            "financial_currency": financial_currency,
+            "currency_converted": currency_converted,
+            "risks":              risks,
+            "cats":               cats,
         }
         _dcf_cache[sym] = {"ts": time.time(), "data": result}
         log.info(f"DCF {sym}: price={price} fcf={fcf}B iv_base={iv_base} wacc={wacc}%")

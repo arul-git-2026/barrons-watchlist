@@ -1316,8 +1316,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
             <div class="dcf-card-title">DCF model inputs &amp; outputs
               <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:6px" id="dcf-data-source"></span>
             </div>
-            <div class="dcf-row"><span class="dcf-key">FCF (TTM, $B)</span><span class="dcf-val" id="dcf-d-fcf">—</span></div>
-            <div class="dcf-row"><span class="dcf-key">EBITDA (TTM, $B)</span><span class="dcf-val" id="dcf-d-ebitda">—</span></div>
+            <div class="dcf-row"><span class="dcf-key" id="dcf-d-fcf-label">FCF ($B)</span><span class="dcf-val" id="dcf-d-fcf">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">EBITDA ($B)</span><span class="dcf-val" id="dcf-d-ebitda">—</span></div>
+            <div id="dcf-currency-warn" style="display:none;background:#7c3a0022;border:1px solid #c0392b44;border-radius:4px;padding:4px 8px;font-size:10px;color:#c0392b;margin:4px 0">
+              ⚠ ADR: financials converted from <span id="dcf-fin-currency"></span> → USD using live FX rate
+            </div>
             <div class="dcf-row"><span class="dcf-key">EV / EBITDA (live)</span><span class="dcf-val" id="dcf-d-eveb">—</span></div>
             <div class="dcf-row"><span class="dcf-key">Beta</span><span class="dcf-val" id="dcf-d-beta">—</span></div>
             <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 1 (yr 1–5)</span><span class="dcf-val" id="dcf-d-g1">—</span></div>
@@ -4631,6 +4634,14 @@ function dcfRenderDCF() {
     return;
   }
   document.getElementById('dcf-d-fcf').textContent      = `$${s.fcf}B`;
+  document.getElementById('dcf-d-fcf-label').textContent = `FCF (${s.fcf_source || 'TTM'}, $B)`;
+  const cwarn = document.getElementById('dcf-currency-warn');
+  if (s.currency_converted) {
+    document.getElementById('dcf-fin-currency').textContent = s.financial_currency;
+    cwarn.style.display = 'block';
+  } else {
+    cwarn.style.display = 'none';
+  }
   document.getElementById('dcf-d-ebitda').textContent   = s.ebitda ? `$${s.ebitda}B` : 'N/A';
   document.getElementById('dcf-d-eveb').textContent     = s.ev_ebitda || 'N/A';
   document.getElementById('dcf-d-beta').textContent     = s.beta;
