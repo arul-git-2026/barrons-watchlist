@@ -2927,6 +2927,10 @@ Steps:
             f"All outputs (iv_base/bull/bear) must be in USD per ADR share."
         ) if _is_adr else ""
 
+        log.info(f"  DCF {sym} yfinance inputs: price={price} fcf={yf_fcf} ocf={yf_ocf} "
+                 f"ebitda={yf_ebitda} debt={yf_debt} cash={yf_cash} shares={yf_shares} "
+                 f"beta={beta} fx={_fx:.4f} is_adr={_is_adr} sector='{sector}'")
+
         # ── Step 2: Gemini Flash — valuation math on real yfinance numbers ────
         gemini_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
         if not gemini_key:
@@ -3057,6 +3061,10 @@ Return ONLY valid JSON, no markdown fences, no text outside the JSON:
                     pass
                 log.error(f"  DCF Gemini JSON parse error for {sym}: {je2} | debug dump: {_dbg_path}")
                 return jsonify({"ok": False, "error": f"Gemini returned invalid JSON: {je2}"}), 502
+
+        log.info(f"  DCF {sym} Gemini raw: fcf={g.get('fcf')} ocf_src='{g.get('fcf_source')}' "
+                 f"shares={g.get('shares')} wacc={g.get('wacc')} "
+                 f"iv_base={g.get('iv_base')} iv_bull={g.get('iv_bull')} iv_bear={g.get('iv_bear')}")
 
         # ── Step 3: Extract + sanitise Gemini fields ──────────────────────────
         def _f(key, default=None):
