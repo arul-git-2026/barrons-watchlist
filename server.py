@@ -2816,9 +2816,8 @@ Return ONLY valid JSON with no markdown fences and no text outside the JSON:
         payload = json.dumps({
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature":      0,
-                "maxOutputTokens":  2048,
-                "responseMimeType": "application/json",
+                "temperature":     0,
+                "maxOutputTokens": 8192,
             },
         }).encode()
         req = urllib.request.Request(
