@@ -2949,7 +2949,14 @@ Return ONLY valid JSON with no markdown fences and no text outside the JSON:
             try:
                 g = json.loads(json_txt)
             except Exception as je2:
-                log.error(f"  DCF Gemini JSON parse error for {sym}: {je2} | raw: {raw_txt[:600]}")
+                # Dump full cleaned text to file for debugging
+                _dbg_path = f"/tmp/dcf_debug_{sym}.txt"
+                try:
+                    with open(_dbg_path, "w") as _dbg:
+                        _dbg.write(f"=== RAW ===\n{raw_txt}\n\n=== CLEANED ===\n{json_txt}")
+                except Exception:
+                    pass
+                log.error(f"  DCF Gemini JSON parse error for {sym}: {je2} | debug dump: {_dbg_path}")
                 return jsonify({"ok": False, "error": f"Gemini returned invalid JSON: {je2}"}), 502
 
         # ── Step 3: Extract + sanitise Gemini fields ──────────────────────────
