@@ -821,6 +821,69 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
   .rctab{padding:9px 10px;font-size:11px}
 }
 
+/* ── DCF Analysis Panel ─────────────────────────────────────────── */
+#dcf-panel{display:none;background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px 18px;box-shadow:0 1px 2px rgba(60,64,67,.1)}
+#dcf-panel.on{display:block}
+#dcf-toggle-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.dcf-section-label{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.08em;margin-bottom:10px}
+.dcf-stock-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.dcf-tab{padding:6px 14px;border-radius:var(--radius);border:0.5px solid var(--border);
+  font-size:13px;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s;font-family:var(--font)}
+.dcf-tab.active{background:var(--accent-light);color:var(--accent);border-color:var(--accent);font-weight:500}
+.dcf-tab:hover:not(.active){background:var(--bg);color:var(--text)}
+.dcf-metrics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:20px}
+.dcf-metric-card{background:var(--bg);border-radius:var(--radius);padding:14px 16px}
+.dcf-metric-label{font-size:11px;color:var(--muted);margin-bottom:4px}
+.dcf-metric-value{font-size:22px;font-weight:500;color:var(--text)}
+.dcf-metric-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.dcf-main-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.dcf-card{background:var(--card);border:.5px solid var(--border);border-radius:12px;padding:16px}
+.dcf-card-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:12px}
+.dcf-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;
+  border-bottom:.5px solid var(--border);font-size:13px}
+.dcf-row:last-child{border-bottom:none}
+.dcf-key{color:var(--muted)}.dcf-val{font-weight:500;color:var(--text)}
+.dcf-upside{color:#1D9E75}.dcf-downside{color:#D85A30}
+.dcf-bar-wrap{margin-bottom:10px}
+.dcf-bar-slabel{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+.dcf-bar-track{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.dcf-bar-fill{height:100%;border-radius:4px;transition:width .4s}
+.dcf-bull-fill{background:#1D9E75}.dcf-base-fill{background:#1a73e8}.dcf-bear-fill{background:#D85A30}
+.dcf-screener-table{width:100%;border-collapse:collapse;font-size:12px}
+.dcf-screener-table th{text-align:left;padding:6px 8px;color:var(--muted);font-weight:500;
+  border-bottom:.5px solid var(--border);font-size:11px}
+.dcf-screener-table td{padding:7px 8px;border-bottom:.5px solid var(--border);color:var(--text)}
+.dcf-screener-table tr:last-child td{border-bottom:none}
+.dcf-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500}
+.dcf-badge-buy{background:#e6f4ea;color:#085041}
+.dcf-badge-hold{background:#e8f0fe;color:#0C447C}
+.dcf-badge-watch{background:#fef3c7;color:#633806}
+.dcf-mos-pill{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:500}
+.dcf-mos-high{background:#e6f4ea;color:#085041}
+.dcf-mos-mid{background:#e8f0fe;color:#0C447C}
+.dcf-mos-low{background:#fce8e6;color:#4A1B0C}
+.dcf-wacc-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.dcf-wacc-label{font-size:12px;color:var(--muted);min-width:80px}
+.dcf-wacc-val{font-size:12px;font-weight:500;min-width:36px;text-align:right;color:var(--text)}
+.dcf-bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.dcf-risk-item{display:flex;gap:8px;align-items:flex-start;padding:6px 0;
+  border-bottom:.5px solid var(--border);font-size:12px}
+.dcf-risk-item:last-child{border-bottom:none}
+.dcf-risk-dot{width:8px;height:8px;border-radius:50%;margin-top:3px;flex-shrink:0}
+.dcf-risk-high{background:#D85A30}.dcf-risk-mid{background:#BA7517}.dcf-risk-low{background:#1D9E75}
+.dcf-catalyst-item{display:flex;gap:8px;padding:6px 0;border-bottom:.5px solid var(--border);
+  font-size:12px;align-items:flex-start}
+.dcf-catalyst-item:last-child{border-bottom:none}
+.dcf-cat-tag{font-size:10px;padding:2px 7px;border-radius:8px;background:var(--accent-light);
+  color:var(--accent);font-weight:500;flex-shrink:0}
+.dcf-full-card{background:var(--card);border:.5px solid var(--border);border-radius:12px;
+  padding:16px;margin-bottom:14px}
+@media(max-width:900px){.dcf-metrics-grid{grid-template-columns:repeat(2,1fr)}
+  .dcf-main-grid,.dcf-bottom-grid{grid-template-columns:1fr}}
+@media(max-width:500px){.dcf-metrics-grid{grid-template-columns:1fr}}
+
 /* ── Crisis Monitor ──────────────────────────────────────────────── */
 #crisis-panel{display:none;background:var(--card);border:1px solid var(--border);
   border-radius:var(--radius);padding:16px 18px;box-shadow:0 1px 2px rgba(60,64,67,.1)}
@@ -1167,6 +1230,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
                        border-color:var(--accent);color:var(--accent)">
           📈 Plot
         </button>
+        <button id="dcf-toggle-btn" onclick="toggleDCFPanel()" title="DCF Intrinsic Value Analysis">
+          📊 DCF
+        </button>
         <button id="crisis-toggle-btn" onclick="toggleCrisisPanel()" title="Global Crisis Monitor">
           🌍 Crisis Monitor
         </button>
@@ -1196,6 +1262,976 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading crisis data…</div>
       </div>
     </div>
+
+    <!-- ── DCF Analysis Panel ────────────────────────────────────── -->
+    <div id="dcf-panel">
+      <div class="crisis-header">
+        <h3>📊 DCF Analysis</h3>
+        <span style="font-size:11px;color:var(--muted)" id="dcf-subtitle">Select a stock from your database</span>
+        <button onclick="dcfRefresh()" style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">↺ Refresh</button>
+      </div>
+
+      <!-- Stock picker row -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--muted);white-space:nowrap">Analyse stock:</label>
+        <select id="dcf-picker"
+          style="flex:1;min-width:220px;max-width:380px;padding:6px 10px;border:1px solid var(--border);
+                 border-radius:var(--radius);font-size:13px;background:var(--card);color:var(--text);cursor:pointer">
+          <option value="">— pick a ticker —</option>
+        </select>
+        <button onclick="dcfRunSelected()"
+          style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);
+                 font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap">
+          ▶ Run Analysis
+        </button>
+        <span id="dcf-loading" style="display:none;font-size:11px;color:var(--muted)">⏳ Calling Gemini…</span>
+        <span id="dcf-error"   style="display:none;font-size:11px;color:var(--down)"></span>
+      </div>
+
+      <!-- Content area — hidden until a stock is loaded -->
+      <div id="dcf-content" style="display:none">
+
+        <!-- KPI cards -->
+        <div class="dcf-metrics-grid">
+          <div class="dcf-metric-card">
+            <div class="dcf-metric-label">Current price</div>
+            <div class="dcf-metric-value" id="dcf-kpi-price">—</div>
+            <div class="dcf-metric-sub" id="dcf-kpi-mktcap">—</div>
+          </div>
+          <div class="dcf-metric-card">
+            <div class="dcf-metric-label">DCF intrinsic value</div>
+            <div class="dcf-metric-value" id="dcf-kpi-iv">—</div>
+            <div class="dcf-metric-sub">Base case, 10yr FCF</div>
+          </div>
+          <div class="dcf-metric-card">
+            <div class="dcf-metric-label">Margin of safety</div>
+            <div class="dcf-metric-value" id="dcf-kpi-mos">—</div>
+            <div class="dcf-metric-sub" id="dcf-kpi-verdict">—</div>
+          </div>
+          <div class="dcf-metric-card">
+            <div class="dcf-metric-label">Dividend yield</div>
+            <div class="dcf-metric-value" id="dcf-kpi-div">—</div>
+            <div class="dcf-metric-sub" id="dcf-kpi-pe">—</div>
+          </div>
+        </div>
+
+        <!-- DCF inputs + Scenario analysis -->
+        <div class="dcf-main-grid">
+          <div class="dcf-card">
+            <div class="dcf-card-title">DCF model inputs &amp; outputs
+              <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:6px" id="dcf-data-source"></span>
+            </div>
+            <div id="dcf-rationale" style="display:none;font-size:11px;color:var(--muted);font-style:italic;padding:6px 0 8px;border-bottom:.5px solid var(--border);margin-bottom:4px;line-height:1.5"></div>
+            <div class="dcf-row"><span class="dcf-key" id="dcf-d-fcf-label">FCF ($B)</span><span class="dcf-val" id="dcf-d-fcf">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">EBITDA ($B)</span><span class="dcf-val" id="dcf-d-ebitda">—</span></div>
+            <div id="dcf-currency-warn" style="display:none;background:#7c3a0022;border:1px solid #c0392b44;border-radius:4px;padding:4px 8px;font-size:10px;color:#c0392b;margin:4px 0">
+              ⚠ ADR: financials converted from <span id="dcf-fin-currency"></span> → USD using live FX rate
+            </div>
+            <div class="dcf-row"><span class="dcf-key">EV / EBITDA (live)</span><span class="dcf-val" id="dcf-d-eveb">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Beta</span><span class="dcf-val" id="dcf-d-beta">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 1 (yr 1–5)</span><span class="dcf-val" id="dcf-d-g1">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">FCF growth — Phase 2</span><span class="dcf-val" id="dcf-d-g2">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Terminal value method</span><span class="dcf-val" id="dcf-d-tvmethod">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">WACC (RF 4.44% + β×5.0%)</span><span class="dcf-val" id="dcf-d-wacc">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">PV of FCFs ($B)</span><span class="dcf-val" id="dcf-d-pvfcf">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Terminal value PV ($B)</span><span class="dcf-val" id="dcf-d-tv">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Enterprise value ($B)</span><span class="dcf-val" id="dcf-d-ev">—</span></div>
+            <div class="dcf-row"><span class="dcf-key">Intrinsic value / share</span><span class="dcf-val" id="dcf-d-iv">—</span></div>
+            <div class="dcf-wacc-controls">
+              <span class="dcf-wacc-label">Stress-test WACC</span>
+              <input type="range" id="dcf-wacc-slider" min="6" max="14" step="0.5" value="8"
+                     style="flex:1" oninput="dcfUpdateWACC(this.value)">
+              <span class="dcf-wacc-val" id="dcf-wacc-out">8.0%</span>
+            </div>
+          </div>
+
+          <div class="dcf-card">
+            <div class="dcf-card-title">Scenario analysis — intrinsic value / share</div>
+            <div id="dcf-scenario-bars"></div>
+            <div style="margin-top:14px;border-top:.5px solid var(--border);padding-top:12px">
+              <div class="dcf-card-title" style="margin-bottom:8px">Upside / downside to current price</div>
+              <div id="dcf-updown-rows"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Risks + Catalysts -->
+        <div class="dcf-bottom-grid">
+          <div class="dcf-card">
+            <div class="dcf-card-title" id="dcf-risk-title">Key risks</div>
+            <div id="dcf-risk-list"></div>
+          </div>
+          <div class="dcf-card">
+            <div class="dcf-card-title" id="dcf-cat-title">Investment thesis</div>
+            <div id="dcf-cat-list"></div>
+          </div>
+        </div>
+
+      </div><!-- /dcf-content -->
+
+      <!-- ── Portfolio DCF Screener ─────────────────────────────────── -->
+      <div style="margin-top:14px;border:.5px solid var(--border);border-radius:12px;padding:16px;background:var(--card)">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <span style="font-size:13px;font-weight:500;color:var(--text)">Portfolio Screener</span>
+          <span style="font-size:11px;color:var(--muted)">Margin of safety</span>
+          <select id="dcf-mos-op" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--text)">
+            <option value="gte">≥</option>
+            <option value="lte">≤</option>
+            <option value="eq">≈</option>
+          </select>
+          <input type="number" id="dcf-mos-val" value="20" min="-100" max="200" step="5"
+            style="width:64px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:right">
+          <span style="font-size:12px;color:var(--muted)">%</span>
+          <button id="dcf-run-btn" onclick="dcfRunScreener()"
+            style="padding:5px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">
+            ▶ Run
+          </button>
+          <button onclick="dcfFilterScreener()" title="Re-apply filter to cached results"
+            style="padding:5px 10px;border:1px solid var(--border);background:var(--bg);border-radius:6px;font-size:12px;cursor:pointer">
+            Filter
+          </button>
+          <span id="dcf-scr-progress" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
+          <button id="dcf-csv-btn" onclick="dcfDownloadCSV()" style="display:none;margin-left:auto;
+            padding:5px 12px;border:1px solid var(--border);background:var(--bg);
+            border-radius:6px;font-size:12px;cursor:pointer" title="Download filtered list as CSV">
+            ⬇ CSV
+          </button>
+          <span style="font-size:11px;color:var(--muted)" id="dcf-scr-count"></span>
+        </div>
+
+        <!-- Results table -->
+        <div style="overflow-x:auto">
+          <table class="dcf-screener-table" id="dcf-scr-tbl" style="display:none">
+            <thead>
+              <tr>
+                <th>Ticker</th><th>Name</th><th>Sector</th>
+                <th>Price</th><th>DCF IV (base)</th>
+                <th>Margin of Safety</th>
+                <th>EV/EBITDA</th><th>Div</th><th>Beta</th>
+                <th>TV method</th><th>Rating</th>
+              </tr>
+            </thead>
+            <tbody id="dcf-scr-body"></tbody>
+          </table>
+        </div>
+        <div id="dcf-scr-empty" style="display:none;font-size:12px;color:var(--muted);padding:8px 0">
+          No stocks match the filter.
+        </div>
+        <div id="dcf-scr-hint" style="font-size:11px;color:var(--muted);line-height:1.6">
+          Click <strong>▶ Run</strong> to scan all stocks in your database.<br>
+          Results are cached — subsequent runs are instant. Click a row to load the full DCF.
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart card — TradingView widget -->
+    <div class="card" style="padding:12px 16px">
+      <!-- Header: title only -->
+      <div class="chart-header" style="border-bottom:none;padding-bottom:6px">
+        <h3>Performance</h3>
+        <span id="tv-symbol-label" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
+      </div>
+
+      <!-- TradingView container — tall enough for the chart to breathe -->
+      <div id="chart-wrap" style="height:380px;border-radius:6px;overflow:hidden;background:var(--card)">
+        <div id="tv-chart" style="width:100%;height:100%;display:flex;align-items:center;
+             justify-content:center;color:var(--muted);font-size:12px">
+          Check tickers in the sidebar to view chart
+        </div>
+      </div>
+
+      <!-- Range buttons below chart — always visible, full width -->
+      <div style="display:flex;flex-wrap:wrap;gap:1px;
+                  margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <button class="rb"    onclick="setRange('1D',this)">1D</button>
+        <button class="rb"    onclick="setRange('5D',this)">5D</button>
+        <button class="rb"    onclick="setRange('1W',this)">1W</button>
+        <button class="rb on" onclick="setRange('1M',this)">1M</button>
+        <button class="rb"    onclick="setRange('3M',this)">3M</button>
+        <button class="rb"    onclick="setRange('6M',this)">6M</button>
+        <button class="rb"    onclick="setRange('YTD',this)">YTD</button>
+        <button class="rb"    onclick="setRange('1Y',this)">1Y</button>
+        <button class="rb"    onclick="setRange('2Y',this)">2Y</button>
+        <button class="rb"    onclick="setRange('3Y',this)">3Y</button>
+      </div>
+
+      <!-- Ticker legend pills -->
+      <div class="chart-legend" id="chart-legend" style="margin-top:8px">
+        <span style="font-size:11px;color:var(--muted)">
+          Check tickers in the sidebar to compare
+        </span>
+      </div>
+    </div>
+
+    <!-- Detail card (hidden until row is clicked) -->
+    <div class="card" id="detail-card" style="display:none"></div>
+
+    <!-- Placeholder -->
+    <div class="card" id="placeholder-card">
+      <div class="placeholder" style="min-height:160px">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.5">
+          <path d="M3 3h18v18H3zM3 9h18M9 21V9"/>
+        </svg>
+        <span>Click any row to see the full thesis and scenarios</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────
+// 20 visually distinct colors
+const PALETTE = [
+  '#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6',
+  '#06b6d4','#f97316','#ec4899','#14b8a6','#a3e635',
+  '#6366f1','#f43f5e','#84cc16','#0ea5e9','#d946ef',
+  '#fb923c','#10b981','#facc15','#a855f7','#38bdf8'
+];
+
+// Colors are assigned fresh each render in dataset order (index i → PALETTE[i]).
+// The legend always reads ds.borderColor from the final datasets array,
+// so legend and chart lines are guaranteed to match.
+// No persistent map — eliminates all stale-state color mismatches.
+// ── Sidebar resize ────────────────────────────────────────────────────────────
+(function() {
+  const MIN_W = 320, MAX_W = 720;
+  const saved = parseInt(localStorage.getItem('sw-sidebar-w'), 10);
+  if (saved && saved >= MIN_W && saved <= MAX_W)
+    document.documentElement.style.setProperty('--sidebar-w', saved + 'px');
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const handle = document.getElementById('sidebar-resize-handle');
+    if (!handle) return;
+    let dragging = false, startX = 0, startW = 0;
+
+    handle.addEventListener('mousedown', e => {
+      dragging = true;
+      startX = e.clientX;
+      startW = parseInt(getComputedStyle(document.documentElement)
+                        .getPropertyValue('--sidebar-w')) || 480;
+      handle.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const w = Math.min(MAX_W, Math.max(MIN_W, startW + e.clientX - startX));
+      document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const w = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w');
+      localStorage.setItem('sw-sidebar-w', parseInt(w));
+    });
+  });
+})();
+
+const STATUS_MAP = {
+  hot:'Momentum', rot:'Rotating',  pull:'Pullback', press:'Pressure',
+  dip:'Dip Buy',  rec:'Recovery',  caut:'Caution',  flat:'Neutral'
+};
+
+// Max tickers on the chart — set to 0 for no limit
+// Chart.js handles many lines fine; readability is the only constraint
+const MAX_CHART_TICKERS = 0;   // 0 = no limit on refresh selection
+const MAX_CHART_LINES    = 20;  // chart renders max 20 lines (readability)
+
+// ── State ──────────────────────────────────────────────────────────
+let allData      = [];
+let selectedChk  = new Set();   // tickers checked for chart comparison
+let activeRow    = null;        // ticker of the currently-expanded detail row
+let currentSort  = 'pct';
+let sortAsc      = false;
+let currentRange = '1M';
+let currentSrc   = '';   // active source prefix filter — '' means All Sources
+let perfChart = null; // stub — chart is now TradingView
+let hiddenLines         = new Set();   // tickers hidden via legend click
+let _defaultLegendItems = null;        // end-of-range values, restored on mouse leave
+let _chartFilter        = 'all';       // 'all' | 'positive' | 'negative'  — hover filter
+
+
+// ── Utilities ──────────────────────────────────────────────────────
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function showLoader(v) {
+  document.getElementById('loader').style.display = v ? 'flex' : 'none';
+}
+
+function setStatus(state, extra = '') {
+  const dot = document.getElementById('live-dot');
+  const txt = document.getElementById('status-txt');
+  const cfg = {
+    loading: ['#fbbf24', 'Loading…'],
+    live:    ['#22c55e', `Live · ${allData.length} tickers · ${new Date().toLocaleTimeString()}`],
+    partial: ['#22c55e', `Refreshed ${extra} · ${new Date().toLocaleTimeString()}`],
+    error:   ['#ef4444', 'Error — check console'],
+  };
+  const [color, label] = cfg[state] || cfg.loading;
+  dot.className    = (state === 'live' || state === 'partial') ? 'dot live' : 'dot';
+  dot.style.background = color;
+  txt.textContent  = label;
+}
+
+// ── Initial load — static data only, no Yahoo calls ──────────────────
+async function loadData() {
+  showLoader(true);
+  setStatus('loading');
+  try {
+    const res = await fetch('/api/data');   // no ?tickers param = static
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    allData = await res.json();
+    populateFilters();
+    render();
+    // Show "loaded" but make clear prices need a manual refresh
+    const dot = document.getElementById('live-dot');
+    const txt = document.getElementById('status-txt');
+    dot.className = 'dot';
+    dot.style.background = '#fbbf24';
+    txt.textContent = `${allData.length} tickers loaded — select tickers and press Refresh for live prices`;
+  } catch (e) {
+    console.error(e);
+    setStatus('error');
+  } finally {
+    showLoader(false);
+  }
+}
+
+// ── Selective refresh — only fetches quotes for checked tickers ────────
+async function handleRefresh() {
+  if (selectedChk.size === 0) {
+    toast('Check tickers in the sidebar first, then press Refresh');
+    return;
+  }
+
+  const btn     = document.getElementById('refresh-btn');
+  const label   = document.getElementById('refresh-label');
+  const targets = [...selectedChk];
+  const param   = targets.join(',');
+
+  btn.classList.add('spinning');
+  label.textContent = 'Refreshing…';
+
+  try {
+    // Expire cache for selected tickers only
+    await fetch(`/api/cache/clear?tickers=${param}`, { method: 'POST' });
+
+    // Fetch live quotes for selected tickers only
+    const res = await fetch(`/api/data?tickers=${param}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const fresh = await res.json();
+
+    // Merge back into allData in-place
+    fresh.forEach(u => {
+      const idx = allData.findIndex(d => d.t === u.t);
+      if (idx !== -1) allData[idx] = u;
+      else allData.push(u);
+    });
+
+    setStatus('partial', `${fresh.length} ticker${fresh.length !== 1 ? 's' : ''}`);
+    const refreshed = fresh.map(d => d.t);
+    const summary   = refreshed.length <= 8
+      ? refreshed.join(', ')
+      : refreshed.slice(0, 8).join(', ') + ` + ${refreshed.length - 8} more`;
+    toast(`Live prices updated: ${summary}`);
+    populateFilters();   // re-populate now that sector/rec are available
+    render();
+    fetchChart();
+
+  } catch (e) {
+    console.error(e);
+    setStatus('error');
+    toast('Refresh failed — check console');
+  } finally {
+    btn.classList.remove('spinning');
+    label.textContent = `Refresh (${targets.length})`;
+  }
+}
+
+// Keep the refresh button label and selection banner in sync
+function updateSelectionUI() {
+  const n       = selectedChk.size;
+  const label   = document.getElementById('refresh-label');
+  const banner  = document.getElementById('sel-banner');
+  const ctxt    = document.getElementById('sel-count-txt');
+  label.textContent = n > 0 ? `Refresh (${n})` : 'Refresh';
+  if (n > 0) {
+    banner.classList.add('visible');
+    ctxt.innerHTML =
+      `<strong>${n}</strong> ticker${n !== 1 ? 's' : ''} selected for chart &amp; refresh`;
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
+function clearSelection() {
+  selectedChk.clear();
+  hiddenLines.clear();
+  clearChart();          // synchronous — chart clears instantly
+  updateSelectionUI();
+  syncSelectAllChk();
+  render();
+}
+
+// ── Select / deselect all visible rows ────────────────────────────
+function toggleSelectAll(chk) {
+  // Collect tickers currently visible in the table
+  const rows = document.querySelectorAll('#tb .row');
+  const visible = [...rows].map(r => {
+    const chip = r.querySelector('.chip');
+    return chip ? chip.textContent.trim() : null;
+  }).filter(Boolean);
+
+  if (chk.checked) {
+    // Select all visible — no cap (refresh has no limit)
+    visible.forEach(t => selectedChk.add(t));
+
+  } else {
+    // Deselect all visible tickers from selection
+    visible.forEach(t => {
+      selectedChk.delete(t);
+      hiddenLines.delete(t);
+    });
+  }
+  updateSelectionUI();
+  render();
+  // If nothing selected after this, clear chart immediately (synchronous)
+  // Otherwise fetch updated chart for remaining selected tickers
+  if (selectedChk.size === 0) {
+    clearChart();
+  } else {
+    fetchChart();
+  }
+}
+
+// Keep the select-all checkbox in sync with the current selection state
+function syncSelectAllChk() {
+  const chk = document.getElementById('select-all-chk');
+  if (!chk) return;
+  const rows    = document.querySelectorAll('#tb .row');
+  const visible = [...rows].map(r => {
+    const chip = r.querySelector('.chip');
+    return chip ? chip.textContent.trim() : null;
+  }).filter(Boolean);
+
+  if (!visible.length) {
+    chk.checked       = false;
+    chk.indeterminate = false;
+    return;
+  }
+  const checkedCount = visible.filter(t => selectedChk.has(t)).length;
+  const cap          = visible.length;  // no cap on selection
+  if (checkedCount === 0) {
+    chk.checked       = false;
+    chk.indeterminate = false;
+  } else if (checkedCount >= cap) {
+    chk.checked       = true;
+    chk.indeterminate = false;
+  } else {
+    chk.checked       = false;
+    chk.indeterminate = true;
+  }
+}
+
+// ── Source filter ──────────────────────────────────────────────────
+function setSrcDropdown(val) {
+  if (_mirrorInProgress) return;   // ignore spurious calls during mirror
+  currentSrc = val;
+  populateEpisodesForSource(val);
+  render();
+}
+
+function populateEpisodesForSource(prefixFilter) {
+  // prefixFilter is a raw ep-key prefix e.g. "stw", "ian", "div"
+  // Episode keys: "stw:2026/3/13", "ian:2026/3/6", "div:2026/3/15"
+  let episodes;
+  if (!prefixFilter) {
+    episodes = [...new Set(allData.flatMap(d => d.e || []))].sort();
+  } else {
+    const needle = prefixFilter.toLowerCase() + ':';
+    episodes = [...new Set(
+      allData.flatMap(d =>
+        (d.e || []).filter(ep => ep.toLowerCase().startsWith(needle))
+      )
+    )].sort();
+  }
+  const cur = document.getElementById('f-episode').value;
+  fillSelect('f-episode', episodes, 'All Episodes');
+  if (cur && !episodes.includes(cur))
+    document.getElementById('f-episode').value = '';
+}
+
+// Cache of prefix → label from /api/sources (loaded once on startup)
+let _sourceLabels = {
+  stw: "Barron's Streetwise",
+  ian: "Barron's Ian Salisbury",
+  div: 'Dividends',
+  bl:  'Barrons Live',
+};
+
+async function loadSourceLabels() {
+  try {
+    const res  = await fetch('/api/sources');
+    if (!res.ok) return;
+    const data = await res.json();
+    (data.sources || []).forEach(s => {
+      if (s.prefix && s.label) _sourceLabels[s.prefix] = s.label;
+    });
+  } catch(e) { /* use hardcoded fallback */ }
+}
+
+function populateSourceDropdown() {
+  // Collect all prefixes that appear in episode keys
+  const prefixes = new Set();
+  allData.forEach(d =>
+    (d.e || []).forEach(ep => {
+      const p = ep.split(':')[0].toLowerCase();
+      if (p) prefixes.add(p);
+    })
+  );
+
+  const sel = document.getElementById('f-source');
+  const cur = sel.value;
+
+  sel.innerHTML = '<option value="">All Sources</option>';
+  [...prefixes].sort().forEach(p => {
+    const label = _sourceLabels[p] || p.charAt(0).toUpperCase() + p.slice(1);
+    const opt   = document.createElement('option');
+    opt.value       = p;
+    opt.textContent = label;
+    if (p === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+// ── Filters ────────────────────────────────────────────────────────
+function populateFilters() {
+  // sector: from live quote (d.sector) or stored by updater (d.sector)
+  const naLabel  = '— Unassigned / N/A';
+  const naValue  = 'N/A';
+  const knownSectors = [...new Set(allData.map(d => d.sector).filter(s => s && s !== 'N/A' && s !== 'ETF'))].sort();
+  const hasNA    = allData.some(d => !d.sector || d.sector === 'N/A');
+  const hasETF   = allData.some(d => d.y === 'ETF' || d.sector === 'ETF');
+  const sectors  = [
+    ...knownSectors,
+    ...(hasETF ? ['ETF'] : []),
+    ...(hasNA  ? [naValue] : []),
+  ];
+  // rec: from live quote (d.rec) or stored by updater (d.rec_analyst)
+  const recs     = [...new Set(allData.map(d => d.rec && d.rec !== 'N/A' ? d.rec : d.rec_analyst).filter(r => r && r !== 'N/A'))].sort();
+  const episodes = [...new Set(allData.flatMap(d => d.e || []))].sort();
+  fillSelectSector('f-sector', knownSectors, hasETF, hasNA);
+  fillSelect('f-rec',     recs,     'All Recs');
+  fillSelect('f-episode', episodes, 'All Episodes');
+  // Mirror dynamic options to top filter bar
+  setTimeout(mirrorDynamicFilters, 0);
+  populateSourceDropdown();
+}
+
+function fillSelect(id, values, placeholder) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>` +
+    values.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`).join('');
+}
+
+function fillSelectSector(id, knownSectors, hasETF, hasNA) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  const opts = [
+    `<option value="">All Sectors</option>`,
+    ...knownSectors.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`),
+    ...(hasETF ? [`<option value="ETF"${'ETF' === cur ? ' selected' : ''}>ETF</option>`] : []),
+    ...(hasNA  ? [`<option value="N/A"${'N/A' === cur ? ' selected' : ''}>— Unassigned / N/A</option>`] : []),
+  ];
+  sel.innerHTML = opts.join('');
+}
+
+// ── Sort ───────────────────────────────────────────────────────────
+function setSort(key) {
+  if (currentSort === key) { sortAsc = !sortAsc; }
+  else { currentSort = key; sortAsc = false; }
+  document.querySelectorAll('.sb').forEach(b => b.classList.remove('on'));
+  const btn = document.getElementById('sb-' + key);
+  if (btn) btn.classList.add('on');
+  render();
+}
+
+function sortVal(d, k) {
+  if (k === 'pct')   return d.pct_raw   ?? 0;
+  if (k === 'price') return d.price_raw ?? 0;
+  if (k === 'ep')    return (d.e || []).length;
+  if (k === 't')     return d.t  || '';
+  if (k === 'name')  return d.n  || '';
+  return 0;
+}
+
+// ── Render table ───────────────────────────────────────────────────
+function render() {
+  const q       = document.getElementById('srch').value.toLowerCase();
+  const fSector = document.getElementById('f-sector').value;
+  const fType   = document.getElementById('f-type').value;
+  const fStatus = document.getElementById('f-status').value;
+  const fRec    = document.getElementById('f-rec').value;
+  const fEp     = document.getElementById('f-episode').value;
+  const fMove   = document.getElementById('f-move').value;
+
+  let rows = allData.filter(d => {
+    if (q       && !(`${d.t} ${d.n}`).toLowerCase().includes(q)) return false;
+    if (fSector) {
+      if (fSector === 'N/A') { if (d.sector && d.sector !== 'N/A') return false; }
+      else if (d.sector !== fSector) return false;
+    }
+    if (fType   && d.y      !== fType)                            return false;
+    if (fStatus && d.s      !== fStatus)                          return false;
+    if (fRec    && d.rec !== fRec && d.rec_analyst !== fRec)     return false;
+    // Watchlist filter
+    if (_activeWl && !(_watchlists[_activeWl] || []).includes(d.t)) return false;
+    if (fEp     && !(d.e || []).includes(fEp))                    return false;
+    if (fMove === 'up'   && !d.is_up)  return false;
+    if (fMove === 'down' &&  d.is_up)  return false;
+    // Source filter
+    if (currentSrc && currentSrc !== 'all') {
+      // currentSrc is a prefix e.g. "stw", "ian", "div"
+      // Show ticker only if it has at least one episode with that prefix
+      const needle = currentSrc.toLowerCase() + ':';
+      if (!(d.e || []).some(ep => ep.toLowerCase().startsWith(needle))) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    const av = sortVal(a, currentSort), bv = sortVal(b, currentSort);
+    const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+    return sortAsc ? cmp : -cmp;
+  });
+
+  document.getElementById('count-row').textContent =
+    `Showing ${rows.length} of ${allData.length} securities`;
+
+  const empty = document.getElementById('empty-msg');
+  const tbody = document.getElementById('tb');
+
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = rows.map(d => {
+    const pc  = d.pct_raw > 0 ? 'up' : d.pct_raw < 0 ? 'down' : 'neu';
+    const act = d.t === activeRow ? ' active' : '';
+    const chk = selectedChk.has(d.t)   ? ' checked' : '';
+    const dis = (MAX_CHART_TICKERS > 0 && selectedChk.size >= MAX_CHART_TICKERS && !selectedChk.has(d.t)) ? ' disabled' : '';
+    return `
+    <tr class="row${act}" onclick="selectRow('${d.t}')" oncontextmenu="showCtxMenu(event,'${d.t}')">
+      <td class="cell" style="padding:9px 8px">
+        <input type="checkbox" data-ticker="${d.t}" title="Add to chart"${chk}${dis}
+          onclick="toggleChart('${d.t}', event)">
+      </td>
+      <td class="cell">
+        <div class="ticker-line">
+          <span class="chip">${d.t}</span>
+          ${(d.src||[]).includes('ian') ? '<span class="ian-badge">Ian</span>' : ''}
+          <span class="co-name">${d.n || ''}</span>
+        </div>
+      </td>
+      <td class="cell" style="text-align:right">
+        <div class="price-val">${d.price_fmt || '—'}</div>
+        <div class="change-val"
+             style="color:${d.is_up ? 'var(--up)' : 'var(--down)'}">
+          ${d.diff_fmt || ''}
+        </div>
+      </td>
+      <td class="cell" style="text-align:right">
+        <span class="pct ${pc}">${d.pct_fmt || '—'}</span>
+      </td>
+    </tr>`;
+  }).join('');
+  syncSelectAllChk();
+}
+
+// ── Summary section parser ─────────────────────────────────────────────
+// Sections are delimited by:  === ep_key | Source · label ===
+// e.g.  === ian:2026/3/6 | Ian Salisbury (Barron's) · 3/6/2026 — Small-Cap Revival ===
+//
+// Each section: { epKey, sourceLabel, label, text }
+// Plain text before the first heading (Streetwise AI-merged summary) gets
+// { epKey: null, text }
+
+function parseSummary(raw) {
+  if (!raw || !raw.trim()) return [];
+
+  // Match lines of the form  === anything ===
+  const HEADING = /===\s*([^=]+?)\s*===/g;
+  const sections = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = HEADING.exec(raw)) !== null) {
+    // Text before this heading
+    const before = raw.slice(lastIndex, match.index).trim();
+    if (before) sections.push({ epKey: null, sourceLabel: null, label: null, text: before });
+
+    // Parse "ep_key | Source · label" from the heading content
+    const inner   = match[1].trim();
+    const pipeIdx = inner.indexOf('|');
+    let epKey = null, sourceLabel = null, label = null;
+    if (pipeIdx !== -1) {
+      epKey = inner.slice(0, pipeIdx).trim();
+      const rest  = inner.slice(pipeIdx + 1).trim();
+      const dotIdx = rest.indexOf('·');
+      if (dotIdx !== -1) {
+        sourceLabel = rest.slice(0, dotIdx).trim();
+        label       = rest.slice(dotIdx + 1).trim();
+      } else {
+        sourceLabel = rest;
+      }
+    } else {
+      sourceLabel = inner;
+    }
+
+    lastIndex = match.index + match[0].length;
+    // Capture text after heading (until next heading or end)
+    const nextMatch = HEADING.exec(raw);
+    const textEnd   = nextMatch ? nextMatch.index : raw.length;
+    HEADING.lastIndex = nextMatch ? nextMatch.index : raw.length;
+    const text = raw.slice(lastIndex, textEnd).trim();
+    lastIndex  = textEnd;
+    HEADING.lastIndex = lastIndex;
+
+    sections.push({ epKey, sourceLabel, label, text });
+  }
+
+  // Any remaining text after the last heading
+  const tail = raw.slice(lastIndex).trim();
+  if (tail) sections.push({ epKey: null, sourceLabel: null, label: null, text: tail });
+
+  // If nothing matched at all, treat the whole string as one plain section
+  if (sections.length === 0 && raw.trim()) {
+    sections.push({ epKey: null, sourceLabel: null, label: null, text: raw.trim() });
+  }
+
+  return sections;
+}
+
+// ── Format summary body — converts bullet points and **bold** to HTML ──
+function formatSummaryBody(text) {
+  if (!text) return '';
+  const lines = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+  const hasBullets = lines.some(function(l){ return l.startsWith('•'); });
+
+  if (hasBullets) {
+    const items = lines
+      .filter(function(l){ return l.startsWith('•'); })
+      .map(function(l) {
+        var content = l.slice(1).trim()
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        return '<li class="sum-bullet">'
+          + '<span class="sum-bullet-dot"></span>'
+          + '<span>' + content + '</span>'
+          + '</li>';
+      }).join('');
+    return '<ul class="sum-bullets">' + items + '</ul>';
+  }
+  // Plain paragraph
+  var rendered = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  return '<p class="sum-ep-text">' + rendered + '</p>';
+}
+
+// Derive badge CSS class from ep_key prefix
+function epBadgeCls(epKey) {
+  if (!epKey) return 'ep-plain';
+  const prefix = epKey.split(':')[0].toLowerCase();
+  if (prefix === 'stw')  return 'ep-stw';
+  if (prefix === 'ian')  return 'ep-ian';
+  return 'ep-custom';
+}
+
+// Render summary: collapsible badge sections.
+// State (open/closed) is persisted per ticker+epKey in sessionStorage.
+function renderSummary(raw, disc, ticker) {
+  if (!raw) return '';
+  const sections = parseSummary(raw);
+  if (!sections.length) return '';
+  // disc is {ep_key: "narrative text"} or undefined
+  const discMap = (disc && typeof disc === 'object') ? disc : {};
+
+  return sections.map((s, i) => {
+    if (!s.epKey) {
+      // Plain text preamble — always visible
+      return '<div class="summary-text">' + formatSummaryBody(s.text) + '</div>';
+    }
+    const cls        = epBadgeCls(s.epKey);
+    const badgeLabel = s.label
+      ? s.sourceLabel + ' &nbsp;·&nbsp; ' + s.label
+      : (s.sourceLabel || s.epKey);
+
+    // Check sessionStorage for open/closed state
+    const storeKey = 'sum:' + (ticker||'') + ':' + s.epKey;
+    const isOpen   = sessionStorage.getItem(storeKey) !== 'closed';
+    const openCls  = isOpen ? ' open' : '';
+
+    // Discussion narrative for this episode
+    const discText = discMap[s.epKey]
+      ? '<p class="disc-text">' + discMap[s.epKey] + '</p>'
+      : '';
+
+    return '<div class="sum-section' + openCls + '" data-sum-key="' + storeKey + '">'
+      + '<div class="sum-section-toggle" onclick="toggleSumSection(this)">'
+      + '<span class="sum-ep-badge ' + cls + '">' + badgeLabel + '</span>'
+      + '<span class="sum-chevron">' + (isOpen ? '▲' : '▼') + '</span>'
+      + '</div>'
+      + '<div class="sum-section-body">'
+      + discText
+      + formatSummaryBody(s.text)
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function toggleSumSection(toggleEl) {
+  const section  = toggleEl.closest('.sum-section');
+  const chevron  = toggleEl.querySelector('.sum-chevron');
+  const isOpen   = section.classList.contains('open');
+  const storeKey = section.dataset.sumKey;
+
+  if (isOpen) {
+    section.classList.remove('open');
+    if (chevron) chevron.textContent = '▼';
+    if (storeKey) sessionStorage.setItem(storeKey, 'closed');
+  } else {
+    section.classList.add('open');
+    if (chevron) chevron.textContent = '▲';
+    if (storeKey) sessionStorage.removeItem(storeKey);
+  }
+}
+
+// ── Detail panel ───────────────────────────────────────────────────
+function selectRow(ticker) {
+  activeRow = ticker;
+  showResearchCard(ticker);
+  render();
+  dcfOnSidebarChange(ticker);   // notify DCF panel if open
+  // Auto-fetch Finnhub in background so sidebar earn-pill + sentiment dot populate
+  // immediately on row click (not only when Finnhub tab is opened manually)
+  if (!_rcCache[ticker] || !_rcCache[ticker].finnhub) {
+    fetch('/api/finnhub/' + ticker)
+      .then(r => r.json())
+      .then(data => {
+        if (!_rcCache[ticker]) _rcCache[ticker] = {};
+        _rcCache[ticker].finnhub = data;
+        updateSidebarSentiment(ticker, data);
+        // If Finnhub tab is currently open for this ticker, render it now
+        const pane = document.getElementById('rc-tab-finnhub');
+        if (pane && _rcTab === 'finnhub' && _rcTicker === ticker) renderFinnhub(ticker, data);
+      })
+      .catch(() => {});  // silent — sidebar just stays empty if API unreachable
+  }
+  const d = allData.find(x => x.t === ticker);
+  if (!d) return;
+
+  document.getElementById('placeholder-card').style.display = 'none';
+  const card = document.getElementById('detail-card');
+  card.style.display = 'block';
+
+  const stCls = `st s-${d.s || 'flat'}`;
+  const stLbl = STATUS_MAP[d.s] || 'Neutral';
+  const eps   = (d.e || []).map(ep => `<span class="ep-tag">${ep}</span>`).join('');
+  const pc    = (d.pct_raw || 0) > 0 ? 'up' : (d.pct_raw || 0) < 0 ? 'down' : 'neu';
+  const w52   = d['52w_high'] && d['52w_low']
+    ? `<span class="pill">52W $${(+d['52w_low']).toFixed(2)} – $${(+d['52w_high']).toFixed(2)}</span>`
+    : '';
+  const pe  = d.pe ? '<span class="pill">P/E ' + (+d.pe).toFixed(1) + '</span>' : '';
+  // Yahoo returns dividendYield already as a % decimal (e.g. 0.92 = 0.92%)
+  const dyVal = (d.div_yield != null && d.div_yield > 0) ? (+d.div_yield).toFixed(2) : '0.00';
+  const dy = '<span class="pill pill-yield">Yield ' + dyVal + '%</span>';
+  const mc  = d.mktcap ? '<span class="pill">Mktcap ' + fmtMktcap(d.mktcap) + '</span>' : '';
+  const recVal = (d.rec && d.rec !== 'N/A' && d.rec !== 'None') ? d.rec : (d.rec_analyst || '');
+  const rec    = (recVal && recVal !== 'None' && recVal !== 'N/A') ? `<span class="pill">Analyst: ${recVal}</span>` : '';
+  const ts  = d.fetched_at
+    ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">
+         Updated ${new Date(d.fetched_at).toLocaleTimeString()}
+       </div>`
+    : '';
+
+  const activeTab = _rcTab || 'perplexity';
+
+  card.innerHTML = `
+    <div class="detail-header">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="detail-ticker" id="detail-ticker-label">${d.t}</span>
+          <span style="font-size:14px;color:var(--muted)">${d.n || ''}</span>
+          <button class="edit-ticker-btn" onclick="showTickerEditor('${d.t}')"
+                  title="Edit ticker symbol">✏</button>
+        </div>
+        <div class="ticker-edit-row" id="ticker-edit-row">
+          <input class="ticker-edit-input" id="ticker-edit-input"
+                 value="${d.t}" maxlength="12"
+                 oninput="this.value=this.value.toUpperCase()"
+                 onkeydown="if(event.key==='Enter')saveTicker('${d.t}');if(event.key==='Escape')hideTickerEditor()">
+          <button class="ticker-save-btn"   onclick="saveTicker('${d.t}')">Save</button>
+          <button class="ticker-cancel-btn" onclick="hideTickerEditor()">Cancel</button>
+          <span class="ticker-hint">Enter the correct exchange ticker</span>
+        </div>
+        <div class="meta-pills" style="align-items:center">
+          <span class="pill">${d.y || 'Stock'}</span>
+          <span class="pill">${d.sector || 'N/A'}</span>
+          <span class="${stCls}">${stLbl}</span>
+          ${pe}${dy}${mc}${w52}${rec}
+          <button class="edit-ticker-btn" onclick="showFieldsEditor('${d.t}')"
+                  title="Edit sector, name, type, status" style="margin-left:2px">✏</button>
+        </div>
+        <div class="fields-edit-panel" id="fields-edit-panel">
+          <div class="field-group"><label>Sector</label><input id="fe-sector" value="${d.sector || ''}" placeholder="e.g. Industrials"></div>
+          <div class="field-group"><label>Name</label><input id="fe-name" value="${d.n || ''}" placeholder="Full company name"></div>
+          <div class="field-group"><label>Type</label>
+            <select id="fe-type">
+              <option value="Stock"${(d.y||'Stock')==='Stock'?' selected':''}>Stock</option>
+              <option value="ETF"${d.y==='ETF'?' selected':''}>ETF</option>
+              <option value="Fund"${d.y==='Fund'?' selected':''}>Fund</option>
+            </select>
+          </div>
+          <div class="field-group"><label>Status</label>
+            <select id="fe-status">
+              ${['hot','rot','pull','press','dip','rec','caut','flat'].map(s =>
+                '<option value="' + s + '"' + (d.s === s ? ' selected' : '') + '>' + (STATUS_MAP[s] || s) + '</option>'
+              ).join('')}
+            </select>
+          </div>
+          <div class="field-group"><label>Analyst Rec</label><input id="fe-rec" value="${d.rec_analyst || ''}" placeholder="e.g. Buy, Hold"></div>
+          <div class="fields-edit-actions">
+            <button class="ticker-save-btn" onclick="saveFields('${d.t}')">Save</button>
+            <button class="ticker-cancel-btn" onclick="hideFieldsEditor()">Cancel</button>
+          </div>
+        </div>
+        <div class="ep-tags" style="margin-top:10px">${eps}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:22px;font-weight:700">${d.price_fmt || '—'}</div>
+        <div style="margin-top:4px">
+          <span class="pct ${pc}">${d.pct_fmt || '—'}</span>
+          <span style="font-size:12px;color:var(--muted);margin-left:6px">${d.diff_fmt || ''}</span>
+        </div>
+        ${ts}
+      </div>
+    </div>
+
     <!-- ── Unified tab bar ─────────────────────────────────────────── -->
     <div class="rc-tabs" style="margin-top:14px;flex-wrap:nowrap;overflow-x:auto;border-bottom:1px solid var(--border);padding-bottom:0;gap:0">
       <button class="rctab ${activeTab==='perplexity'?'on':''}" id="rctab-perplexity" onclick="setRCTab('perplexity',this)">
@@ -3485,6 +4521,403 @@ if (!document.querySelector('meta[name="viewport"]')) {
   m.name = 'viewport'; m.content = 'width=device-width, initial-scale=1, maximum-scale=1';
   document.head.prepend(m);
 }
+
+// ── DCF Analysis Panel ─────────────────────────────────────────────
+// Token auth for DCF calls — bypasses CF Access for AJAX requests.
+// Saves to sessionStorage so it survives CF Access redirects that strip the URL param.
+(function(){
+  const urlToken = new URLSearchParams(window.location.search).get('token');
+  if (urlToken) sessionStorage.setItem('sw_token', urlToken);
+})();
+function _getToken() { return sessionStorage.getItem('sw_token') || ''; }
+function _dcfUrl(ticker, force) {
+  const t = _getToken();
+  const q = t ? `?token=${encodeURIComponent(t)}${force ? '&force=1' : ''}` : (force ? '?force=1' : '');
+  return `/api/dcf/${ticker}${q}`;
+}
+
+let _dcfData   = null;   // last API response
+let _dcfWACC   = null;   // current slider value
+let _dcfPanelOpen = false;
+
+// Populate the picker from allData whenever DCF panel opens
+function dcfPopulatePicker() {
+  const sel = document.getElementById('dcf-picker');
+  // Only rebuild if list changed
+  const tickers = allData.filter(d => d.y !== 'ETF').map(d => d.t);
+  if (sel.options.length - 1 === tickers.length) return;
+  sel.innerHTML = '<option value="">— pick a ticker —</option>';
+  // Sort: stocks in DB alphabetically; put activeRow first if set
+  const sorted = [...tickers].sort((a, b) => a.localeCompare(b));
+  sorted.forEach(t => {
+    const rec  = allData.find(d => d.t === t);
+    const name = rec ? ` – ${rec.n}` : '';
+    const opt  = document.createElement('option');
+    opt.value       = t;
+    opt.textContent = `${t}${name}`;
+    sel.appendChild(opt);
+  });
+}
+
+function toggleDCFPanel() {
+  const panel = document.getElementById('dcf-panel');
+  const btn   = document.getElementById('dcf-toggle-btn');
+  _dcfPanelOpen = panel.classList.toggle('on');
+  btn.classList.toggle('on', _dcfPanelOpen);
+  if (_dcfPanelOpen) {
+    dcfPopulatePicker();
+    // Pre-select active sidebar row in picker but do NOT auto-run
+    if (activeRow) {
+      const sel = document.getElementById('dcf-picker');
+      if (sel) sel.value = activeRow;
+    }
+  }
+}
+
+// Called when sidebar row changes — just sync the picker, no auto-run
+function dcfOnSidebarChange(ticker) {
+  if (!_dcfPanelOpen) return;
+  const sel = document.getElementById('dcf-picker');
+  if (sel) sel.value = ticker;
+}
+
+// Triggered by the ▶ Run Analysis button
+function dcfRunSelected() {
+  const ticker = document.getElementById('dcf-picker').value;
+  if (!ticker) return;
+  dcfSelectStock(ticker);
+}
+
+async function dcfSelectStock(ticker) {
+  if (!ticker) return;
+  const loadEl = document.getElementById('dcf-loading');
+  const errEl  = document.getElementById('dcf-error');
+  const content= document.getElementById('dcf-content');
+  const sub    = document.getElementById('dcf-subtitle');
+
+  // Update picker to match
+  const sel = document.getElementById('dcf-picker');
+  if (sel && sel.value !== ticker) sel.value = ticker;
+
+  loadEl.style.display = 'inline';
+  errEl.style.display  = 'none';
+  content.style.display= 'none';
+
+  try {
+    const res  = await fetch(_dcfUrl(ticker));
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'API error');
+    _dcfData = data;
+    _dcfWACC = data.wacc_default;
+    document.getElementById('dcf-wacc-slider').value = _dcfWACC;
+    document.getElementById('dcf-wacc-out').textContent = _dcfWACC.toFixed(1) + '%';
+    if (sub) {
+      const cached = data.cached_ts ? new Date(data.cached_ts * 1000).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : null;
+      sub.textContent = `${data.name} · ⚡ Gemini Flash` + (cached ? ` · cached ${cached}` : ' · live');
+    }
+    dcfRenderAll();
+    content.style.display = 'block';
+  } catch(e) {
+    errEl.textContent    = `⚠ ${e.message}`;
+    errEl.style.display  = 'inline';
+  } finally {
+    loadEl.style.display = 'none';
+  }
+}
+
+function dcfRefresh() {
+  if (_dcfData) dcfSelectStock(_dcfData.ticker + '?force=1'.replace('?force=1',''));
+  const t = document.getElementById('dcf-picker').value;
+  if (t) {
+    _dcfData = null;
+    fetch(_dcfUrl(t, true)).then(() => dcfSelectStock(t));
+  }
+}
+
+// Local DCF re-computation for WACC slider (no API call needed)
+function dcfComputeLocal(s, wacc) {
+  if (!s || s.fcf <= 0 || s.shares <= 0) return null;
+  // Exit-multiple method: can't recompute analytically — return Gemini's IV as-is
+  if (s.tv_method === 'exit_multiple' || s.tgr == null) {
+    return { pv: '—', pvtv: '—', ev: '—', iv: s.iv_base || 0, static: true };
+  }
+  let pv = 0, fcf = s.fcf;
+  const r = wacc / 100;
+  for (let y = 1; y <= 5; y++)  { fcf *= (1 + s.g1_base / 100); pv += fcf / (1+r)**y; }
+  for (let y = 6; y <= 10; y++) { fcf *= (1 + s.g2_base / 100); pv += fcf / (1+r)**y; }
+  if (r <= s.tgr / 100) return null;
+  const tv   = fcf * (1 + s.tgr/100) / (r - s.tgr/100);
+  const pvtv = tv / (1+r)**10;
+  const ev   = pv + pvtv - s.net_debt;
+  const iv   = Math.max(ev / s.shares, 0);
+  return { pv: pv.toFixed(1), pvtv: pvtv.toFixed(1), ev: ev.toFixed(1), iv: Math.round(iv) };
+}
+
+function dcfUpdateWACC(val) {
+  _dcfWACC = parseFloat(val);
+  document.getElementById('dcf-wacc-out').textContent = _dcfWACC.toFixed(1) + '%';
+  if (_dcfData) dcfRenderDCF();
+}
+
+function dcfRenderDCF() {
+  const s   = _dcfData;
+  const res = dcfComputeLocal(s, _dcfWACC);
+  if (!res) {
+    ['dcf-d-pvfcf','dcf-d-tv','dcf-d-ev','dcf-d-iv','dcf-kpi-iv'].forEach(id => {
+      document.getElementById(id).textContent = 'N/A (neg. FCF)';
+    });
+    return;
+  }
+  const ratEl = document.getElementById('dcf-rationale');
+  if (ratEl && s.rationale) { ratEl.textContent = s.rationale; ratEl.style.display = 'block'; }
+  else if (ratEl) { ratEl.style.display = 'none'; }
+  document.getElementById('dcf-d-fcf').textContent      = `$${s.fcf}B`;
+  document.getElementById('dcf-d-fcf-label').textContent = `FCF (${s.fcf_source || 'TTM'}, $B)`;
+  const cwarn = document.getElementById('dcf-currency-warn');
+  if (s.currency_converted) {
+    document.getElementById('dcf-fin-currency').textContent = s.financial_currency;
+    cwarn.style.display = 'block';
+  } else {
+    cwarn.style.display = 'none';
+  }
+  document.getElementById('dcf-d-ebitda').textContent   = s.ebitda ? `$${s.ebitda}B` : 'N/A';
+  document.getElementById('dcf-d-eveb').textContent     = s.ev_ebitda || 'N/A';
+  document.getElementById('dcf-d-beta').textContent     = s.beta;
+  document.getElementById('dcf-d-g1').textContent       = `${s.g1_base}% / yr`;
+  document.getElementById('dcf-d-g2').textContent       = `${s.g2_base}% / yr  (phase 2, yr 6–${s.tv_horizon || 10})`;
+  document.getElementById('dcf-d-tvmethod').textContent = s.tv_label || '—';
+  const betaNote = s.beta_u != null
+    ? `β_U ${s.beta_u} × (1 + 0.79 × D/E ${s.de_ratio}) = β_L ${s.beta}`
+    : `β ${s.beta} (yfinance raw)`;
+  document.getElementById('dcf-d-wacc').textContent = `${_dcfWACC.toFixed(1)}%`;
+  const src = document.getElementById('dcf-data-source');
+  if (src) {
+    const isStatic = res.static;
+    src.textContent = isStatic
+      ? '⚡ Gemini Flash · exit-multiple method — WACC slider N/A'
+      : `⚡ Gemini Flash · WACC slider active`;
+  }
+  document.getElementById('dcf-d-pvfcf').textContent  = `$${res.pv}B`;
+  document.getElementById('dcf-d-tv').textContent     = `$${res.pvtv}B`;
+  document.getElementById('dcf-d-ev').textContent     = `$${res.ev}B`;
+  document.getElementById('dcf-d-iv').textContent     = `$${res.iv}`;
+  document.getElementById('dcf-kpi-iv').textContent   = `$${res.iv}`;
+  const mos   = res.iv > 0 ? Math.round((res.iv - s.price) / res.iv * 100) : null;
+  const mosEl = document.getElementById('dcf-kpi-mos');
+  if (mos === null) { mosEl.textContent = 'N/A'; mosEl.style.color = 'var(--muted)'; }
+  else {
+    mosEl.textContent = mos > 0 ? `+${mos}%` : `${mos}%`;
+    mosEl.style.color = mos > 20 ? '#1D9E75' : mos > 0 ? '#1a73e8' : '#D85A30';
+  }
+  document.getElementById('dcf-kpi-verdict').textContent =
+    (mos||0) > 30 ? 'Deep value' : (mos||0) > 15 ? 'Undervalued' :
+    (mos||0) > 0  ? 'Slight discount' : 'Overvalued / no FCF';
+}
+
+function dcfRenderScenarios() {
+  const s = _dcfData;
+  const maxIV = Math.max(s.iv_bull || 0, s.iv_base || 0, s.iv_bear || 0, 1);
+  const scenarios = [
+    {label:'Bull case', iv: s.iv_bull, cls:'dcf-bull-fill', color:'#1D9E75'},
+    {label:'Base case', iv: s.iv_base, cls:'dcf-base-fill', color:'#1a73e8'},
+    {label:'Bear case', iv: s.iv_bear, cls:'dcf-bear-fill', color:'#D85A30'},
+  ];
+  let bars = '', ud = '';
+  scenarios.forEach(sc => {
+    if (sc.iv == null) return;
+    const pct  = Math.round((sc.iv - s.price) / s.price * 100);
+    const sign = pct >= 0 ? '+' : '';
+    bars += `<div class="dcf-bar-wrap">
+      <div class="dcf-bar-slabel">
+        <span style="color:var(--muted)">${sc.label}</span>
+        <span style="font-weight:500">$${sc.iv}
+          <span style="color:${sc.color};font-size:11px">(${sign}${pct}%)</span>
+        </span>
+      </div>
+      <div class="dcf-bar-track">
+        <div class="dcf-bar-fill ${sc.cls}" style="width:${Math.round(sc.iv/maxIV*100)}%"></div>
+      </div>
+    </div>`;
+    ud += `<div class="dcf-row"><span class="dcf-key">${sc.label}</span>
+      <span style="color:${sc.color};font-weight:500">${sign}${pct}% (target: $${sc.iv})</span></div>`;
+  });
+  ud += `<div class="dcf-row"><span class="dcf-key">Current price</span>
+    <span class="dcf-val">$${s.price}</span></div>`;
+  document.getElementById('dcf-scenario-bars').innerHTML = bars;
+  document.getElementById('dcf-updown-rows').innerHTML   = ud;
+}
+
+function dcfRenderKPIs() {
+  const s = _dcfData;
+  document.getElementById('dcf-kpi-price').textContent  = `$${s.price}`;
+  document.getElementById('dcf-kpi-mktcap').textContent = `Mkt cap: ${s.mktcap}`;
+  document.getElementById('dcf-kpi-div').textContent    = s.div;
+  document.getElementById('dcf-kpi-pe').textContent     = s.pe;
+}
+
+function dcfRenderRisks() {
+  const s = _dcfData;
+  document.getElementById('dcf-risk-title').textContent = `Key risks — ${s.ticker}`;
+  document.getElementById('dcf-risk-list').innerHTML = s.risks.map(r => {
+    const cls = r.level==='high' ? 'dcf-risk-high' : r.level==='mid' ? 'dcf-risk-mid' : 'dcf-risk-low';
+    return `<div class="dcf-risk-item"><div class="dcf-risk-dot ${cls}"></div>
+      <span style="color:var(--muted)">${r.text}</span></div>`;
+  }).join('');
+}
+
+function dcfRenderCatalysts() {
+  const s = _dcfData;
+  document.getElementById('dcf-cat-title').textContent = `Investment thesis — ${s.ticker}`;
+  document.getElementById('dcf-cat-list').innerHTML = s.cats.map(c =>
+    `<div class="dcf-catalyst-item"><span class="dcf-cat-tag">${c.tag}</span>
+      <span style="color:var(--muted)">${c.text}</span></div>`
+  ).join('');
+}
+
+function dcfRenderAll() {
+  dcfRenderKPIs();
+  dcfRenderDCF();
+  dcfRenderScenarios();
+  dcfRenderRisks();
+  dcfRenderCatalysts();
+}
+
+// ── DCF Portfolio Screener ─────────────────────────────────────────
+const _scrCache = {};      // ticker → API result (persists across runs)
+let   _scrRunning = false;
+
+async function dcfRunScreener() {
+  if (_scrRunning) return;
+  _scrRunning = true;
+
+  const btn      = document.getElementById('dcf-run-btn');
+  const progress = document.getElementById('dcf-scr-progress');
+  const hint     = document.getElementById('dcf-scr-hint');
+  if (hint) hint.style.display = 'none';
+  btn.disabled    = true;
+  btn.textContent = '⏳ Scanning…';
+
+  const tickers = allData.filter(d => d.y !== 'ETF').map(d => d.t);
+  let done = 0;
+
+  for (const t of tickers) {
+    progress.textContent = `${done} / ${tickers.length} — ${t}`;
+    if (!_scrCache[t]) {
+      try {
+        const res  = await fetch(_dcfUrl(t));
+        const data = await res.json();
+        if (data.ok) _scrCache[t] = data;
+      } catch (_) {}
+    }
+    done++;
+    // Refresh table every 5 tickers so user sees live progress
+    if (done % 5 === 0) dcfFilterScreener();
+  }
+
+  dcfFilterScreener();
+  progress.textContent = `${done} stocks scanned · click Filter to change threshold`;
+  btn.disabled    = false;
+  btn.textContent = '▶ Run';
+  _scrRunning = false;
+}
+
+function dcfFilterScreener() {
+  const op     = document.getElementById('dcf-mos-op').value;
+  const thresh = parseFloat(document.getElementById('dcf-mos-val').value) || 0;
+  const tbl    = document.getElementById('dcf-scr-tbl');
+  const body   = document.getElementById('dcf-scr-body');
+  const empty  = document.getElementById('dcf-scr-empty');
+  const count  = document.getElementById('dcf-scr-count');
+
+  const all = Object.values(_scrCache).filter(d => d.mos != null);
+
+  const rows = all.filter(d => {
+    const m = d.mos;
+    if (op === 'gte') return m >= thresh;
+    if (op === 'lte') return m <= thresh;
+    if (op === 'eq')  return Math.abs(m - thresh) <= 5;
+    return true;
+  }).sort((a, b) => (b.mos || 0) - (a.mos || 0));
+
+  count.textContent = rows.length
+    ? `${rows.length} of ${all.length} stocks`
+    : '';
+
+  if (!rows.length) {
+    tbl.style.display   = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  tbl.style.display   = '';
+  empty.style.display = 'none';
+  const csvBtn = document.getElementById('dcf-csv-btn');
+  if (csvBtn) csvBtn.style.display = '';
+
+  body.innerHTML = rows.map(r => {
+    const mos    = r.mos || 0;
+    const sign   = mos >= 0 ? '+' : '';
+    const mosCls = mos >= 30 ? 'dcf-mos-high' : mos >= 10 ? 'dcf-mos-mid' : 'dcf-mos-low';
+    const rCls   = r.rating === 'buy'  ? 'dcf-badge-buy'
+                 : r.rating === 'hold' ? 'dcf-badge-hold' : 'dcf-badge-watch';
+    const tvShort = r.tv_method === 'perpetuity' ? `Perp. ${r.tgr}%`
+                  : `Exit ${r.exit_mult}×`;
+    const deep   = mos >= 30 ? 'background:var(--bg)' : '';
+    return `<tr onclick="dcfSelectStock('${r.ticker}')" style="cursor:pointer;${deep}" title="Click to load full DCF">
+      <td style="font-weight:600">${r.ticker}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${r.name}</td>
+      <td style="font-size:11px;color:var(--muted)">${r.sector || '—'}</td>
+      <td>$${r.price}</td>
+      <td style="font-weight:500">${r.iv_base != null ? '$' + r.iv_base : '—'}</td>
+      <td><span class="dcf-mos-pill ${mosCls}">${sign}${mos}%</span></td>
+      <td style="font-size:11px">${r.ev_ebitda || '—'}</td>
+      <td style="font-size:11px">${r.div}</td>
+      <td style="font-size:11px">${r.beta}</td>
+      <td style="font-size:10px;color:var(--muted)">${tvShort}</td>
+      <td><span class="dcf-badge ${rCls}">${(r.rating || '').toUpperCase()}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function dcfDownloadCSV() {
+  const op     = document.getElementById('dcf-mos-op').value;
+  const thresh = parseFloat(document.getElementById('dcf-mos-val').value) || 0;
+  const all    = Object.values(_scrCache).filter(d => d.mos != null);
+  const rows   = all.filter(d => {
+    const m = d.mos;
+    if (op === 'gte') return m >= thresh;
+    if (op === 'lte') return m <= thresh;
+    if (op === 'eq')  return Math.abs(m - thresh) <= 5;
+    return true;
+  }).sort((a, b) => (b.mos || 0) - (a.mos || 0));
+
+  if (!rows.length) return;
+
+  const headers = ['Ticker','Name','Sector','Price','DCF IV (Base)','Margin of Safety %',
+                   'EV/EBITDA','Div Yield','Beta','WACC %','TV Method','Exit Multiple',
+                   'FCF ($B)','EBITDA ($B)','Net Debt ($B)','Rating'];
+  const escape  = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines   = [headers.join(',')];
+
+  rows.forEach(r => {
+    lines.push([
+      r.ticker, r.name, r.sector || '',
+      r.price, r.iv_base ?? '', r.mos ?? '',
+      r.ev_ebitda || '', r.div, r.beta,
+      r.wacc_default, r.tv_method === 'perpetuity' ? `Perpetuity ${r.tgr}% TGR` : `Exit ${r.exit_mult}x EBITDA`,
+      r.exit_mult ?? '', r.fcf, r.ebitda ?? '', r.net_debt,
+      r.rating
+    ].map(escape).join(','));
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `dcf_screener_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Boot ───────────────────────────────────────────────────────────
 loadSourceLabels().then(() => loadData());
 wlLoad().then(() => renderWatchlistPills());
