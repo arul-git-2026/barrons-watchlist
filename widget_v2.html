@@ -1274,12 +1274,17 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       <!-- Stock picker row -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
         <label style="font-size:12px;color:var(--muted);white-space:nowrap">Analyse stock:</label>
-        <select id="dcf-picker" onchange="dcfSelectStock(this.value)"
+        <select id="dcf-picker"
           style="flex:1;min-width:220px;max-width:380px;padding:6px 10px;border:1px solid var(--border);
                  border-radius:var(--radius);font-size:13px;background:var(--card);color:var(--text);cursor:pointer">
           <option value="">— pick a ticker —</option>
         </select>
-        <span id="dcf-loading" style="display:none;font-size:11px;color:var(--muted)">⏳ Fetching fundamentals…</span>
+        <button onclick="dcfRunSelected()"
+          style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);
+                 font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap">
+          ▶ Run Analysis
+        </button>
+        <span id="dcf-loading" style="display:none;font-size:11px;color:var(--muted)">⏳ Calling Gemini…</span>
         <span id="dcf-error"   style="display:none;font-size:11px;color:var(--down)"></span>
       </div>
 
@@ -4561,16 +4566,25 @@ function toggleDCFPanel() {
   btn.classList.toggle('on', _dcfPanelOpen);
   if (_dcfPanelOpen) {
     dcfPopulatePicker();
-    // Pre-select active sidebar row if available and no stock loaded yet
-    if (activeRow && !_dcfData) dcfSelectStock(activeRow);
+    // Pre-select active sidebar row in picker but do NOT auto-run
+    if (activeRow) {
+      const sel = document.getElementById('dcf-picker');
+      if (sel) sel.value = activeRow;
+    }
   }
 }
 
-// Called when sidebar row changes — auto-load if DCF panel is open
+// Called when sidebar row changes — just sync the picker, no auto-run
 function dcfOnSidebarChange(ticker) {
   if (!_dcfPanelOpen) return;
   const sel = document.getElementById('dcf-picker');
   if (sel) sel.value = ticker;
+}
+
+// Triggered by the ▶ Run Analysis button
+function dcfRunSelected() {
+  const ticker = document.getElementById('dcf-picker').value;
+  if (!ticker) return;
   dcfSelectStock(ticker);
 }
 

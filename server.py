@@ -2920,20 +2920,37 @@ Return ONLY valid JSON with no markdown fences and no text outside the JSON:
         parts   = (g_data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
         raw_txt = "".join(p.get("text", "") for p in parts).strip()
 
-        # Strip markdown code fences if present
+        # ── Clean up Gemini's response before JSON parsing ────────────────────
+        # 1. Strip markdown fences (with or without closing fence)
         fence = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw_txt)
-        json_txt = fence.group(1).strip() if fence else raw_txt
+        if fence:
+            json_txt = fence.group(1).strip()
+        else:
+            # Remove opening fence only (response may be truncated)
+            json_txt = _re.sub(r'^```(?:json)?\s*', '', raw_txt.strip())
 
-        # Strip // single-line comments (Gemini sometimes annotates values)
+        # 2. Strip // single-line comments
         json_txt = _re.sub(r'//[^\n"]*', '', json_txt)
-        # Strip trailing commas before } or ] (Gemini sometimes adds them)
+        # 3. Strip trailing commas before } or ]
         json_txt = _re.sub(r',\s*([}\]])', r'\1', json_txt)
-
+        # 4. Python literals → JSON literals
+        json_txt = json_txt.replace(': True', ': true').replace(': False', ': false').replace(': None', ': null')
+        json_txt = json_txt.replace(':True', ':true').replace(':False', ':false').replace(':None', ':null')
+        # 5. If JSON is truncated mid-object, try to close it
         try:
             g = json.loads(json_txt)
-        except Exception as je:
-            log.error(f"  DCF Gemini JSON parse error for {sym}: {je} | raw: {raw_txt[:500]}")
-            return jsonify({"ok": False, "error": f"Gemini returned invalid JSON: {je}"}), 502
+        except Exception:
+            open_b = json_txt.count('{') - json_txt.count('}')
+            open_a = json_txt.count('[') - json_txt.count(']')
+            # Drop trailing incomplete token and close
+            json_txt = _re.sub(r',?\s*"[^"]*$', '', json_txt)  # drop dangling key
+            json_txt = _re.sub(r',?\s*[\w"]+\s*:\s*[^,}\]]*$', '', json_txt)
+            json_txt += ']' * max(0, open_a) + '}' * max(0, open_b)
+            try:
+                g = json.loads(json_txt)
+            except Exception as je2:
+                log.error(f"  DCF Gemini JSON parse error for {sym}: {je2} | raw: {raw_txt[:600]}")
+                return jsonify({"ok": False, "error": f"Gemini returned invalid JSON: {je2}"}), 502
 
         # ── Step 3: Extract + sanitise Gemini fields ──────────────────────────
         def _f(key, default=None):
