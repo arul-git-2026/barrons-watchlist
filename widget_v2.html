@@ -4518,12 +4518,17 @@ if (!document.querySelector('meta[name="viewport"]')) {
 }
 
 // ── DCF Analysis Panel ─────────────────────────────────────────────
-// Extract token from URL once — used to authenticate DCF API calls directly,
-// bypassing CF Access session expiry for AJAX requests.
-const _pageToken = new URLSearchParams(window.location.search).get('token') || '';
+// Token auth for DCF calls — bypasses CF Access for AJAX requests.
+// Saves to sessionStorage so it survives CF Access redirects that strip the URL param.
+(function(){
+  const urlToken = new URLSearchParams(window.location.search).get('token');
+  if (urlToken) sessionStorage.setItem('sw_token', urlToken);
+})();
+function _getToken() { return sessionStorage.getItem('sw_token') || ''; }
 function _dcfUrl(ticker, force) {
-  const t = _pageToken ? `?token=${encodeURIComponent(_pageToken)}${force ? '&force=1' : ''}` : (force ? '?force=1' : '');
-  return `/api/dcf/${ticker}${t}`;
+  const t = _getToken();
+  const q = t ? `?token=${encodeURIComponent(t)}${force ? '&force=1' : ''}` : (force ? '?force=1' : '');
+  return `/api/dcf/${ticker}${q}`;
 }
 
 let _dcfData   = null;   // last API response
