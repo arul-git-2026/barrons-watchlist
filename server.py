@@ -2798,7 +2798,7 @@ def get_dcf_analysis(ticker):
         import urllib.request, urllib.error as _ue
         import re as _re
 
-        # ── Step 1: yfinance — market data only (price, mktcap, div, pe, beta) ─
+        # ── Step 1: yfinance — market data + raw financials ──────────────────
         tk        = yf.Ticker(sym)
         info      = tk.info
         price     = float(info.get("currentPrice") or info.get("previousClose") or 0)
@@ -2806,23 +2806,7 @@ def get_dcf_analysis(ticker):
         mktcap    = f"${mktcap_r/1e9:.1f}B" if mktcap_r >= 1e9 else f"${mktcap_r/1e6:.0f}M"
         pe_v      = info.get("forwardPE") or info.get("trailingPE")
         pe_str    = f"Fwd P/E: {pe_v:.1f}×" if pe_v else "P/E: N/A"
-        dy = info.get("dividendYield", 0) or 0
-        # ADR FX fix: yfinance computes dividendYield = local_div / USD_price (mixed currencies)
-        # Detect ADR: financialCurrency != trading currency → apply fx_rate correction
-        _fin_ccy = info.get("financialCurrency", "USD") or "USD"
-        _trd_ccy = info.get("currency", "USD") or "USD"
-        if _fin_ccy != _trd_ccy and dy > 0:
-            _FX_ADR = {"TWD": 0.031, "HKD": 0.128, "BRL": 0.200,
-                       "CNH": 0.138, "KRW": 0.00072, "INR": 0.012, "JPY": 0.0067}
-            _fx = _FX_ADR.get(_fin_ccy, 1.0)
-            try:
-                _fx_info = yf.Ticker(f"{_fin_ccy}{_trd_ccy}=X").info
-                _fx = float(_fx_info.get("regularMarketPrice") or _fx_info.get("previousClose") or _fx)
-            except Exception:
-                pass
-            if _fx < 1.0:
-                dy = dy * _fx
-        div_str = f"{dy*100:.1f}%" if dy else "0%"
+        dy        = info.get("dividendYield", 0) or 0
         raw_beta  = float(info.get("beta", 1.0) or 1.0)
         beta      = round(max(0.5, min(2.5, raw_beta)), 2)
         sector    = info.get("sector", "")
@@ -2831,60 +2815,119 @@ def get_dcf_analysis(ticker):
         ev_r      = info.get("enterpriseValue", 0) or 0
         name      = info.get("longName", sym)
 
-        # ── Step 2: Gemini Flash — full DCF model at temperature=0 ────────────
+        # Raw financials for Gemini (yfinance reports in local currency)
+        _fin_ccy   = info.get("financialCurrency", "USD") or "USD"
+        _trd_ccy   = info.get("currency", "USD") or "USD"
+        _is_adr    = _fin_ccy != _trd_ccy
+
+        # Get live FX rate for ADR conversion (local → USD)
+        _fx = 1.0
+        if _is_adr:
+            _FX_FALLBACK = {"TWD": 0.031, "HKD": 0.128, "BRL": 0.200,
+                            "CNH": 0.138, "KRW": 0.00072, "INR": 0.012, "JPY": 0.0067}
+            _fx = _FX_FALLBACK.get(_fin_ccy, 1.0)
+            try:
+                _fx_info = yf.Ticker(f"{_fin_ccy}{_trd_ccy}=X").info
+                _fx = float(_fx_info.get("regularMarketPrice") or _fx_info.get("previousClose") or _fx)
+            except Exception:
+                pass
+            if dy > 0 and _fx < 1.0:
+                dy = dy * _fx
+
+        div_str = f"{dy*100:.1f}%" if dy else "0%"
+
+        # Pull financials and convert to USD billions
+        def _to_usd_b(raw_val):
+            v = float(raw_val) if raw_val and raw_val != "N/A" else None
+            if v is None: return None
+            v_usd = v * _fx          # no-op if _fx == 1.0
+            return round(v_usd / 1e9, 2)
+
+        yf_fcf    = _to_usd_b(info.get("freeCashflow"))
+        yf_ocf    = _to_usd_b(info.get("operatingCashflow"))
+        yf_ebitda = _to_usd_b(info.get("ebitda"))
+        yf_debt   = _to_usd_b(info.get("totalDebt", 0) or 0)
+        yf_cash   = _to_usd_b(info.get("totalCash", 0) or 0)
+        yf_shares_raw = info.get("sharesOutstanding")
+        yf_shares = None
+        if yf_shares_raw:
+            s = float(yf_shares_raw)
+            yf_shares = round(s / 1e9, 3)   # always in billions
+
+        def _fmt(v, suffix="B"):
+            return f"${v}{suffix}" if v is not None else "N/A"
+
+        # ADR note for prompt
+        adr_note = (
+            f"IMPORTANT — {sym} is an ADR: reports in {_fin_ccy}, trades in USD. "
+            f"The figures above are already converted to USD using fx_rate={_fx:.4f}. "
+            f"All outputs (iv_base/bull/bear) must be in USD per ADR share."
+        ) if _is_adr else ""
+
+        # ── Step 2: Gemini Flash — DCF math on real yfinance numbers ─────────
         gemini_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
         if not gemini_key:
             return jsonify({"ok": False, "error": "GEMINI_API_KEY not set"}), 400
 
         today_str = datetime.now().strftime("%B %Y")
         prompt = f"""You are a CFA-level financial analyst. Perform a DCF intrinsic value analysis for {sym} ({name}).
-Reference date: {today_str}. Current market price: ${price:.2f}.
+Reference date: {today_str}. Current market price: ${price:.2f}. Sector: {sector or "N/A"}.
 
-Instructions:
-- Use the most appropriate cash flow metric for this specific company:
-  * Platform/software companies (AMZN, GOOGL, META, MSFT, NFLX, etc.): use Operating Cash Flow (OCF) — CapEx is growth investment
-  * Capex-heavy companies (semiconductors, energy, industrials, manufacturing): use Free Cash Flow (FCF = OCF - CapEx)
-- Normalize over 3 years to avoid one-time anomalies
-- For ADRs (non-US companies whose stock trades in USD): ALL financial figures (FCF, EBITDA, net debt) must be expressed in USD billions. E.g. TSM reports in TWD — divide by ~32 to get USD. The iv_base/bull/bear must also be in USD per ADR share.
-- Use sector-appropriate terminal value method:
-  * Stable compounders / software: perpetuity with 2-3% TGR
-  * Cyclicals / capex-heavy / semiconductors: EV/EBITDA exit multiple
-- Use analyst consensus estimates for growth rates
-- Provide conservative bull, base, and bear case intrinsic values
+== LIVE DATA FROM YAHOO FINANCE (already in USD) ==
+- Trailing FCF (OCF − CapEx): {_fmt(yf_fcf)}
+- Trailing OCF (Operating Cash Flow): {_fmt(yf_ocf)}
+- Trailing EBITDA: {_fmt(yf_ebitda)}
+- Total Debt: {_fmt(yf_debt)}
+- Total Cash: {_fmt(yf_cash)}
+- Shares Outstanding: {f"{yf_shares}B" if yf_shares else "N/A"}
+- Beta: {beta}
+- Gross Margin: {gm*100:.1f}%
+{adr_note}
 
-CRITICAL UNITS — strictly required or the output will be wrong:
-- fcf, ebitda, net_debt: BILLIONS of USD. $45 billion = 45.0 NOT 45000000000
-- shares: BILLIONS of shares. 10.3 billion shares = 10.3 NOT 10300000000
-- g1_base/bull/bear, g2_base/bull/bear, wacc, tgr: PERCENTAGE POINTS. 12%% = 12.0 NOT 0.12
+== MACRO ASSUMPTIONS (March 2026) ==
+- Risk-Free Rate: 4.44%
+- Equity Risk Premium: 5.0%
+- Corporate Tax Rate: 21%
+
+== YOUR TASKS ==
+1. Choose FCF or OCF as the base cash flow:
+   - Platform/software (AMZN, GOOGL, META, MSFT, NFLX): use OCF — CapEx is growth investment
+   - Capex-heavy (semiconductors, energy, industrials): use FCF
+   - If yfinance FCF is negative or unreliable, use EBITDA × (1 − tax rate) as proxy
+2. Estimate analyst-consensus 5-year growth rate (g1) and a slower phase-2 rate (g2)
+3. Calculate WACC using the Beta and macro assumptions above
+4. Choose terminal value method:
+   - Stable compounders / software: perpetuity growth (TGR 2–3%)
+   - Cyclicals / semiconductors: EV/EBITDA exit multiple
+5. Run the DCF and produce bull, base, bear intrinsic values per share
+
+CRITICAL UNITS — output will be wrong if violated:
+- fcf, ebitda, net_debt: BILLIONS of USD (e.g. 45.0 not 45000000000)
+- shares: BILLIONS (e.g. 10.3 not 10300000000)
+- g1_base/bull/bear, g2_base/bull/bear, wacc, tgr: PERCENTAGE POINTS (e.g. 12.0 not 0.12)
 - iv_base/bull/bear: USD per share integer (e.g. 268)
 
-Return ONLY valid JSON with no markdown fences and no text outside the JSON:
+Return ONLY valid JSON, no markdown fences, no text outside the JSON:
 {{
-  "fcf": <$B e.g. 45.0>,
-  "fcf_source": "<e.g. '3-yr median OCF' or '3-yr median FCF'>",
-  "ebitda": <$B e.g. 110.0>,
-  "net_debt": <$B negative=net cash e.g. -30.0>,
-  "shares": <billions e.g. 10.3>,
-  "g1_base": <pct-points e.g. 12.0>,
-  "g1_bull": <pct-points e.g. 17.0>,
-  "g1_bear": <pct-points e.g. 7.0>,
-  "g2_base": <pct-points e.g. 7.0>,
-  "g2_bull": <pct-points e.g. 10.0>,
-  "g2_bear": <pct-points e.g. 4.0>,
-  "wacc": <pct-points e.g. 9.5>,
-  "tgr": <pct-points e.g. 2.5 or null if exit_multiple>,
+  "fcf": <$B>,
+  "fcf_source": "<e.g. 'Trailing OCF' or 'Trailing FCF' or 'EBITDA proxy'>",
+  "ebitda": <$B>,
+  "net_debt": <$B, negative = net cash>,
+  "shares": <billions>,
+  "g1_base": <pct-points>, "g1_bull": <pct-points>, "g1_bear": <pct-points>,
+  "g2_base": <pct-points>, "g2_bull": <pct-points>, "g2_bear": <pct-points>,
+  "wacc": <pct-points>,
+  "tgr": <pct-points or null if exit_multiple>,
   "tv_method": "<perpetuity or exit_multiple>",
   "tv_horizon": <5 or 10>,
   "tv_label": "<e.g. 'Perpetuity @ 2.5%% TGR · WACC 9.5%%'>",
-  "exit_mult": <e.g. 15.0 or null if perpetuity>,
-  "iv_base": <USD/share e.g. 268>,
-  "iv_bull": <USD/share e.g. 340>,
-  "iv_bear": <USD/share e.g. 190>,
-  "rationale": "<1-2 sentences on metric choice>",
+  "exit_mult": <e.g. 15.0 or null>,
+  "iv_base": <USD/share>, "iv_bull": <USD/share>, "iv_bear": <USD/share>,
+  "rationale": "<1-2 sentences on metric choice and key assumptions>",
   "risks": [
-    {{"level": "high", "text": "<company-specific risk>"}},
-    {{"level": "mid",  "text": "<company-specific risk>"}},
-    {{"level": "low",  "text": "<company-specific risk>"}}
+    {{"level": "high", "text": "<risk>"}},
+    {{"level": "mid",  "text": "<risk>"}},
+    {{"level": "low",  "text": "<risk>"}}
   ],
   "cats": [
     {{"tag": "Bull", "text": "<bull thesis>"}},
