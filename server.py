@@ -2841,10 +2841,15 @@ Return ONLY valid JSON with no markdown fences and no text outside the JSON:
         fence = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw_txt)
         json_txt = fence.group(1).strip() if fence else raw_txt
 
+        # Strip // single-line comments (Gemini sometimes annotates values)
+        json_txt = _re.sub(r'//[^\n"]*', '', json_txt)
+        # Strip trailing commas before } or ] (Gemini sometimes adds them)
+        json_txt = _re.sub(r',\s*([}\]])', r'\1', json_txt)
+
         try:
             g = json.loads(json_txt)
         except Exception as je:
-            log.error(f"  DCF Gemini JSON parse error for {sym}: {je} | raw: {raw_txt[:300]}")
+            log.error(f"  DCF Gemini JSON parse error for {sym}: {je} | raw: {raw_txt[:500]}")
             return jsonify({"ok": False, "error": f"Gemini returned invalid JSON: {je}"}), 502
 
         # ── Step 3: Extract + sanitise Gemini fields ──────────────────────────
