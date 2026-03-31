@@ -2768,38 +2768,44 @@ Instructions:
 - Use analyst consensus estimates for growth rates
 - Provide conservative bull, base, and bear case intrinsic values
 
+CRITICAL UNITS — strictly required or the output will be wrong:
+- fcf, ebitda, net_debt: BILLIONS of USD. $45 billion = 45.0 NOT 45000000000
+- shares: BILLIONS of shares. 10.3 billion shares = 10.3 NOT 10300000000
+- g1_base/bull/bear, g2_base/bull/bear, wacc, tgr: PERCENTAGE POINTS. 12%% = 12.0 NOT 0.12
+- iv_base/bull/bear: USD per share integer (e.g. 268)
+
 Return ONLY valid JSON with no markdown fences and no text outside the JSON:
 {{
-  "fcf": <normalized cash flow in $B USD, number>,
-  "fcf_source": "<e.g. '3-yr median OCF' or '3-yr median FCF' or 'TTM FCF'>",
-  "ebitda": <EBITDA in $B USD, number or null>,
-  "net_debt": <total debt minus cash in $B USD — negative means net cash, number>,
-  "shares": <diluted shares outstanding in billions, number>,
-  "g1_base": <phase 1 base growth rate % yr 1-5, number>,
-  "g1_bull": <phase 1 bull growth %, number>,
-  "g1_bear": <phase 1 bear growth %, number>,
-  "g2_base": <phase 2 base growth rate % yr 6-10, number>,
-  "g2_bull": <phase 2 bull growth %, number>,
-  "g2_bear": <phase 2 bear growth %, number>,
-  "wacc": <WACC % e.g. 9.5, number>,
-  "tgr": <terminal growth rate % e.g. 2.5 — use null if exit_multiple method, number or null>,
+  "fcf": <$B e.g. 45.0>,
+  "fcf_source": "<e.g. '3-yr median OCF' or '3-yr median FCF'>",
+  "ebitda": <$B e.g. 110.0>,
+  "net_debt": <$B negative=net cash e.g. -30.0>,
+  "shares": <billions e.g. 10.3>,
+  "g1_base": <pct-points e.g. 12.0>,
+  "g1_bull": <pct-points e.g. 17.0>,
+  "g1_bear": <pct-points e.g. 7.0>,
+  "g2_base": <pct-points e.g. 7.0>,
+  "g2_bull": <pct-points e.g. 10.0>,
+  "g2_bear": <pct-points e.g. 4.0>,
+  "wacc": <pct-points e.g. 9.5>,
+  "tgr": <pct-points e.g. 2.5 or null if exit_multiple>,
   "tv_method": "<perpetuity or exit_multiple>",
-  "tv_horizon": <years: 5 or 10, number>,
-  "tv_label": "<short label e.g. 'Perpetuity @ 2.5% TGR · WACC 9.5%'>",
-  "exit_mult": <EV/EBITDA exit multiple — null if perpetuity method, number or null>,
-  "iv_base": <base case intrinsic value per share USD, integer>,
-  "iv_bull": <bull case IV per share USD, integer>,
-  "iv_bear": <bear case IV per share USD, integer>,
-  "rationale": "<1-2 sentences: which metric was chosen and why>",
+  "tv_horizon": <5 or 10>,
+  "tv_label": "<e.g. 'Perpetuity @ 2.5%% TGR · WACC 9.5%%'>",
+  "exit_mult": <e.g. 15.0 or null if perpetuity>,
+  "iv_base": <USD/share e.g. 268>,
+  "iv_bull": <USD/share e.g. 340>,
+  "iv_bear": <USD/share e.g. 190>,
+  "rationale": "<1-2 sentences on metric choice>",
   "risks": [
-    {{"level": "high", "text": "<specific risk for this company>"}},
-    {{"level": "mid",  "text": "<specific risk for this company>"}},
-    {{"level": "low",  "text": "<specific risk for this company>"}}
+    {{"level": "high", "text": "<company-specific risk>"}},
+    {{"level": "mid",  "text": "<company-specific risk>"}},
+    {{"level": "low",  "text": "<company-specific risk>"}}
   ],
   "cats": [
-    {{"tag": "Bull", "text": "<bull investment thesis>"}},
-    {{"tag": "Base", "text": "<base case thesis>"}},
-    {{"tag": "Bear", "text": "<bear case / downside thesis>"}}
+    {{"tag": "Bull", "text": "<bull thesis>"}},
+    {{"tag": "Base", "text": "<base thesis>"}},
+    {{"tag": "Bear", "text": "<bear thesis>"}}
   ]
 }}"""
 
@@ -2856,18 +2862,31 @@ Return ONLY valid JSON with no markdown fences and no text outside the JSON:
             except (TypeError, ValueError):
                 return default
 
-        fcf        = round(_f("fcf", 0), 2)
-        ebitda     = round(_f("ebitda") or 0, 2)
-        net_debt   = round(_f("net_debt", 0), 1)
-        shares     = round(_f("shares", 1), 3)
-        g1_base    = round(_f("g1_base", 10.0), 1)
-        g1_bull    = round(_f("g1_bull", g1_base + 5.0), 1)
-        g1_bear    = round(_f("g1_bear", g1_base - 5.0), 1)
-        g2_base    = round(_f("g2_base", g1_base * 0.5), 1)
-        g2_bull    = round(_f("g2_bull", g2_base + 3.0), 1)
-        g2_bear    = round(_f("g2_bear", g2_base - 3.0), 1)
-        wacc       = round(_f("wacc", 9.5), 1)
-        tgr        = _f("tgr")        # None for exit_multiple
+        # Auto-normalise units — Gemini sometimes returns raw dollars or decimal ratios
+        def _billions(key, default=0.0):
+            v = _f(key, default)
+            if v is None: return default
+            return round(v / 1e9 if abs(v) > 1e6 else v, 2)  # raw dollars → $B
+
+        def _pct(key, default=0.0):
+            v = _f(key, default)
+            if v is None: return default
+            return round(v * 100 if abs(v) < 2.0 else v, 1)  # decimal → pct-points
+
+        fcf        = _billions("fcf", 0)
+        ebitda     = _billions("ebitda", 0)
+        net_debt   = _billions("net_debt", 0)
+        shares_raw = _f("shares", 1)
+        shares     = round(shares_raw / 1e9 if shares_raw > 1e6 else shares_raw, 3)
+        g1_base    = _pct("g1_base", 10.0)
+        g1_bull    = _pct("g1_bull", g1_base + 5.0)
+        g1_bear    = _pct("g1_bear", g1_base - 5.0)
+        g2_base    = _pct("g2_base", g1_base * 0.5)
+        g2_bull    = _pct("g2_bull", g2_base + 3.0)
+        g2_bear    = _pct("g2_bear", g2_base - 3.0)
+        wacc       = _pct("wacc", 9.5)
+        tgr_raw    = _f("tgr")
+        tgr        = round(tgr_raw * 100 if tgr_raw is not None and abs(tgr_raw) < 2.0 else tgr_raw, 1) if tgr_raw is not None else None
         iv_base    = _i("iv_base")
         iv_bull    = _i("iv_bull")
         iv_bear    = _i("iv_bear")
