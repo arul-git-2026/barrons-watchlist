@@ -4592,7 +4592,10 @@ async function dcfSelectStock(ticker) {
     _dcfWACC = data.wacc_default;
     document.getElementById('dcf-wacc-slider').value = _dcfWACC;
     document.getElementById('dcf-wacc-out').textContent = _dcfWACC.toFixed(1) + '%';
-    if (sub) sub.textContent = `${data.name} (${ticker}) · yfinance fundamentals · 10-yr FCF`;
+    if (sub) {
+      const cached = data.cached_ts ? new Date(data.cached_ts * 1000).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : null;
+      sub.textContent = `${data.name} · ⚡ Gemini Flash` + (cached ? ` · cached ${cached}` : ' · live');
+    }
     dcfRenderAll();
     content.style.display = 'block';
   } catch(e) {

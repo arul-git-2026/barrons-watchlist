@@ -2708,22 +2708,91 @@ def rpo_extract(ticker):
 #            which metric suits each company (OCF vs FCF) and has audited financials
 #            in its training data. This removes all the fragile sector heuristics.
 
-_dcf_cache: dict = {}
-_DCF_TTL = 86400  # 24 hours — Gemini knowledge doesn't change intraday
+_dcf_mem: dict = {}   # in-memory layer (process lifetime)
+_DCF_TTL = 7 * 86400  # 7 days — Gemini fundamental data doesn't change weekly
+
+def _dcf_db_init():
+    """Create dcf_cache table in price_history.db if it doesn't exist."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS dcf_cache (
+                ticker   TEXT PRIMARY KEY,
+                ts       REAL NOT NULL,
+                payload  TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def _dcf_db_load(sym: str):
+    """Return (ts, data_dict) from DB, or None if missing/stale."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row  = conn.execute(
+            "SELECT ts, payload FROM dcf_cache WHERE ticker=?", (sym,)
+        ).fetchone()
+        conn.close()
+        if row:
+            return row[0], json.loads(row[1])
+    except Exception:
+        pass
+    return None
+
+def _dcf_db_save(sym: str, ts: float, data: dict):
+    """Upsert DCF result into DB."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.execute(
+            "INSERT OR REPLACE INTO dcf_cache (ticker, ts, payload) VALUES (?,?,?)",
+            (sym, ts, json.dumps(data))
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.warning(f"  DCF DB save failed for {sym}: {e}")
+
+_dcf_db_init()   # run once at import time
 
 @app.route("/api/dcf/<ticker>")
 def get_dcf_analysis(ticker):
     """
     Returns DCF intrinsic value analysis for a ticker.
-    Market data (price, mktcap, div, pe, beta) from yfinance.
-    DCF model (FCF, growth rates, WACC, IV scenarios) from Gemini Flash at temp=0.
+    Market data (price, mktcap, div, pe, beta) from yfinance (always live).
+    DCF model (FCF, growth rates, WACC, IV scenarios) from Gemini Flash at temp=0,
+    cached in price_history.db for 7 days so Gemini isn't called on every load.
     """
-    sym = ticker.upper()
+    sym   = ticker.upper()
+    force = bool(request.args.get("force"))
+    now   = time.time()
 
-    # ── Cache check ───────────────────────────────────────────────────────────
-    cached = _dcf_cache.get(sym)
-    if cached and (time.time() - cached["ts"]) < _DCF_TTL and not request.args.get("force"):
-        return jsonify(cached["data"])
+    # ── 1. In-memory cache (fastest) ─────────────────────────────────────────
+    mem = _dcf_mem.get(sym)
+    if mem and (now - mem["ts"]) < _DCF_TTL and not force:
+        return jsonify(mem["data"])
+
+    # ── 2. SQLite cache (survives restarts) ───────────────────────────────────
+    if not force:
+        row = _dcf_db_load(sym)
+        if row:
+            db_ts, db_data = row
+            if (now - db_ts) < _DCF_TTL:
+                # refresh price + MoS from yfinance (cheap) then return
+                try:
+                    info  = yf.Ticker(sym).info
+                    price = float(info.get("currentPrice") or info.get("previousClose") or db_data.get("price", 0))
+                    iv    = db_data.get("iv_base") or 0
+                    db_data["price"] = round(price, 2)
+                    db_data["mos"]   = round(((iv - price) / iv * 100)) if iv else None
+                    db_data["rating"] = ("buy" if (db_data["mos"] or 0) > 25 else
+                                         "hold" if (db_data["mos"] or 0) > 0 else "watch")
+                    db_data["cached_ts"] = db_ts
+                except Exception:
+                    pass
+                _dcf_mem[sym] = {"ts": db_ts, "data": db_data}
+                return jsonify(db_data)
 
     try:
         import urllib.request, urllib.error as _ue
@@ -2972,8 +3041,11 @@ Return ONLY valid JSON with no markdown fences and no text outside the JSON:
             "risks":            risks,
             "cats":             cats,
         }
-        _dcf_cache[sym] = {"ts": time.time(), "data": result}
-        log.info(f"DCF {sym} (Gemini): price=${price} iv_base=${iv_base} mos={mos}% wacc={wacc}%")
+        ts = time.time()
+        result["cached_ts"] = ts
+        _dcf_mem[sym] = {"ts": ts, "data": result}
+        _dcf_db_save(sym, ts, result)
+        log.info(f"DCF {sym} (Gemini): price=${price} iv_base=${iv_base} mos={mos}% wacc={wacc}% [saved to DB]")
         return jsonify(result)
 
     except Exception as ex:
