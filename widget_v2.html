@@ -4518,6 +4518,14 @@ if (!document.querySelector('meta[name="viewport"]')) {
 }
 
 // ── DCF Analysis Panel ─────────────────────────────────────────────
+// Extract token from URL once — used to authenticate DCF API calls directly,
+// bypassing CF Access session expiry for AJAX requests.
+const _pageToken = new URLSearchParams(window.location.search).get('token') || '';
+function _dcfUrl(ticker, force) {
+  const t = _pageToken ? `?token=${encodeURIComponent(_pageToken)}${force ? '&force=1' : ''}` : (force ? '?force=1' : '');
+  return `/api/dcf/${ticker}${t}`;
+}
+
 let _dcfData   = null;   // last API response
 let _dcfWACC   = null;   // current slider value
 let _dcfPanelOpen = false;
@@ -4577,7 +4585,7 @@ async function dcfSelectStock(ticker) {
   content.style.display= 'none';
 
   try {
-    const res  = await fetch(`/api/dcf/${ticker}`);
+    const res  = await fetch(_dcfUrl(ticker));
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'API error');
     _dcfData = data;
@@ -4600,7 +4608,7 @@ function dcfRefresh() {
   const t = document.getElementById('dcf-picker').value;
   if (t) {
     _dcfData = null;
-    fetch(`/api/dcf/${t}?force=1`).then(() => dcfSelectStock(t));
+    fetch(_dcfUrl(t, true)).then(() => dcfSelectStock(t));
   }
 }
 
@@ -4774,7 +4782,7 @@ async function dcfRunScreener() {
     progress.textContent = `${done} / ${tickers.length} — ${t}`;
     if (!_scrCache[t]) {
       try {
-        const res  = await fetch(`/api/dcf/${t}`);
+        const res  = await fetch(_dcfUrl(t));
         const data = await res.json();
         if (data.ok) _scrCache[t] = data;
       } catch (_) {}
