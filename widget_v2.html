@@ -1843,7 +1843,6 @@ function selectRow(ticker) {
   activeRow = ticker;
   showResearchCard(ticker);
   render();
-  dcfOnSidebarChange(ticker);   // notify DCF panel if open
   // Auto-fetch Finnhub in background so sidebar earn-pill + sentiment dot populate
   // immediately on row click (not only when Finnhub tab is opened manually)
   if (!_rcCache[ticker] || !_rcCache[ticker].finnhub) {
@@ -3177,6 +3176,7 @@ async function regenCases(ticker, name) {
 // ── Research panel ────────────────────────────────────────────────
 let _lastResearchTicker  = null;
 let _lastResearchText    = '';
+let _lastResearchModel   = null;
 let _pendingWlTickers    = null;   // tickers returned by watchlist-build
 let _pendingWlReasoning  = '';
 
@@ -4226,7 +4226,6 @@ function closeMobSidebar() {
   document.getElementById('mob-menu-btn').textContent = '☰';
 }
 // Close sidebar after selecting a ticker on mobile
-const _origSelectRow = typeof selectRow === 'function' ? selectRow : null;
 document.addEventListener('click', e => {
   if (window.innerWidth <= 768 && e.target.closest('.ticker-row')) {
     setTimeout(closeMobSidebar, 150);
