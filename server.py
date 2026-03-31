@@ -2806,8 +2806,23 @@ def get_dcf_analysis(ticker):
         mktcap    = f"${mktcap_r/1e9:.1f}B" if mktcap_r >= 1e9 else f"${mktcap_r/1e6:.0f}M"
         pe_v      = info.get("forwardPE") or info.get("trailingPE")
         pe_str    = f"Fwd P/E: {pe_v:.1f}×" if pe_v else "P/E: N/A"
-        dy        = info.get("dividendYield", 0) or 0
-        div_str   = f"{dy*100:.1f}%" if dy else "0%"
+        dy = info.get("dividendYield", 0) or 0
+        # ADR FX fix: yfinance computes dividendYield = local_div / USD_price (mixed currencies)
+        # Detect ADR: financialCurrency != trading currency → apply fx_rate correction
+        _fin_ccy = info.get("financialCurrency", "USD") or "USD"
+        _trd_ccy = info.get("currency", "USD") or "USD"
+        if _fin_ccy != _trd_ccy and dy > 0:
+            _FX_ADR = {"TWD": 0.031, "HKD": 0.128, "BRL": 0.200,
+                       "CNH": 0.138, "KRW": 0.00072, "INR": 0.012, "JPY": 0.0067}
+            _fx = _FX_ADR.get(_fin_ccy, 1.0)
+            try:
+                _fx_info = yf.Ticker(f"{_fin_ccy}{_trd_ccy}=X").info
+                _fx = float(_fx_info.get("regularMarketPrice") or _fx_info.get("previousClose") or _fx)
+            except Exception:
+                pass
+            if _fx < 1.0:
+                dy = dy * _fx
+        div_str = f"{dy*100:.1f}%" if dy else "0%"
         raw_beta  = float(info.get("beta", 1.0) or 1.0)
         beta      = round(max(0.5, min(2.5, raw_beta)), 2)
         sector    = info.get("sector", "")
@@ -2830,7 +2845,7 @@ Instructions:
   * Platform/software companies (AMZN, GOOGL, META, MSFT, NFLX, etc.): use Operating Cash Flow (OCF) — CapEx is growth investment
   * Capex-heavy companies (semiconductors, energy, industrials, manufacturing): use Free Cash Flow (FCF = OCF - CapEx)
 - Normalize over 3 years to avoid one-time anomalies
-- For ADRs (non-US companies trading in USD): convert all financials to USD
+- For ADRs (non-US companies whose stock trades in USD): ALL financial figures (FCF, EBITDA, net debt) must be expressed in USD billions. E.g. TSM reports in TWD — divide by ~32 to get USD. The iv_base/bull/bear must also be in USD per ADR share.
 - Use sector-appropriate terminal value method:
   * Stable compounders / software: perpetuity with 2-3% TGR
   * Cyclicals / capex-heavy / semiconductors: EV/EBITDA exit multiple
