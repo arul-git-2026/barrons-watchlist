@@ -1196,6 +1196,759 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading crisis data…</div>
       </div>
     </div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────
+// 20 visually distinct colors
+const PALETTE = [
+  '#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6',
+  '#06b6d4','#f97316','#ec4899','#14b8a6','#a3e635',
+  '#6366f1','#f43f5e','#84cc16','#0ea5e9','#d946ef',
+  '#fb923c','#10b981','#facc15','#a855f7','#38bdf8'
+];
+
+// Colors are assigned fresh each render in dataset order (index i → PALETTE[i]).
+// The legend always reads ds.borderColor from the final datasets array,
+// so legend and chart lines are guaranteed to match.
+// No persistent map — eliminates all stale-state color mismatches.
+// ── Sidebar resize ────────────────────────────────────────────────────────────
+(function() {
+  const MIN_W = 320, MAX_W = 720;
+  const saved = parseInt(localStorage.getItem('sw-sidebar-w'), 10);
+  if (saved && saved >= MIN_W && saved <= MAX_W)
+    document.documentElement.style.setProperty('--sidebar-w', saved + 'px');
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const handle = document.getElementById('sidebar-resize-handle');
+    if (!handle) return;
+    let dragging = false, startX = 0, startW = 0;
+
+    handle.addEventListener('mousedown', e => {
+      dragging = true;
+      startX = e.clientX;
+      startW = parseInt(getComputedStyle(document.documentElement)
+                        .getPropertyValue('--sidebar-w')) || 480;
+      handle.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const w = Math.min(MAX_W, Math.max(MIN_W, startW + e.clientX - startX));
+      document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const w = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w');
+      localStorage.setItem('sw-sidebar-w', parseInt(w));
+    });
+  });
+})();
+
+const STATUS_MAP = {
+  hot:'Momentum', rot:'Rotating',  pull:'Pullback', press:'Pressure',
+  dip:'Dip Buy',  rec:'Recovery',  caut:'Caution',  flat:'Neutral'
+};
+
+// Max tickers on the chart — set to 0 for no limit
+// Chart.js handles many lines fine; readability is the only constraint
+const MAX_CHART_TICKERS = 0;   // 0 = no limit on refresh selection
+const MAX_CHART_LINES    = 20;  // chart renders max 20 lines (readability)
+
+// ── State ──────────────────────────────────────────────────────────
+let allData      = [];
+let selectedChk  = new Set();   // tickers checked for chart comparison
+let activeRow    = null;        // ticker of the currently-expanded detail row
+let currentSort  = 'pct';
+let sortAsc      = false;
+let currentRange = '1M';
+let currentSrc   = '';   // active source prefix filter — '' means All Sources
+let perfChart = null; // stub — chart is now TradingView
+let hiddenLines         = new Set();   // tickers hidden via legend click
+let _defaultLegendItems = null;        // end-of-range values, restored on mouse leave
+let _chartFilter        = 'all';       // 'all' | 'positive' | 'negative'  — hover filter
+
+
+// ── Utilities ──────────────────────────────────────────────────────
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function showLoader(v) {
+  document.getElementById('loader').style.display = v ? 'flex' : 'none';
+}
+
+function setStatus(state, extra = '') {
+  const dot = document.getElementById('live-dot');
+  const txt = document.getElementById('status-txt');
+  const cfg = {
+    loading: ['#fbbf24', 'Loading…'],
+    live:    ['#22c55e', `Live · ${allData.length} tickers · ${new Date().toLocaleTimeString()}`],
+    partial: ['#22c55e', `Refreshed ${extra} · ${new Date().toLocaleTimeString()}`],
+    error:   ['#ef4444', 'Error — check console'],
+  };
+  const [color, label] = cfg[state] || cfg.loading;
+  dot.className    = (state === 'live' || state === 'partial') ? 'dot live' : 'dot';
+  dot.style.background = color;
+  txt.textContent  = label;
+}
+
+// ── Initial load — static data only, no Yahoo calls ──────────────────
+async function loadData() {
+  showLoader(true);
+  setStatus('loading');
+  try {
+    const res = await fetch('/api/data');   // no ?tickers param = static
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    allData = await res.json();
+    populateFilters();
+    render();
+    // Show "loaded" but make clear prices need a manual refresh
+    const dot = document.getElementById('live-dot');
+    const txt = document.getElementById('status-txt');
+    dot.className = 'dot';
+    dot.style.background = '#fbbf24';
+    txt.textContent = `${allData.length} tickers loaded — select tickers and press Refresh for live prices`;
+  } catch (e) {
+    console.error(e);
+    setStatus('error');
+  } finally {
+    showLoader(false);
+  }
+}
+
+// ── Selective refresh — only fetches quotes for checked tickers ────────
+async function handleRefresh() {
+  if (selectedChk.size === 0) {
+    toast('Check tickers in the sidebar first, then press Refresh');
+    return;
+  }
+
+  const btn     = document.getElementById('refresh-btn');
+  const label   = document.getElementById('refresh-label');
+  const targets = [...selectedChk];
+  const param   = targets.join(',');
+
+  btn.classList.add('spinning');
+  label.textContent = 'Refreshing…';
+
+  try {
+    // Expire cache for selected tickers only
+    await fetch(`/api/cache/clear?tickers=${param}`, { method: 'POST' });
+
+    // Fetch live quotes for selected tickers only
+    const res = await fetch(`/api/data?tickers=${param}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const fresh = await res.json();
+
+    // Merge back into allData in-place
+    fresh.forEach(u => {
+      const idx = allData.findIndex(d => d.t === u.t);
+      if (idx !== -1) allData[idx] = u;
+      else allData.push(u);
+    });
+
+    setStatus('partial', `${fresh.length} ticker${fresh.length !== 1 ? 's' : ''}`);
+    const refreshed = fresh.map(d => d.t);
+    const summary   = refreshed.length <= 8
+      ? refreshed.join(', ')
+      : refreshed.slice(0, 8).join(', ') + ` + ${refreshed.length - 8} more`;
+    toast(`Live prices updated: ${summary}`);
+    populateFilters();   // re-populate now that sector/rec are available
+    render();
+    fetchChart();
+
+  } catch (e) {
+    console.error(e);
+    setStatus('error');
+    toast('Refresh failed — check console');
+  } finally {
+    btn.classList.remove('spinning');
+    label.textContent = `Refresh (${targets.length})`;
+  }
+}
+
+// Keep the refresh button label and selection banner in sync
+function updateSelectionUI() {
+  const n       = selectedChk.size;
+  const label   = document.getElementById('refresh-label');
+  const banner  = document.getElementById('sel-banner');
+  const ctxt    = document.getElementById('sel-count-txt');
+  label.textContent = n > 0 ? `Refresh (${n})` : 'Refresh';
+  if (n > 0) {
+    banner.classList.add('visible');
+    ctxt.innerHTML =
+      `<strong>${n}</strong> ticker${n !== 1 ? 's' : ''} selected for chart &amp; refresh`;
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
+function clearSelection() {
+  selectedChk.clear();
+  hiddenLines.clear();
+  clearChart();          // synchronous — chart clears instantly
+  updateSelectionUI();
+  syncSelectAllChk();
+  render();
+}
+
+// ── Select / deselect all visible rows ────────────────────────────
+function toggleSelectAll(chk) {
+  // Collect tickers currently visible in the table
+  const rows = document.querySelectorAll('#tb .row');
+  const visible = [...rows].map(r => {
+    const chip = r.querySelector('.chip');
+    return chip ? chip.textContent.trim() : null;
+  }).filter(Boolean);
+
+  if (chk.checked) {
+    // Select all visible — no cap (refresh has no limit)
+    visible.forEach(t => selectedChk.add(t));
+
+  } else {
+    // Deselect all visible tickers from selection
+    visible.forEach(t => {
+      selectedChk.delete(t);
+      hiddenLines.delete(t);
+    });
+  }
+  updateSelectionUI();
+  render();
+  // If nothing selected after this, clear chart immediately (synchronous)
+  // Otherwise fetch updated chart for remaining selected tickers
+  if (selectedChk.size === 0) {
+    clearChart();
+  } else {
+    fetchChart();
+  }
+}
+
+// Keep the select-all checkbox in sync with the current selection state
+function syncSelectAllChk() {
+  const chk = document.getElementById('select-all-chk');
+  if (!chk) return;
+  const rows    = document.querySelectorAll('#tb .row');
+  const visible = [...rows].map(r => {
+    const chip = r.querySelector('.chip');
+    return chip ? chip.textContent.trim() : null;
+  }).filter(Boolean);
+
+  if (!visible.length) {
+    chk.checked       = false;
+    chk.indeterminate = false;
+    return;
+  }
+  const checkedCount = visible.filter(t => selectedChk.has(t)).length;
+  const cap          = visible.length;  // no cap on selection
+  if (checkedCount === 0) {
+    chk.checked       = false;
+    chk.indeterminate = false;
+  } else if (checkedCount >= cap) {
+    chk.checked       = true;
+    chk.indeterminate = false;
+  } else {
+    chk.checked       = false;
+    chk.indeterminate = true;
+  }
+}
+
+// ── Source filter ──────────────────────────────────────────────────
+function setSrcDropdown(val) {
+  if (_mirrorInProgress) return;   // ignore spurious calls during mirror
+  currentSrc = val;
+  populateEpisodesForSource(val);
+  render();
+}
+
+function populateEpisodesForSource(prefixFilter) {
+  // prefixFilter is a raw ep-key prefix e.g. "stw", "ian", "div"
+  // Episode keys: "stw:2026/3/13", "ian:2026/3/6", "div:2026/3/15"
+  let episodes;
+  if (!prefixFilter) {
+    episodes = [...new Set(allData.flatMap(d => d.e || []))].sort();
+  } else {
+    const needle = prefixFilter.toLowerCase() + ':';
+    episodes = [...new Set(
+      allData.flatMap(d =>
+        (d.e || []).filter(ep => ep.toLowerCase().startsWith(needle))
+      )
+    )].sort();
+  }
+  const cur = document.getElementById('f-episode').value;
+  fillSelect('f-episode', episodes, 'All Episodes');
+  if (cur && !episodes.includes(cur))
+    document.getElementById('f-episode').value = '';
+}
+
+// Cache of prefix → label from /api/sources (loaded once on startup)
+let _sourceLabels = {
+  stw: "Barron's Streetwise",
+  ian: "Barron's Ian Salisbury",
+  div: 'Dividends',
+  bl:  'Barrons Live',
+};
+
+async function loadSourceLabels() {
+  try {
+    const res  = await fetch('/api/sources');
+    if (!res.ok) return;
+    const data = await res.json();
+    (data.sources || []).forEach(s => {
+      if (s.prefix && s.label) _sourceLabels[s.prefix] = s.label;
+    });
+  } catch(e) { /* use hardcoded fallback */ }
+}
+
+function populateSourceDropdown() {
+  // Collect all prefixes that appear in episode keys
+  const prefixes = new Set();
+  allData.forEach(d =>
+    (d.e || []).forEach(ep => {
+      const p = ep.split(':')[0].toLowerCase();
+      if (p) prefixes.add(p);
+    })
+  );
+
+  const sel = document.getElementById('f-source');
+  const cur = sel.value;
+
+  sel.innerHTML = '<option value="">All Sources</option>';
+  [...prefixes].sort().forEach(p => {
+    const label = _sourceLabels[p] || p.charAt(0).toUpperCase() + p.slice(1);
+    const opt   = document.createElement('option');
+    opt.value       = p;
+    opt.textContent = label;
+    if (p === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+// ── Filters ────────────────────────────────────────────────────────
+function populateFilters() {
+  // sector: from live quote (d.sector) or stored by updater (d.sector)
+  const naLabel  = '— Unassigned / N/A';
+  const naValue  = 'N/A';
+  const knownSectors = [...new Set(allData.map(d => d.sector).filter(s => s && s !== 'N/A' && s !== 'ETF'))].sort();
+  const hasNA    = allData.some(d => !d.sector || d.sector === 'N/A');
+  const hasETF   = allData.some(d => d.y === 'ETF' || d.sector === 'ETF');
+  const sectors  = [
+    ...knownSectors,
+    ...(hasETF ? ['ETF'] : []),
+    ...(hasNA  ? [naValue] : []),
+  ];
+  // rec: from live quote (d.rec) or stored by updater (d.rec_analyst)
+  const recs     = [...new Set(allData.map(d => d.rec && d.rec !== 'N/A' ? d.rec : d.rec_analyst).filter(r => r && r !== 'N/A'))].sort();
+  const episodes = [...new Set(allData.flatMap(d => d.e || []))].sort();
+  fillSelectSector('f-sector', knownSectors, hasETF, hasNA);
+  fillSelect('f-rec',     recs,     'All Recs');
+  fillSelect('f-episode', episodes, 'All Episodes');
+  // Mirror dynamic options to top filter bar
+  setTimeout(mirrorDynamicFilters, 0);
+  populateSourceDropdown();
+}
+
+function fillSelect(id, values, placeholder) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>` +
+    values.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`).join('');
+}
+
+function fillSelectSector(id, knownSectors, hasETF, hasNA) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  const opts = [
+    `<option value="">All Sectors</option>`,
+    ...knownSectors.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}</option>`),
+    ...(hasETF ? [`<option value="ETF"${'ETF' === cur ? ' selected' : ''}>ETF</option>`] : []),
+    ...(hasNA  ? [`<option value="N/A"${'N/A' === cur ? ' selected' : ''}>— Unassigned / N/A</option>`] : []),
+  ];
+  sel.innerHTML = opts.join('');
+}
+
+// ── Sort ───────────────────────────────────────────────────────────
+function setSort(key) {
+  if (currentSort === key) { sortAsc = !sortAsc; }
+  else { currentSort = key; sortAsc = false; }
+  document.querySelectorAll('.sb').forEach(b => b.classList.remove('on'));
+  const btn = document.getElementById('sb-' + key);
+  if (btn) btn.classList.add('on');
+  render();
+}
+
+function sortVal(d, k) {
+  if (k === 'pct')   return d.pct_raw   ?? 0;
+  if (k === 'price') return d.price_raw ?? 0;
+  if (k === 'ep')    return (d.e || []).length;
+  if (k === 't')     return d.t  || '';
+  if (k === 'name')  return d.n  || '';
+  return 0;
+}
+
+// ── Render table ───────────────────────────────────────────────────
+function render() {
+  const q       = document.getElementById('srch').value.toLowerCase();
+  const fSector = document.getElementById('f-sector').value;
+  const fType   = document.getElementById('f-type').value;
+  const fStatus = document.getElementById('f-status').value;
+  const fRec    = document.getElementById('f-rec').value;
+  const fEp     = document.getElementById('f-episode').value;
+  const fMove   = document.getElementById('f-move').value;
+
+  let rows = allData.filter(d => {
+    if (q       && !(`${d.t} ${d.n}`).toLowerCase().includes(q)) return false;
+    if (fSector) {
+      if (fSector === 'N/A') { if (d.sector && d.sector !== 'N/A') return false; }
+      else if (d.sector !== fSector) return false;
+    }
+    if (fType   && d.y      !== fType)                            return false;
+    if (fStatus && d.s      !== fStatus)                          return false;
+    if (fRec    && d.rec !== fRec && d.rec_analyst !== fRec)     return false;
+    // Watchlist filter
+    if (_activeWl && !(_watchlists[_activeWl] || []).includes(d.t)) return false;
+    if (fEp     && !(d.e || []).includes(fEp))                    return false;
+    if (fMove === 'up'   && !d.is_up)  return false;
+    if (fMove === 'down' &&  d.is_up)  return false;
+    // Source filter
+    if (currentSrc && currentSrc !== 'all') {
+      // currentSrc is a prefix e.g. "stw", "ian", "div"
+      // Show ticker only if it has at least one episode with that prefix
+      const needle = currentSrc.toLowerCase() + ':';
+      if (!(d.e || []).some(ep => ep.toLowerCase().startsWith(needle))) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    const av = sortVal(a, currentSort), bv = sortVal(b, currentSort);
+    const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+    return sortAsc ? cmp : -cmp;
+  });
+
+  document.getElementById('count-row').textContent =
+    `Showing ${rows.length} of ${allData.length} securities`;
+
+  const empty = document.getElementById('empty-msg');
+  const tbody = document.getElementById('tb');
+
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = rows.map(d => {
+    const pc  = d.pct_raw > 0 ? 'up' : d.pct_raw < 0 ? 'down' : 'neu';
+    const act = d.t === activeRow ? ' active' : '';
+    const chk = selectedChk.has(d.t)   ? ' checked' : '';
+    const dis = (MAX_CHART_TICKERS > 0 && selectedChk.size >= MAX_CHART_TICKERS && !selectedChk.has(d.t)) ? ' disabled' : '';
+    return `
+    <tr class="row${act}" onclick="selectRow('${d.t}')" oncontextmenu="showCtxMenu(event,'${d.t}')">
+      <td class="cell" style="padding:9px 8px">
+        <input type="checkbox" data-ticker="${d.t}" title="Add to chart"${chk}${dis}
+          onclick="toggleChart('${d.t}', event)">
+      </td>
+      <td class="cell">
+        <div class="ticker-line">
+          <span class="chip">${d.t}</span>
+          ${(d.src||[]).includes('ian') ? '<span class="ian-badge">Ian</span>' : ''}
+          <span class="co-name">${d.n || ''}</span>
+        </div>
+      </td>
+      <td class="cell" style="text-align:right">
+        <div class="price-val">${d.price_fmt || '—'}</div>
+        <div class="change-val"
+             style="color:${d.is_up ? 'var(--up)' : 'var(--down)'}">
+          ${d.diff_fmt || ''}
+        </div>
+      </td>
+      <td class="cell" style="text-align:right">
+        <span class="pct ${pc}">${d.pct_fmt || '—'}</span>
+      </td>
+    </tr>`;
+  }).join('');
+  syncSelectAllChk();
+}
+
+// ── Summary section parser ─────────────────────────────────────────────
+// Sections are delimited by:  === ep_key | Source · label ===
+// e.g.  === ian:2026/3/6 | Ian Salisbury (Barron's) · 3/6/2026 — Small-Cap Revival ===
+//
+// Each section: { epKey, sourceLabel, label, text }
+// Plain text before the first heading (Streetwise AI-merged summary) gets
+// { epKey: null, text }
+
+function parseSummary(raw) {
+  if (!raw || !raw.trim()) return [];
+
+  // Match lines of the form  === anything ===
+  const HEADING = /===\s*([^=]+?)\s*===/g;
+  const sections = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = HEADING.exec(raw)) !== null) {
+    // Text before this heading
+    const before = raw.slice(lastIndex, match.index).trim();
+    if (before) sections.push({ epKey: null, sourceLabel: null, label: null, text: before });
+
+    // Parse "ep_key | Source · label" from the heading content
+    const inner   = match[1].trim();
+    const pipeIdx = inner.indexOf('|');
+    let epKey = null, sourceLabel = null, label = null;
+    if (pipeIdx !== -1) {
+      epKey = inner.slice(0, pipeIdx).trim();
+      const rest  = inner.slice(pipeIdx + 1).trim();
+      const dotIdx = rest.indexOf('·');
+      if (dotIdx !== -1) {
+        sourceLabel = rest.slice(0, dotIdx).trim();
+        label       = rest.slice(dotIdx + 1).trim();
+      } else {
+        sourceLabel = rest;
+      }
+    } else {
+      sourceLabel = inner;
+    }
+
+    lastIndex = match.index + match[0].length;
+    // Capture text after heading (until next heading or end)
+    const nextMatch = HEADING.exec(raw);
+    const textEnd   = nextMatch ? nextMatch.index : raw.length;
+    HEADING.lastIndex = nextMatch ? nextMatch.index : raw.length;
+    const text = raw.slice(lastIndex, textEnd).trim();
+    lastIndex  = textEnd;
+    HEADING.lastIndex = lastIndex;
+
+    sections.push({ epKey, sourceLabel, label, text });
+  }
+
+  // Any remaining text after the last heading
+  const tail = raw.slice(lastIndex).trim();
+  if (tail) sections.push({ epKey: null, sourceLabel: null, label: null, text: tail });
+
+  // If nothing matched at all, treat the whole string as one plain section
+  if (sections.length === 0 && raw.trim()) {
+    sections.push({ epKey: null, sourceLabel: null, label: null, text: raw.trim() });
+  }
+
+  return sections;
+}
+
+// ── Format summary body — converts bullet points and **bold** to HTML ──
+function formatSummaryBody(text) {
+  if (!text) return '';
+  const lines = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+  const hasBullets = lines.some(function(l){ return l.startsWith('•'); });
+
+  if (hasBullets) {
+    const items = lines
+      .filter(function(l){ return l.startsWith('•'); })
+      .map(function(l) {
+        var content = l.slice(1).trim()
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        return '<li class="sum-bullet">'
+          + '<span class="sum-bullet-dot"></span>'
+          + '<span>' + content + '</span>'
+          + '</li>';
+      }).join('');
+    return '<ul class="sum-bullets">' + items + '</ul>';
+  }
+  // Plain paragraph
+  var rendered = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  return '<p class="sum-ep-text">' + rendered + '</p>';
+}
+
+// Derive badge CSS class from ep_key prefix
+function epBadgeCls(epKey) {
+  if (!epKey) return 'ep-plain';
+  const prefix = epKey.split(':')[0].toLowerCase();
+  if (prefix === 'stw')  return 'ep-stw';
+  if (prefix === 'ian')  return 'ep-ian';
+  return 'ep-custom';
+}
+
+// Render summary: collapsible badge sections.
+// State (open/closed) is persisted per ticker+epKey in sessionStorage.
+function renderSummary(raw, disc, ticker) {
+  if (!raw) return '';
+  const sections = parseSummary(raw);
+  if (!sections.length) return '';
+  // disc is {ep_key: "narrative text"} or undefined
+  const discMap = (disc && typeof disc === 'object') ? disc : {};
+
+  return sections.map((s, i) => {
+    if (!s.epKey) {
+      // Plain text preamble — always visible
+      return '<div class="summary-text">' + formatSummaryBody(s.text) + '</div>';
+    }
+    const cls        = epBadgeCls(s.epKey);
+    const badgeLabel = s.label
+      ? s.sourceLabel + ' &nbsp;·&nbsp; ' + s.label
+      : (s.sourceLabel || s.epKey);
+
+    // Check sessionStorage for open/closed state
+    const storeKey = 'sum:' + (ticker||'') + ':' + s.epKey;
+    const isOpen   = sessionStorage.getItem(storeKey) !== 'closed';
+    const openCls  = isOpen ? ' open' : '';
+
+    // Discussion narrative for this episode
+    const discText = discMap[s.epKey]
+      ? '<p class="disc-text">' + discMap[s.epKey] + '</p>'
+      : '';
+
+    return '<div class="sum-section' + openCls + '" data-sum-key="' + storeKey + '">'
+      + '<div class="sum-section-toggle" onclick="toggleSumSection(this)">'
+      + '<span class="sum-ep-badge ' + cls + '">' + badgeLabel + '</span>'
+      + '<span class="sum-chevron">' + (isOpen ? '▲' : '▼') + '</span>'
+      + '</div>'
+      + '<div class="sum-section-body">'
+      + discText
+      + formatSummaryBody(s.text)
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function toggleSumSection(toggleEl) {
+  const section  = toggleEl.closest('.sum-section');
+  const chevron  = toggleEl.querySelector('.sum-chevron');
+  const isOpen   = section.classList.contains('open');
+  const storeKey = section.dataset.sumKey;
+
+  if (isOpen) {
+    section.classList.remove('open');
+    if (chevron) chevron.textContent = '▼';
+    if (storeKey) sessionStorage.setItem(storeKey, 'closed');
+  } else {
+    section.classList.add('open');
+    if (chevron) chevron.textContent = '▲';
+    if (storeKey) sessionStorage.removeItem(storeKey);
+  }
+}
+
+// ── Detail panel ───────────────────────────────────────────────────
+function selectRow(ticker) {
+  activeRow = ticker;
+  showResearchCard(ticker);
+  render();
+  dcfOnSidebarChange(ticker);   // notify DCF panel if open
+  // Auto-fetch Finnhub in background so sidebar earn-pill + sentiment dot populate
+  // immediately on row click (not only when Finnhub tab is opened manually)
+  if (!_rcCache[ticker] || !_rcCache[ticker].finnhub) {
+    fetch('/api/finnhub/' + ticker)
+      .then(r => r.json())
+      .then(data => {
+        if (!_rcCache[ticker]) _rcCache[ticker] = {};
+        _rcCache[ticker].finnhub = data;
+        updateSidebarSentiment(ticker, data);
+        // If Finnhub tab is currently open for this ticker, render it now
+        const pane = document.getElementById('rc-tab-finnhub');
+        if (pane && _rcTab === 'finnhub' && _rcTicker === ticker) renderFinnhub(ticker, data);
+      })
+      .catch(() => {});  // silent — sidebar just stays empty if API unreachable
+  }
+  const d = allData.find(x => x.t === ticker);
+  if (!d) return;
+
+  document.getElementById('placeholder-card').style.display = 'none';
+  const card = document.getElementById('detail-card');
+  card.style.display = 'block';
+
+  const stCls = `st s-${d.s || 'flat'}`;
+  const stLbl = STATUS_MAP[d.s] || 'Neutral';
+  const eps   = (d.e || []).map(ep => `<span class="ep-tag">${ep}</span>`).join('');
+  const pc    = (d.pct_raw || 0) > 0 ? 'up' : (d.pct_raw || 0) < 0 ? 'down' : 'neu';
+  const w52   = d['52w_high'] && d['52w_low']
+    ? `<span class="pill">52W $${(+d['52w_low']).toFixed(2)} – $${(+d['52w_high']).toFixed(2)}</span>`
+    : '';
+  const pe  = d.pe ? '<span class="pill">P/E ' + (+d.pe).toFixed(1) + '</span>' : '';
+  // Yahoo returns dividendYield already as a % decimal (e.g. 0.92 = 0.92%)
+  const dyVal = (d.div_yield != null && d.div_yield > 0) ? (+d.div_yield).toFixed(2) : '0.00';
+  const dy = '<span class="pill pill-yield">Yield ' + dyVal + '%</span>';
+  const mc  = d.mktcap ? '<span class="pill">Mktcap ' + fmtMktcap(d.mktcap) + '</span>' : '';
+  const recVal = (d.rec && d.rec !== 'N/A' && d.rec !== 'None') ? d.rec : (d.rec_analyst || '');
+  const rec    = (recVal && recVal !== 'None' && recVal !== 'N/A') ? `<span class="pill">Analyst: ${recVal}</span>` : '';
+  const ts  = d.fetched_at
+    ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">
+         Updated ${new Date(d.fetched_at).toLocaleTimeString()}
+       </div>`
+    : '';
+
+  const activeTab = _rcTab || 'perplexity';
+
+  card.innerHTML = `
+    <div class="detail-header">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="detail-ticker" id="detail-ticker-label">${d.t}</span>
+          <span style="font-size:14px;color:var(--muted)">${d.n || ''}</span>
+          <button class="edit-ticker-btn" onclick="showTickerEditor('${d.t}')"
+                  title="Edit ticker symbol">✏</button>
+        </div>
+        <div class="ticker-edit-row" id="ticker-edit-row">
+          <input class="ticker-edit-input" id="ticker-edit-input"
+                 value="${d.t}" maxlength="12"
+                 oninput="this.value=this.value.toUpperCase()"
+                 onkeydown="if(event.key==='Enter')saveTicker('${d.t}');if(event.key==='Escape')hideTickerEditor()">
+          <button class="ticker-save-btn"   onclick="saveTicker('${d.t}')">Save</button>
+          <button class="ticker-cancel-btn" onclick="hideTickerEditor()">Cancel</button>
+          <span class="ticker-hint">Enter the correct exchange ticker</span>
+        </div>
+        <div class="meta-pills" style="align-items:center">
+          <span class="pill">${d.y || 'Stock'}</span>
+          <span class="pill">${d.sector || 'N/A'}</span>
+          <span class="${stCls}">${stLbl}</span>
+          ${pe}${dy}${mc}${w52}${rec}
+          <button class="edit-ticker-btn" onclick="showFieldsEditor('${d.t}')"
+                  title="Edit sector, name, type, status" style="margin-left:2px">✏</button>
+        </div>
+        <div class="fields-edit-panel" id="fields-edit-panel">
+          <div class="field-group"><label>Sector</label><input id="fe-sector" value="${d.sector || ''}" placeholder="e.g. Industrials"></div>
+          <div class="field-group"><label>Name</label><input id="fe-name" value="${d.n || ''}" placeholder="Full company name"></div>
+          <div class="field-group"><label>Type</label>
+            <select id="fe-type">
+              <option value="Stock"${(d.y||'Stock')==='Stock'?' selected':''}>Stock</option>
+              <option value="ETF"${d.y==='ETF'?' selected':''}>ETF</option>
+              <option value="Fund"${d.y==='Fund'?' selected':''}>Fund</option>
+            </select>
+          </div>
+          <div class="field-group"><label>Status</label>
+            <select id="fe-status">
+              ${['hot','rot','pull','press','dip','rec','caut','flat'].map(s =>
+                '<option value="' + s + '"' + (d.s === s ? ' selected' : '') + '>' + (STATUS_MAP[s] || s) + '</option>'
+              ).join('')}
+            </select>
+          </div>
+          <div class="field-group"><label>Analyst Rec</label><input id="fe-rec" value="${d.rec_analyst || ''}" placeholder="e.g. Buy, Hold"></div>
+          <div class="fields-edit-actions">
+            <button class="ticker-save-btn" onclick="saveFields('${d.t}')">Save</button>
+            <button class="ticker-cancel-btn" onclick="hideFieldsEditor()">Cancel</button>
+          </div>
+        </div>
+        <div class="ep-tags" style="margin-top:10px">${eps}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:22px;font-weight:700">${d.price_fmt || '—'}</div>
+        <div style="margin-top:4px">
+          <span class="pct ${pc}">${d.pct_fmt || '—'}</span>
+          <span style="font-size:12px;color:var(--muted);margin-left:6px">${d.diff_fmt || ''}</span>
+        </div>
+        ${ts}
+      </div>
+    </div>
+
     <!-- ── Unified tab bar ─────────────────────────────────────────── -->
     <div class="rc-tabs" style="margin-top:14px;flex-wrap:nowrap;overflow-x:auto;border-bottom:1px solid var(--border);padding-bottom:0;gap:0">
       <button class="rctab ${activeTab==='perplexity'?'on':''}" id="rctab-perplexity" onclick="setRCTab('perplexity',this)">
