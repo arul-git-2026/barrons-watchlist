@@ -1230,6 +1230,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
                        border-color:var(--accent);color:var(--accent)">
           📈 Plot
         </button>
+        <button id="dcf-toggle-btn" onclick="toggleDCFPanel()" title="DCF Intrinsic Value Analysis">
+          📊 DCF
+        </button>
         <button id="crisis-toggle-btn" onclick="toggleCrisisPanel()" title="Global Crisis Monitor">
           🌍 Crisis Monitor
         </button>
@@ -1260,8 +1263,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       </div>
     </div>
 
-    <!-- ── DCF Analysis Panel (hidden — temporarily removed) ─────── -->
-    <div id="dcf-panel" style="display:none!important">
+    <!-- ── DCF Analysis Panel ────────────────────────────────────── -->
+    <div id="dcf-panel">
       <div class="crisis-header">
         <h3>📊 DCF Analysis</h3>
         <span style="font-size:11px;color:var(--muted)" id="dcf-subtitle">Select a stock from your database</span>
@@ -1313,6 +1316,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
             <div class="dcf-card-title">DCF model inputs &amp; outputs
               <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:6px" id="dcf-data-source"></span>
             </div>
+            <div id="dcf-rationale" style="display:none;font-size:11px;color:var(--muted);font-style:italic;padding:6px 0 8px;border-bottom:.5px solid var(--border);margin-bottom:4px;line-height:1.5"></div>
             <div class="dcf-row"><span class="dcf-key" id="dcf-d-fcf-label">FCF ($B)</span><span class="dcf-val" id="dcf-d-fcf">—</span></div>
             <div class="dcf-row"><span class="dcf-key">EBITDA ($B)</span><span class="dcf-val" id="dcf-d-ebitda">—</span></div>
             <div id="dcf-currency-warn" style="display:none;background:#7c3a0022;border:1px solid #c0392b44;border-radius:4px;padding:4px 8px;font-size:10px;color:#c0392b;margin:4px 0">
@@ -4603,6 +4607,10 @@ function dcfRefresh() {
 // Local DCF re-computation for WACC slider (no API call needed)
 function dcfComputeLocal(s, wacc) {
   if (!s || s.fcf <= 0 || s.shares <= 0) return null;
+  // Exit-multiple method: can't recompute analytically — return Gemini's IV as-is
+  if (s.tv_method === 'exit_multiple' || s.tgr == null) {
+    return { pv: '—', pvtv: '—', ev: '—', iv: s.iv_base || 0, static: true };
+  }
   let pv = 0, fcf = s.fcf;
   const r = wacc / 100;
   for (let y = 1; y <= 5; y++)  { fcf *= (1 + s.g1_base / 100); pv += fcf / (1+r)**y; }
@@ -4630,6 +4638,9 @@ function dcfRenderDCF() {
     });
     return;
   }
+  const ratEl = document.getElementById('dcf-rationale');
+  if (ratEl && s.rationale) { ratEl.textContent = s.rationale; ratEl.style.display = 'block'; }
+  else if (ratEl) { ratEl.style.display = 'none'; }
   document.getElementById('dcf-d-fcf').textContent      = `$${s.fcf}B`;
   document.getElementById('dcf-d-fcf-label').textContent = `FCF (${s.fcf_source || 'TTM'}, $B)`;
   const cwarn = document.getElementById('dcf-currency-warn');
@@ -4650,7 +4661,12 @@ function dcfRenderDCF() {
     : `β ${s.beta} (yfinance raw)`;
   document.getElementById('dcf-d-wacc').textContent = `${_dcfWACC.toFixed(1)}%`;
   const src = document.getElementById('dcf-data-source');
-  if (src) src.textContent = `Hamada re-levered · ${betaNote} · RF ${s.wacc_rf}% + β×${s.wacc_erp}% ERP`;
+  if (src) {
+    const isStatic = res.static;
+    src.textContent = isStatic
+      ? '⚡ Gemini Flash · exit-multiple method — WACC slider N/A'
+      : `⚡ Gemini Flash · WACC slider active`;
+  }
   document.getElementById('dcf-d-pvfcf').textContent  = `$${res.pv}B`;
   document.getElementById('dcf-d-tv').textContent     = `$${res.pvtv}B`;
   document.getElementById('dcf-d-ev').textContent     = `$${res.ev}B`;

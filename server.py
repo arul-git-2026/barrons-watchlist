@@ -2701,15 +2701,22 @@ def rpo_extract(ticker):
 
 
 # ── /api/dcf/<ticker> ─────────────────────────────────────────────────────────
+# Strategy: yfinance → market data only (price, mktcap, div, P/E, beta)
+#           Gemini Flash (temperature=0) → DCF model (FCF metric, growth, WACC, IV)
+# Rationale: yfinance sector/industry classification and FCF normalization are
+#            unreliable across ADRs and non-standard tickers. Gemini already knows
+#            which metric suits each company (OCF vs FCF) and has audited financials
+#            in its training data. This removes all the fragile sector heuristics.
 
 _dcf_cache: dict = {}
-_DCF_TTL = 3600  # 1 hour — yfinance fundamentals don't change intraday
+_DCF_TTL = 86400  # 24 hours — Gemini knowledge doesn't change intraday
 
 @app.route("/api/dcf/<ticker>")
 def get_dcf_analysis(ticker):
     """
-    Returns DCF inputs + computed intrinsic values (base/bull/bear) for a ticker.
-    Pulls real fundamentals from yfinance; narratives from streetwise_data.json.
+    Returns DCF intrinsic value analysis for a ticker.
+    Market data (price, mktcap, div, pe, beta) from yfinance.
+    DCF model (FCF, growth rates, WACC, IV scenarios) from Gemini Flash at temp=0.
     """
     sym = ticker.upper()
 
@@ -2719,560 +2726,231 @@ def get_dcf_analysis(ticker):
         return jsonify(cached["data"])
 
     try:
-        tk   = yf.Ticker(sym)
-        info = tk.info
+        import urllib.request, urllib.error as _ue
+        import re as _re
 
-        # ── Prices & market data ──────────────────────────────────────────────
+        # ── Step 1: yfinance — market data only (price, mktcap, div, pe, beta) ─
+        tk        = yf.Ticker(sym)
+        info      = tk.info
         price     = float(info.get("currentPrice") or info.get("previousClose") or 0)
         mktcap_r  = info.get("marketCap", 0) or 0
         mktcap    = f"${mktcap_r/1e9:.1f}B" if mktcap_r >= 1e9 else f"${mktcap_r/1e6:.0f}M"
+        pe_v      = info.get("forwardPE") or info.get("trailingPE")
+        pe_str    = f"Fwd P/E: {pe_v:.1f}×" if pe_v else "P/E: N/A"
+        dy        = info.get("dividendYield", 0) or 0
+        div_str   = f"{dy*100:.1f}%" if dy else "0%"
+        raw_beta  = float(info.get("beta", 1.0) or 1.0)
+        beta      = round(max(0.5, min(2.5, raw_beta)), 2)
+        sector    = info.get("sector", "")
+        gm        = info.get("grossMargins", 0) or 0
+        moat      = "Wide" if (mktcap_r > 50e9 and gm > 0.40) else "Narrow"
+        ev_r      = info.get("enterpriseValue", 0) or 0
+        name      = info.get("longName", sym)
 
-        # ── Free cash flow, EBITDA & balance sheet ────────────────────────────
-        # Normalization strategy (sector-aware):
-        #   Tech sector  → use Operating Cash Flow (3-yr median).
-        #     Rationale: Big Tech CapEx is growth investment (AWS infra, data centres).
-        #     yfinance FCF = OCF − total CapEx incl. finance leases → severely understates
-        #     earning power (AMZN FY2022 FCF was −$19B; OCF was +$46B).
-        #   All others   → use Free Cash Flow (3-yr median) to cap one-time TTM spikes
-        #     (e.g. OMC FCF > EBITDA anomaly).
-        #   Fallback: TTM freeCashflow from info if cashflow statement unavailable.
-        _sector_early = info.get("sector", "")
-        # Big Tech tickers that are NOT classified as "Technology" in yfinance
-        # (e.g. AMZN = Consumer Cyclical, GOOGL = Communication Services)
-        # but whose CapEx is primarily growth investment → use OCF like Tech
-        # OCF (Operating Cash Flow) is used ONLY for software/platform Big Tech whose CapEx
-        # is discretionary growth investment (cloud infra, data centres).
-        # Semiconductor fabs (TSM, INTC, ASML), hardware (AAPL manufacturing), and all other
-        # sectors use FCF (OCF − CapEx) which reflects real cash generation after maintenance spend.
-        _OCF_TICKERS = {"AMZN","GOOGL","GOOG","META","MSFT","NFLX"}
-        _use_ocf = sym in _OCF_TICKERS
+        # ── Step 2: Gemini Flash — full DCF model at temperature=0 ────────────
+        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+        if not gemini_key:
+            return jsonify({"ok": False, "error": "GEMINI_API_KEY not set"}), 400
 
-        # TTM freeCashflow — if missing, compute from cashflow statement (common for ADRs)
-        fcf_r      = info.get("freeCashflow") or 0
-        fcf_source = "TTM"
+        today_str = datetime.now().strftime("%B %Y")
+        prompt = f"""You are a CFA-level financial analyst. Perform a DCF intrinsic value analysis for {sym} ({name}).
+Reference date: {today_str}. Current market price: ${price:.2f}.
+
+Instructions:
+- Use the most appropriate cash flow metric for this specific company:
+  * Platform/software companies (AMZN, GOOGL, META, MSFT, NFLX, etc.): use Operating Cash Flow (OCF) — CapEx is growth investment
+  * Capex-heavy companies (semiconductors, energy, industrials, manufacturing): use Free Cash Flow (FCF = OCF - CapEx)
+- Normalize over 3 years to avoid one-time anomalies
+- For ADRs (non-US companies trading in USD): convert all financials to USD
+- Use sector-appropriate terminal value method:
+  * Stable compounders / software: perpetuity with 2-3% TGR
+  * Cyclicals / capex-heavy / semiconductors: EV/EBITDA exit multiple
+- Use analyst consensus estimates for growth rates
+- Provide conservative bull, base, and bear case intrinsic values
+
+Return ONLY valid JSON with no markdown fences and no text outside the JSON:
+{{
+  "fcf": <normalized cash flow in $B USD, number>,
+  "fcf_source": "<e.g. '3-yr median OCF' or '3-yr median FCF' or 'TTM FCF'>",
+  "ebitda": <EBITDA in $B USD, number or null>,
+  "net_debt": <total debt minus cash in $B USD — negative means net cash, number>,
+  "shares": <diluted shares outstanding in billions, number>,
+  "g1_base": <phase 1 base growth rate % yr 1-5, number>,
+  "g1_bull": <phase 1 bull growth %, number>,
+  "g1_bear": <phase 1 bear growth %, number>,
+  "g2_base": <phase 2 base growth rate % yr 6-10, number>,
+  "g2_bull": <phase 2 bull growth %, number>,
+  "g2_bear": <phase 2 bear growth %, number>,
+  "wacc": <WACC % e.g. 9.5, number>,
+  "tgr": <terminal growth rate % e.g. 2.5 — use null if exit_multiple method, number or null>,
+  "tv_method": "<perpetuity or exit_multiple>",
+  "tv_horizon": <years: 5 or 10, number>,
+  "tv_label": "<short label e.g. 'Perpetuity @ 2.5% TGR · WACC 9.5%'>",
+  "exit_mult": <EV/EBITDA exit multiple — null if perpetuity method, number or null>,
+  "iv_base": <base case intrinsic value per share USD, integer>,
+  "iv_bull": <bull case IV per share USD, integer>,
+  "iv_bear": <bear case IV per share USD, integer>,
+  "rationale": "<1-2 sentences: which metric was chosen and why>",
+  "risks": [
+    {{"level": "high", "text": "<specific risk for this company>"}},
+    {{"level": "mid",  "text": "<specific risk for this company>"}},
+    {{"level": "low",  "text": "<specific risk for this company>"}}
+  ],
+  "cats": [
+    {{"tag": "Bull", "text": "<bull investment thesis>"}},
+    {{"tag": "Base", "text": "<base case thesis>"}},
+    {{"tag": "Bear", "text": "<bear case / downside thesis>"}}
+  ]
+}}"""
+
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/"
+            f"models/gemini-2.5-flash:generateContent?key={gemini_key}"
+        )
+        payload = json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature":      0,
+                "maxOutputTokens":  2048,
+                "responseMimeType": "application/json",
+            },
+        }).encode()
+        req = urllib.request.Request(
+            url, data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+
         try:
-            cf_df = tk.cashflow
-            if cf_df is not None and not cf_df.empty:
-                # If info.freeCashflow was missing, compute TTM as OCF - CapEx
-                if fcf_r == 0 and "Operating Cash Flow" in cf_df.index and "Capital Expenditure" in cf_df.index:
-                    ocf_ttm = float(cf_df.loc["Operating Cash Flow"].dropna().iloc[0])
-                    capex_ttm = float(cf_df.loc["Capital Expenditure"].dropna().iloc[0])
-                    fcf_r = ocf_ttm + capex_ttm  # CapEx is negative in yfinance
-                    fcf_source = "TTM (OCF−CapEx)"
+            resp_raw = urllib.request.urlopen(req, timeout=60)
+        except _ue.HTTPError as he:
+            err_body = he.read().decode("utf-8", errors="replace")
+            log.error(f"  DCF Gemini HTTP {he.code} for {sym} — {err_body[:300]}")
+            return jsonify({"ok": False, "error": f"Gemini API error {he.code}: {err_body[:200]}"}), 502
 
-                if _use_ocf and "Operating Cash Flow" in cf_df.index:
-                    # Tech: OCF is the analyst-grade "normalized" FCF
-                    ocf_hist = cf_df.loc["Operating Cash Flow"].dropna()
-                    if len(ocf_hist) >= 2:
-                        n = min(len(ocf_hist), 3)
-                        fcf_r = float(ocf_hist.iloc[:n].median())
-                        fcf_source = f"{n}-yr median OCF"
-                else:
-                    # Non-Tech: derive FCF, median to cap one-time spikes
-                    if "Free Cash Flow" in cf_df.index:
-                        fcf_hist = cf_df.loc["Free Cash Flow"].dropna()
-                    elif "Operating Cash Flow" in cf_df.index and "Capital Expenditure" in cf_df.index:
-                        fcf_hist = (cf_df.loc["Operating Cash Flow"] + cf_df.loc["Capital Expenditure"]).dropna()
-                    else:
-                        fcf_hist = pd.Series(dtype=float)
-                    if len(fcf_hist) >= 2:
-                        n = min(len(fcf_hist), 3)
-                        fcf_r = float(fcf_hist.iloc[:n].median())
-                        fcf_source = f"{n}-yr median FCF"
-        except Exception:
-            pass  # fall back to TTM or OCF−CapEx computed above
+        g_data  = json.loads(resp_raw.read())
+        parts   = (g_data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+        raw_txt = "".join(p.get("text", "") for p in parts).strip()
 
-        ebitda_r  = info.get("ebitda", 0) or 0
-        debt      = info.get("totalDebt",  0) or 0
-        cash      = info.get("totalCash",  0) or 0
-        shares_r  = info.get("sharesOutstanding", 0) or 0
+        # Strip markdown code fences if present
+        fence = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw_txt)
+        json_txt = fence.group(1).strip() if fence else raw_txt
 
-        # Fix 2: ADR currency conversion — financials are in local currency, price in USD
-        # e.g. TSM: financialCurrency=TWD, currency=USD → FCF/EBITDA/debt in TWD, price in USD
-        financial_currency = info.get("financialCurrency", "USD") or "USD"
-        trading_currency   = info.get("currency", "USD") or "USD"
-        fx_rate = 1.0
-        currency_converted = False
-        # Fallback rates for common ADR pairs if yfinance FX fetch fails
-        _FX_FALLBACKS = {
-            "TWDUSD=X": 0.031,   # Taiwan Dollar
-            "HKDUSD=X": 0.128,   # Hong Kong Dollar
-            "BRLUSD=X": 0.200,   # Brazilian Real
-            "CNHUSD=X": 0.138,   # Chinese Yuan (offshore)
-            "KRWUSD=X": 0.00072, # Korean Won
-            "INRUSD=X": 0.012,   # Indian Rupee
-            "JPYUSD=X": 0.0067,  # Japanese Yen
-        }
-        if financial_currency != trading_currency:
-            pair = f"{financial_currency}{trading_currency}=X"
+        try:
+            g = json.loads(json_txt)
+        except Exception as je:
+            log.error(f"  DCF Gemini JSON parse error for {sym}: {je} | raw: {raw_txt[:300]}")
+            return jsonify({"ok": False, "error": f"Gemini returned invalid JSON: {je}"}), 502
+
+        # ── Step 3: Extract + sanitise Gemini fields ──────────────────────────
+        def _f(key, default=None):
+            v = g.get(key, default)
             try:
-                fx_ticker = yf.Ticker(pair)
-                fx_info   = fx_ticker.info
-                fx_rate   = float(
-                    fx_info.get("regularMarketPrice")
-                    or fx_info.get("previousClose")
-                    or _FX_FALLBACKS.get(pair, 1.0)
-                )
-                if fx_rate > 0 and fx_rate != 1.0:
-                    currency_converted = True
-            except Exception:
-                fx_rate = _FX_FALLBACKS.get(pair, 1.0)
-                if fx_rate != 1.0:
-                    currency_converted = True
-        # EBITDA fallback: if info.ebitda missing, approximate as operatingIncome + D&A
-        if ebitda_r == 0:
+                return float(v) if v is not None else default
+            except (TypeError, ValueError):
+                return default
+
+        def _i(key, default=None):
+            v = g.get(key, default)
             try:
-                op_inc = info.get("operatingIncome", 0) or 0
-                da = 0
-                if cf_df is not None and not cf_df.empty:
-                    for da_key in ("Depreciation And Amortization", "Depreciation Amortization Depletion"):
-                        if da_key in cf_df.index:
-                            da = float(cf_df.loc[da_key].dropna().iloc[0])
-                            break
-                if op_inc != 0:
-                    ebitda_r = op_inc + da
-            except Exception:
-                pass
+                return int(round(float(v))) if v is not None else default
+            except (TypeError, ValueError):
+                return default
 
-        # Debt fallback: try balance sheet if info.totalDebt missing
-        if debt == 0:
-            try:
-                bs = tk.balance_sheet
-                if bs is not None and not bs.empty:
-                    for dk in ("Total Debt", "Long Term Debt"):
-                        if dk in bs.index:
-                            debt = float(bs.loc[dk].dropna().iloc[0])
-                            break
-            except Exception:
-                pass
+        fcf        = round(_f("fcf", 0), 2)
+        ebitda     = round(_f("ebitda") or 0, 2)
+        net_debt   = round(_f("net_debt", 0), 1)
+        shares     = round(_f("shares", 1), 3)
+        g1_base    = round(_f("g1_base", 10.0), 1)
+        g1_bull    = round(_f("g1_bull", g1_base + 5.0), 1)
+        g1_bear    = round(_f("g1_bear", g1_base - 5.0), 1)
+        g2_base    = round(_f("g2_base", g1_base * 0.5), 1)
+        g2_bull    = round(_f("g2_bull", g2_base + 3.0), 1)
+        g2_bear    = round(_f("g2_bear", g2_base - 3.0), 1)
+        wacc       = round(_f("wacc", 9.5), 1)
+        tgr        = _f("tgr")        # None for exit_multiple
+        iv_base    = _i("iv_base")
+        iv_bull    = _i("iv_bull")
+        iv_bear    = _i("iv_bear")
+        tv_method  = g.get("tv_method", "perpetuity")
+        tv_horizon = _i("tv_horizon", 10)
+        tv_label   = g.get("tv_label", f"WACC {wacc}%  ·  Gemini estimate")
+        exit_mult  = _f("exit_mult")
+        fcf_source = g.get("fcf_source", "Gemini estimate")
+        rationale  = g.get("rationale", "")
+        risks      = g.get("risks") or [{"level": "low", "text": "No risk flags returned — verify with latest 10-K"}]
+        cats       = g.get("cats")  or []
 
-        # Cash fallback: try balance sheet if info.totalCash missing
-        if cash == 0:
-            try:
-                bs = tk.balance_sheet if 'bs' in dir() else tk.balance_sheet
-                if bs is not None and not bs.empty:
-                    for ck in ("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"):
-                        if ck in bs.index:
-                            cash = float(bs.loc[ck].dropna().iloc[0])
-                            break
-            except Exception:
-                pass
+        # Fallback thesis from streetwise_data.json if Gemini gave nothing
+        if not cats:
+            db     = load_data_raw()
+            rec_db = next((r for r in db if r.get("t", "").upper() == sym), {})
+            for tag, key in [("Bull", "bull"), ("Base", "base"), ("Bear", "bear")]:
+                if rec_db.get(key):
+                    cats.append({"tag": tag, "text": rec_db[key]})
+        if not cats:
+            cats = [{"tag": "N/A", "text": "No thesis data found."}]
 
-        # Apply FX conversion to all financial statement figures (shares stay as-is)
-        fcf_r    *= fx_rate
-        ebitda_r *= fx_rate
-        debt     *= fx_rate
-        cash     *= fx_rate
-
-        fcf       = round(fcf_r / 1e9, 2)               # $B (USD)
-        ebitda    = round(ebitda_r / 1e9, 2)             # $B (USD)
-        net_debt  = round((debt - cash) / 1e9, 1)        # $B (USD)
-        shares    = round(shares_r / 1e9, 3)             # billions
-
-        # ── WACC: Hamada re-levering + CAPM (late March 2026) ────────────────────
-        # Method: Pure Play approach (Damodaran Jan 2026 unlevered betas)
-        #   Step 1 — take sector unlevered beta (business risk only, no leverage noise)
-        #   Step 2 — re-lever with this stock's actual D/E → stock-specific levered beta
-        #   Step 3 — CAPM: Cost of Equity = RF + β_L × ERP
-        # RF = 4.44% (10Y UST March 2026) · ERP = 5.0% · Tax = 21%
-        _SECTOR_U_BETA = {
-            "Technology":             1.15,
-            "Healthcare":             0.82,
-            "Financial Services":     0.45,
-            "Energy":                 0.58,
-            "Consumer Cyclical":      0.88,
-            "Consumer Defensive":     0.65,
-            "Basic Materials":        0.96,
-            "Industrials":            0.89,
-            "Real Estate":            0.40,
-            "Communication Services": 0.85,
-            "Utilities":              0.35,
-        }
-        TAX            = 0.21
-        rf             = 4.44
-        erp            = 5.0
-        _sec_tmp       = info.get("sector", "")
-        raw_beta       = float(info.get("beta", 1.0) or 1.0)
-        equity_mv      = price * shares_r
-        de_ratio       = (debt / equity_mv) if equity_mv > 0 else 0.25
-
-        if _sec_tmp in _SECTOR_U_BETA:
-            # Hamada: β_L = β_U × (1 + (1-T) × D/E)
-            u_beta = _SECTOR_U_BETA[_sec_tmp]
-            beta   = round(u_beta * (1 + (1 - TAX) * de_ratio), 2)
-            beta   = max(0.20, min(3.0, beta))          # hard floor/cap for extreme leverage
-        else:
-            # Fallback: use raw yfinance beta, bounded to reasonable range
-            u_beta = None
-            beta   = round(max(0.5, min(2.5, raw_beta)), 2)
-
-        cost_equity    = rf + beta * erp
-        total_capital  = equity_mv + debt
-        dw             = (debt / total_capital) if total_capital > 0 else 0.25
-        ew             = 1.0 - dw
-        cost_debt_at   = 5.0 * (1 - TAX)               # after-tax cost of debt
-        wacc_raw       = ew * cost_equity + dw * cost_debt_at
-
-        # ── Growth rate estimation from analyst estimates ─────────────────────
-        eg    = float(info.get("earningsGrowth",  0) or 0) * 100
-        rg    = float(info.get("revenueGrowth",   0) or 0) * 100
-        # For Big Tech, earnings growth is volatile (quarterly EPS noise).
-        # Use max(earningsGrowth, revenueGrowth) — revenue is more stable — with an 8% floor.
-        if sym in _OCF_TICKERS:
-            g_raw = max(eg, rg)
-            g_floor = 8.0
-        else:
-            g_raw = eg if abs(eg) > 0.5 else rg
-            g_floor = -15.0
-        g1_base = round(max(g_floor, min(25.0, g_raw if g_raw != 0 else 3.0)), 1)
-        g1_bull = round(g1_base + 5.0, 1)
-        g1_bear = round(g1_base - 5.0, 1)
-        g2_base = round(max(0.0, g1_base * 0.55), 1)   # phase 2 mean-reverts
-        g2_bull = round(max(0.0, g1_bull * 0.55), 1)
-        g2_bear = round(g1_bear * 0.55, 1)
-
-        # ── Valuation multiples (live market data) ───────────────────────────────
-        pe_v         = info.get("forwardPE") or info.get("trailingPE")
-        pe_str       = f"Fwd P/E: {pe_v:.1f}×" if pe_v else "P/E: N/A"
-        dy           = info.get("dividendYield", 0) or 0
-        # For ADRs, yfinance computes dividendYield = TWD_dividend / USD_price (mixed currencies)
-        # Apply FX correction: multiply by fx_rate to bring numerator to USD
-        if currency_converted and dy > 0:
-            dy = dy * fx_rate
-        div_str      = f"{dy*100:.1f}%" if dy else "0%"
-        ev_r         = info.get("enterpriseValue", 0) or 0
-        evfcf_v      = round(ev_r / fcf_r, 1)    if fcf_r    > 0 else None
-        ev_ebitda_v  = round(ev_r / ebitda_r, 1) if ebitda_r > 0 else None
-        evfcf_s      = f"{evfcf_v}×"    if evfcf_v    else "N/A"
-        ev_ebitda_s  = f"{ev_ebitda_v}×" if ev_ebitda_v else "N/A"
-        gm           = info.get("grossMargins", 0) or 0
-        moat         = "Wide" if (mktcap_r > 50e9 and gm > 0.40) else "Narrow"
-
-        # ── Terminal value method — full GICS sector table (March 2026) ──────────
-        # Source: user-provided sector calibration + Damodaran 2026 data
-        # RF = 3.96% (10Y UST), ERP = 4.4%
-        # Each sector: (wacc_lo, wacc_hi, tv_method, tv_horizon, tgr, mult_base, mult_bull, mult_bear)
-        sector   = info.get("sector", "")
-        industry = info.get("industry", "")
-
-        # Ticker-level overrides for mega-cap Big Tech
-        _BIGTECH_TICKERS = {"AMZN","GOOGL","GOOG","META","MSFT","NVDA"}
-        _FINTECH_TICKERS = {"PYPL","SQ","GPN","FIS"}
-        _FINTECH_INDS    = {"Payment","Credit Services","Capital Markets","Insurance"}
-
-        ev_ebitda_live = ev_ebitda_v or 9.0
-
-        if sym in _BIGTECH_TICKERS or (
-            sector == "Technology" and mktcap_r > 500e9
-        ):
-            # Big Tech — perpetuity, WACC 9.0–10.5%, long reinvestment runway
-            wacc           = round(max(9.0, min(10.5, wacc_raw)), 1)
-            tv_method      = "perpetuity"
-            tv_horizon     = 10
-            tgr            = 3.0 if sym == "AMZN" else 2.5
-            exit_mult_base = exit_mult_bull = exit_mult_bear = None
-            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%"
-
-        elif sector == "Technology" and industry in (
-            "Semiconductors", "Semiconductor Equipment & Materials",
-            "Electronic Components", "Electronic Manufacturing Services",
-        ):
-            # Semiconductor / hardware foundry — exit multiple, not perpetuity.
-            # Cyclical capex-heavy businesses; EV/EBITDA is the market's valuation language.
-            wacc           = round(max(9.0, min(11.0, wacc_raw)), 1)
-            tv_method      = "exit_multiple"
-            tv_horizon     = 5
-            tgr            = None
-            exit_mult_base = 15.0
-            exit_mult_bull = 18.0
-            exit_mult_bear = 12.0
-            tv_label       = f"15× EV/EBITDA exit yr 5  ·  WACC {wacc}%  (semiconductor)"
-
-        elif sector == "Technology":
-            # Mid-cap software/platform Tech — perpetuity, long reinvestment runway
-            wacc           = round(max(9.0, min(10.5, wacc_raw)), 1)
-            tv_method      = "perpetuity"
-            tv_horizon     = 10
-            tgr            = 2.5
-            exit_mult_base = exit_mult_bull = exit_mult_bear = None
-            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%"
-
-        elif sector == "Healthcare":
-            # Pharma/Healthcare — 5yr EBITDA exit; patent cliffs limit visibility
-            wacc           = round(max(7.5, min(8.5, wacc_raw)), 1)
-            tv_method      = "exit_multiple"
-            tv_horizon     = 5
-            tgr            = None
-            exit_mult_base = 13.0 if ev_ebitda_live >= 12 else 9.5
-            exit_mult_bull = exit_mult_base + 2.0
-            exit_mult_bear = max(exit_mult_base - 2.0, 5.0)
-            tv_label       = f"{exit_mult_base}× EV/EBITDA exit yr 5  ·  WACC {wacc}%"
-
-        elif sector == "Financial Services" or sym in _FINTECH_TICKERS or any(k in industry for k in _FINTECH_INDS):
-            # Fintech/Payments — FCF multiple, high regulatory WACC
-            wacc           = round(max(9.5, min(11.0, wacc_raw)), 1)
-            tv_method      = "exit_multiple"
-            tv_horizon     = 10
-            tgr            = None
-            exit_mult_base = 12.0
-            exit_mult_bull = 17.0
-            exit_mult_bear =  9.0
-            tv_label       = f"12× FCF exit yr 10  ·  WACC {wacc}%  (fintech)"
-
-        elif sector == "Energy":
-            # Energy — commodity-linked, high WACC, EBITDA exit
-            wacc           = round(max(10.0, min(12.0, wacc_raw)), 1)
-            tv_method      = "exit_multiple"
-            tv_horizon     = 10
-            tgr            = None
-            exit_mult_base = 6.0
-            exit_mult_bull = 7.0
-            exit_mult_bear = 5.0
-            tv_label       = f"6× EV/EBITDA exit yr 10  ·  WACC {wacc}%  (energy)"
-
-        elif sector == "Real Estate":
-            # REITs — use NOI cap-rate; approximated as exit multiple on EBITDA
-            wacc           = round(max(7.0, min(8.0, wacc_raw)), 1)
-            tv_method      = "exit_multiple"
-            tv_horizon     = 10
-            tgr            = None
-            exit_mult_base = 15.0  # ~6.5% cap rate ≈ 15× NOI
-            exit_mult_bull = 18.0
-            exit_mult_bear = 13.0
-            tv_label       = f"~6.5% cap rate (15× NOI)  ·  WACC {wacc}%  (REIT)"
-
-        elif sector == "Industrials":
-            # Cyclical industrials — GDP-linked, EBITDA exit
-            wacc           = round(max(8.5, min(9.5, wacc_raw)), 1)
-            tv_method      = "exit_multiple"
-            tv_horizon     = 10
-            tgr            = None
-            exit_mult_base = 13.0
-            exit_mult_bull = 15.0
-            exit_mult_bear = 10.0
-            tv_label       = f"13× EV/EBITDA exit yr 10  ·  WACC {wacc}%  (industrials)"
-
-        elif sector == "Consumer Cyclical":
-            # Consumer discretionary — spend-sensitive
-            wacc           = round(max(9.0, min(11.0, wacc_raw)), 1)
-            tv_method      = "exit_multiple"
-            tv_horizon     = 10
-            tgr            = None
-            exit_mult_base = 12.0
-            exit_mult_bull = 14.0
-            exit_mult_bear =  9.0
-            tv_label       = f"12× EV/EBITDA exit yr 10  ·  WACC {wacc}%  (cons. cyclical)"
-
-        elif sector == "Consumer Defensive":
-            # Staples — low vol, perpetuity appropriate
-            wacc           = round(max(7.0, min(8.0, wacc_raw)), 1)
-            tv_method      = "perpetuity"
-            tv_horizon     = 10
-            tgr            = 2.0
-            exit_mult_base = exit_mult_bull = exit_mult_bear = None
-            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%  (cons. defensive)"
-
-        elif sector == "Basic Materials":
-            # Asset-heavy, commodity-linked, highest WACC
-            wacc           = round(max(10.5, min(12.5, wacc_raw)), 1)
-            tv_method      = "exit_multiple"
-            tv_horizon     = 10
-            tgr            = None
-            exit_mult_base = 7.0
-            exit_mult_bull = 9.0
-            exit_mult_bear = 5.0
-            tv_label       = f"7× EV/EBITDA exit yr 10  ·  WACC {wacc}%  (materials)"
-
-        elif sector == "Communication Services":
-            # High capex, utility-like — perpetuity
-            wacc           = round(max(8.5, min(10.0, wacc_raw)), 1)
-            tv_method      = "perpetuity"
-            tv_horizon     = 10
-            tgr            = 2.0
-            exit_mult_base = exit_mult_bull = exit_mult_bear = None
-            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%  (comm. services)"
-
-        elif sector == "Utilities":
-            # Rate-sensitive, dividend-driven — low WACC, perpetuity
-            wacc           = round(max(6.5, min(8.0, wacc_raw)), 1)
-            tv_method      = "perpetuity"
-            tv_horizon     = 10
-            tgr            = 1.5
-            exit_mult_base = exit_mult_bull = exit_mult_bear = None
-            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%  (utilities)"
-
-        else:
-            # Fallback
-            wacc           = round(max(7.0, min(12.0, wacc_raw)), 1)
-            tv_method      = "perpetuity"
-            tv_horizon     = 10
-            tgr            = 2.5
-            exit_mult_base = exit_mult_bull = exit_mult_bear = None
-            tv_label       = f"Perpetuity @ {tgr}% TGR  ·  WACC {wacc}%"
-
-        # ── DCF helpers ───────────────────────────────────────────────────────
-        def _project(fcf_b, ebitda_b, g1, g2, horizon):
-            """Project FCFs and EBITDA over `horizon` years (2-phase growth)."""
-            h1   = min(5, horizon)
-            h2   = max(0, horizon - h1)
-            fcfs = []
-            f, e = fcf_b, ebitda_b
-            for _ in range(h1):
-                f *= (1 + g1 / 100.0); e *= (1 + g1 / 100.0); fcfs.append(f)
-            for _ in range(h2):
-                f *= (1 + g2 / 100.0); e *= (1 + g2 / 100.0); fcfs.append(f)
-            return fcfs, e
-
-        def _pv(fcfs, r):
-            return sum(f / (1 + r) ** (y + 1) for y, f in enumerate(fcfs))
-
-        def _iv_perpetuity(fcf_b, ebitda_b, g1, g2, tg, w, nd, sh, horizon):
-            if sh <= 0 or fcf_b <= 0 or w / 100.0 <= tg / 100.0:
-                return None
-            r            = w / 100.0
-            fcfs, _      = _project(fcf_b, ebitda_b, g1, g2, horizon)
-            pv_fcfs      = _pv(fcfs, r)
-            terminal_fcf = fcfs[-1]
-            tv           = terminal_fcf * (1 + tg / 100.0) / (r - tg / 100.0)
-            ev           = pv_fcfs + tv / (1 + r) ** horizon - nd
-            return max(round(ev / sh, 0), 0)
-
-        def _iv_exit_multiple(fcf_b, ebitda_b, g1, g2, mult, w, nd, sh, horizon):
-            if sh <= 0 or fcf_b <= 0 or ebitda_b <= 0:
-                return None
-            r              = w / 100.0
-            fcfs, ebitda_n = _project(fcf_b, ebitda_b, g1, g2, horizon)
-            pv_fcfs        = _pv(fcfs, r)
-            tv             = mult * ebitda_n           # exit mult × EBITDA at horizon
-            ev             = pv_fcfs + tv / (1 + r) ** horizon - nd
-            return max(round(ev / sh, 0), 0)
-
-        # ── Compute base / bull / bear intrinsic values ───────────────────────
-        _args = (fcf, ebitda, net_debt, shares, tv_horizon)
-        if tv_method == "perpetuity":
-            iv_base = _iv_perpetuity(*_args[:2], g1_base, g2_base, tgr, wacc,        *_args[2:])
-            iv_bull = _iv_perpetuity(*_args[:2], g1_bull, g2_bull, tgr, wacc * 0.90, *_args[2:])
-            iv_bear = _iv_perpetuity(*_args[:2], g1_bear, g2_bear, tgr, wacc * 1.10, *_args[2:])
-        else:
-            iv_base = _iv_exit_multiple(*_args[:2], g1_base, g2_base, exit_mult_base, wacc,        *_args[2:])
-            iv_bull = _iv_exit_multiple(*_args[:2], g1_bull, g2_bull, exit_mult_bull, wacc * 0.90, *_args[2:])
-            iv_bear = _iv_exit_multiple(*_args[:2], g1_bear, g2_bear, exit_mult_bear, wacc * 1.10, *_args[2:])
-
-        # ── Red Flag #1: FCF ≤ 0 → Revenue Multiple fallback ─────────────────
-        # Standard DCF breaks with negative FCF. Switch to P/S-based valuation.
-        # Sector P/S multiples (2026 calibration, conservative)
-        iv_method_used = tv_method
-        if fcf <= 0 and shares > 0:
-            rev_r = info.get("totalRevenue", 0) or 0
-            rev_r *= fx_rate   # apply same FX conversion
-            rev   = rev_r / 1e9
-            _PS_MULT = {
-                "Technology": 7.0, "Healthcare": 3.5,
-                "Financial Services": 2.5, "Consumer Cyclical": 1.5,
-                "Consumer Defensive": 1.2, "Industrials": 1.5,
-                "Energy": 1.2, "Basic Materials": 1.2,
-                "Communication Services": 3.0, "Utilities": 2.0,
-                "Real Estate": 5.0,
-            }
-            ps = _PS_MULT.get(sector, 2.0)
-            if rev > 0:
-                iv_base = max(round((rev * ps - net_debt) / shares, 0), 0)
-                iv_bull = max(round((rev * ps * 1.25 - net_debt) / shares, 0), 0)
-                iv_bear = max(round((rev * ps * 0.75 - net_debt) / shares, 0), 0)
-                iv_method_used = f"revenue_multiple"
-                tv_label = f"{ps}× Revenue  ·  FCF negative — P/S method"
-                fcf_source += " ⚠ negative"
-
-        # ── Red Flag #2: Beta > 2.0 → Value Trap warning ─────────────────────
-        # High beta amplifies losses in downturns; deep value requires stability.
-
-        mos = round(((iv_base - price) / iv_base * 100)) if iv_base else None
+        # ── Step 4: MoS + rating using live price ─────────────────────────────
+        mos    = round(((iv_base - price) / iv_base * 100)) if iv_base else None
         rating = ("buy" if (mos or 0) > 25 else
                   "hold" if (mos or 0) > 0 else "watch")
 
-        # ── Risks: data-driven from yfinance signals ───────────────────────────
-        risks = []
-        if fcf < 0:
-            risks.append({"level": "high",
-                          "text": f"Negative FCF (${fcf:.2f}B {fcf_source}) — DCF switched to {iv_method_used}"})
-        if dw > 0.5:
-            risks.append({"level": "high",
-                          "text": f"High leverage: debt {dw*100:.0f}% of capital; net debt ${net_debt:.1f}B"})
-        if beta > 2.0:
-            risks.append({"level": "high",
-                          "text": f"Value Trap warning: beta {beta:.2f} > 2.0 — high volatility undermines 'Deep Value' thesis"})
-        elif beta > 1.3:
-            risks.append({"level": "mid",
-                          "text": f"Elevated beta ({beta:.2f}) — amplifies market drawdowns"})
-        if dy > 0.06:
-            risks.append({"level": "mid",
-                          "text": f"High dividend yield ({div_str}) — sustainability risk if FCF declines"})
-        if pe_v and pe_v > 25:
-            risks.append({"level": "mid",
-                          "text": f"P/E {pe_v:.1f}× — premium valuation leaves little margin for error"})
-        sector_s = info.get("sector", "")
-        if sector_s:
-            risks.append({"level": "low",
-                          "text": f"Sector exposure: {sector_s} — macro/regulatory cycle risk"})
-        if not risks:
-            risks.append({"level": "low",
-                          "text": "No significant risk flags detected — verify with latest 10-K"})
+        # EV/EBITDA from live market data (yfinance enterprise value ÷ Gemini EBITDA)
+        ebitda_r    = ebitda * 1e9
+        ev_ebitda_v = round(ev_r / ebitda_r, 1) if ebitda_r > 0 else None
+        ev_ebitda_s = f"{ev_ebitda_v}×" if ev_ebitda_v else "N/A"
 
-        # ── Catalysts: pull narrative from streetwise_data.json ───────────────
-        db       = load_data_raw()
-        rec_db   = next((r for r in db if r.get("t","").upper() == sym), {})
-        cats     = []
-        if rec_db.get("bull"):
-            cats.append({"tag": "Bull", "text": rec_db["bull"]})
-        if rec_db.get("base"):
-            cats.append({"tag": "Base", "text": rec_db["base"]})
-        if rec_db.get("bear"):
-            cats.append({"tag": "Bear", "text": rec_db["bear"]})
-        if not cats:
-            cats.append({"tag": "N/A",
-                         "text": "No thesis data found. Add research notes via the sidebar."})
+        # ── Step 5: Log Gemini cost ───────────────────────────────────────────
+        usage  = g_data.get("usageMetadata", {})
+        g_inp  = usage.get("promptTokenCount", 0)
+        g_out  = usage.get("candidatesTokenCount", 0)
+        r_in, r_out = 0.30, 2.50   # gemini-2.5-flash per M tokens (Mar 2026)
+        g_cost = (g_inp * r_in + g_out * r_out) / 1e6
+        log_cost("dcf-gemini", sym, g_inp, g_out, g_cost, model="gemini-2.5-flash")
 
         result = {
-            "ok":            True,
-            "ticker":        sym,
-            "name":          info.get("longName", sym),
-            "price":         round(price, 2),
-            "mktcap":        mktcap,
-            "fcf":           fcf,
-            "ebitda":        ebitda,
-            "g1_base":       g1_base,  "g1_bull": g1_bull,  "g1_bear": g1_bear,
-            "g2_base":       g2_base,  "g2_bull": g2_bull,  "g2_bear": g2_bear,
-            "tgr":           tgr,
-            "wacc_default":  wacc,
-            "wacc_rf":       rf,       "wacc_erp": erp,
-            "net_debt":      net_debt,
-            "shares":        shares,
-            "iv_base":       iv_base,  "iv_bull": iv_bull,  "iv_bear": iv_bear,
-            "tv_method":     iv_method_used,
-            "tv_horizon":    tv_horizon,
-            "tv_label":      tv_label,
-            "exit_mult":     exit_mult_base,
-            "div":           div_str,
-            "pe":            pe_str,
-            "evfcf":         evfcf_s,
-            "ev_ebitda":     ev_ebitda_s,
-            "sector":        sector,
-            "moat":          moat,
-            "rating":        rating,
-            "mos":           mos,
-            "beta":          beta,
-            "beta_raw":      round(raw_beta, 2),
-            "beta_u":        round(u_beta, 2) if u_beta else None,
-            "de_ratio":      round(de_ratio, 2),
-            "gross_margins":      round(gm * 100, 1),
-            "fcf_source":         fcf_source,
-            "financial_currency": financial_currency,
-            "currency_converted": currency_converted,
-            "risks":              risks,
-            "cats":               cats,
+            "ok":               True,
+            "ticker":           sym,
+            "name":             name,
+            "price":            round(price, 2),
+            "mktcap":           mktcap,
+            "fcf":              fcf,
+            "fcf_source":       fcf_source,
+            "ebitda":           ebitda,
+            "g1_base":          g1_base,   "g1_bull": g1_bull,   "g1_bear": g1_bear,
+            "g2_base":          g2_base,   "g2_bull": g2_bull,   "g2_bear": g2_bear,
+            "tgr":              tgr,
+            "wacc_default":     wacc,
+            "wacc_rf":          4.44,      "wacc_erp": 5.0,
+            "net_debt":         net_debt,
+            "shares":           shares,
+            "iv_base":          iv_base,   "iv_bull": iv_bull,   "iv_bear": iv_bear,
+            "tv_method":        tv_method,
+            "tv_horizon":       tv_horizon,
+            "tv_label":         tv_label,
+            "exit_mult":        exit_mult,
+            "div":              div_str,
+            "pe":               pe_str,
+            "evfcf":            "N/A",
+            "ev_ebitda":        ev_ebitda_s,
+            "sector":           sector,
+            "moat":             moat,
+            "rating":           rating,
+            "mos":              mos,
+            "beta":             beta,
+            "beta_raw":         round(raw_beta, 2),
+            "beta_u":           None,
+            "de_ratio":         0,
+            "gross_margins":    round(gm * 100, 1),
+            "financial_currency": "USD",
+            "currency_converted": False,
+            "dcf_source":       "gemini-2.5-flash",
+            "rationale":        rationale,
+            "risks":            risks,
+            "cats":             cats,
         }
         _dcf_cache[sym] = {"ts": time.time(), "data": result}
-        log.info(f"DCF {sym}: price={price} fcf={fcf}B iv_base={iv_base} wacc={wacc}%")
+        log.info(f"DCF {sym} (Gemini): price=${price} iv_base=${iv_base} mos={mos}% wacc={wacc}%")
         return jsonify(result)
 
     except Exception as ex:

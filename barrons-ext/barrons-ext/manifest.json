@@ -18,7 +18,8 @@
     "https://*.ngrok-free.app/*",
     "https://*.ngrok.app/*",
     "https://www.barrons.com/*",
-    "https://barrons.com/*"
+    "https://barrons.com/*",
+    "https://*.barrons-watchlist-research.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
