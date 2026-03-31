@@ -821,6 +821,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
   .rctab{padding:9px 10px;font-size:11px}
 }
 
+<!-- ═══ FEATURE: CRISIS MONITOR — START ══════════════════════════ -->
 /* ── Crisis Monitor ──────────────────────────────────────────────── */
 #crisis-panel{display:none;background:var(--card);border:1px solid var(--border);
   border-radius:var(--radius);padding:16px 18px;box-shadow:0 1px 2px rgba(60,64,67,.1)}
@@ -874,6 +875,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 @media(max-width:900px){.crisis-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.crisis-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:400px){.crisis-grid{grid-template-columns:1fr}}
+<!-- ═══ FEATURE: CRISIS MONITOR — END ════════════════════════════ -->
 </style>
 </head>
 <body>
@@ -1167,6 +1169,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
                        border-color:var(--accent);color:var(--accent)">
           📈 Plot
         </button>
+        <!-- ═══ FEATURE: CRISIS MONITOR — START ══════════════════════════ -->
         <button id="crisis-toggle-btn" onclick="toggleCrisisPanel()" title="Global Crisis Monitor">
           🌍 Crisis Monitor
         </button>
@@ -1196,6 +1199,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading crisis data…</div>
       </div>
     </div>
+    <!-- ═══ FEATURE: CRISIS MONITOR — END ════════════════════════════ -->
 
 <script>
 // ── Constants ──────────────────────────────────────────────────────
@@ -3953,6 +3957,7 @@ function wlModalDelete() {
   toast('Watchlist deleted');
 }
 
+// ═══ FEATURE: CRISIS MONITOR — START ══════════════════════════════════════════
 // ══════════════════════════════════════════════════════════════════════════════
 // ── Global Crisis Monitor ─────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
@@ -4210,6 +4215,7 @@ function renderCrisisGrid(data, grid) {
     </div>`;
   }).join('');
 }
+// ═══ FEATURE: CRISIS MONITOR — END ════════════════════════════════════════════
 
 // ── Mobile sidebar drawer ──────────────────────────────────────────
 function toggleMobSidebar() {
