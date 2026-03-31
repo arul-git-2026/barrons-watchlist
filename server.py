@@ -2857,6 +2857,69 @@ def get_dcf_analysis(ticker):
         def _fmt(v, suffix="B"):
             return f"${v}{suffix}" if v is not None else "N/A"
 
+        # ── Sector classification → drives model choice in prompt ─────────────
+        _sector_up = (sector or "").lower()
+        _industry  = (info.get("industry", "") or "").lower()
+        _is_bank   = any(x in _sector_up or x in _industry for x in
+                         ("bank", "insurance", "diversified financial", "capital markets",
+                          "financial services", "thrift", "mortgage", "credit"))
+        _is_reit   = any(x in _sector_up or x in _industry for x in
+                         ("reit", "real estate investment trust"))
+        _is_energy = any(x in _sector_up or x in _industry for x in
+                         ("oil", "gas", "energy", "mining", "utilities", "pipeline"))
+
+        # Extra data for banks (residual income needs book value + ROE)
+        yf_bvps = _to_usd_b(info.get("bookValue"))       # book value per share (not in B)
+        yf_roe  = info.get("returnOnEquity")              # already a ratio
+        yf_eps  = info.get("trailingEps")
+        # Rough book value per share for residual income (not converted to billions)
+        _bvps_raw = float(info.get("bookValue") or 0) * _fx
+        _roe_pct  = round(float(yf_roe or 0) * 100, 1) if yf_roe else None
+
+        # Extra data for REITs (FFO ≈ Net Income + D&A − gains on sales)
+        # yfinance doesn't expose FFO directly; pass net income + D&A so Gemini can calculate
+        yf_net_income = _to_usd_b(info.get("netIncomeToCommon"))
+        yf_da         = None  # yfinance doesn't reliably expose D&A in info
+
+        # Build sector-specific task block for prompt
+        if _is_bank:
+            model_block = f"""SECTOR: Financial / Bank / Insurance — use RESIDUAL INCOME model (NOT DCF).
+- Book Value Per Share: ${_bvps_raw:.2f}
+- Return on Equity (ROE): {f"{_roe_pct}%" if _roe_pct else "N/A"}
+- Trailing EPS: {f"${yf_eps:.2f}" if yf_eps else "N/A"}
+- Net Income: {_fmt(yf_net_income)}
+Steps:
+1. Use Residual Income = EPS − (Cost of Equity × BVPS). Project 5 years.
+2. Terminal value = BVPS grows at TGR perpetually
+3. Intrinsic value = BVPS + PV of residual incomes + PV of terminal value
+4. fcf_source should be "Residual Income model"
+5. Set fcf = net income, ebitda = net income (best proxy available)"""
+        elif _is_reit:
+            model_block = f"""SECTOR: Real Estate / REIT — use FFO (Funds From Operations) model.
+- Net Income: {_fmt(yf_net_income)}
+- OCF (proxy for FFO): {_fmt(yf_ocf)}
+- Total Debt: {_fmt(yf_debt)}
+- Total Cash: {_fmt(yf_cash)}
+Steps:
+1. Estimate trailing FFO = Net Income + Depreciation & Amortization − gains on property sales
+   (yfinance D&A not available — use OCF as best proxy for FFO if D&A unknown)
+2. Apply a dividend discount / FFO multiple approach for terminal value
+3. Use cap rate or P/FFO multiple for terminal value (not perpetuity growth)
+4. fcf_source should be "FFO (REIT model)"
+5. Set fcf = estimated FFO"""
+        else:
+            _sw = "platform/software" if any(x in _industry for x in ("software","internet","platform","streaming")) else ""
+            model_block = f"""SECTOR: {sector or "General"} — use standard FCF / OCF DCF model.
+Steps:
+1. Choose base cash flow:
+   - {"Use OCF — this is a " + _sw + " company, CapEx is growth investment" if _sw else "Use FCF (OCF − CapEx) for capex-heavy companies"}
+   - {"" if _sw else "Use OCF if FCF is negative or < 50% of OCF (likely one-off CapEx spike)"}
+   - If both are unreliable, use EBITDA × (1 − 21% tax rate) as proxy
+2. Estimate analyst-consensus 5-year growth rate (g1) and slower phase-2 rate (g2)
+3. Terminal value:
+   - Stable compounders / software: perpetuity growth (TGR 2–3%)
+   - Cyclicals / semiconductors / {"energy" if _is_energy else "capex-heavy"}: EV/EBITDA exit multiple"""
+
         # ADR note for prompt
         adr_note = (
             f"IMPORTANT — {sym} is an ADR: reports in {_fin_ccy}, trades in USD. "
@@ -2864,13 +2927,13 @@ def get_dcf_analysis(ticker):
             f"All outputs (iv_base/bull/bear) must be in USD per ADR share."
         ) if _is_adr else ""
 
-        # ── Step 2: Gemini Flash — DCF math on real yfinance numbers ─────────
+        # ── Step 2: Gemini Flash — valuation math on real yfinance numbers ────
         gemini_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
         if not gemini_key:
             return jsonify({"ok": False, "error": "GEMINI_API_KEY not set"}), 400
 
         today_str = datetime.now().strftime("%B %Y")
-        prompt = f"""You are a CFA-level financial analyst. Perform a DCF intrinsic value analysis for {sym} ({name}).
+        prompt = f"""You are a CFA-level financial analyst. Perform an intrinsic value analysis for {sym} ({name}).
 Reference date: {today_str}. Current market price: ${price:.2f}. Sector: {sector or "N/A"}.
 
 == LIVE DATA FROM YAHOO FINANCE (already in USD) ==
@@ -2890,16 +2953,9 @@ Reference date: {today_str}. Current market price: ${price:.2f}. Sector: {sector
 - Corporate Tax Rate: 21%
 
 == YOUR TASKS ==
-1. Choose FCF or OCF as the base cash flow:
-   - Platform/software (AMZN, GOOGL, META, MSFT, NFLX): use OCF — CapEx is growth investment
-   - Capex-heavy (semiconductors, energy, industrials): use FCF
-   - If yfinance FCF is negative or unreliable, use EBITDA × (1 − tax rate) as proxy
-2. Estimate analyst-consensus 5-year growth rate (g1) and a slower phase-2 rate (g2)
-3. Calculate WACC using the Beta and macro assumptions above
-4. Choose terminal value method:
-   - Stable compounders / software: perpetuity growth (TGR 2–3%)
-   - Cyclicals / semiconductors: EV/EBITDA exit multiple
-5. Run the DCF and produce bull, base, bear intrinsic values per share
+{model_block}
+- Calculate WACC = Risk-Free Rate + Beta × Equity Risk Premium (adjust for leverage if applicable)
+- Produce bull, base, bear intrinsic values per share
 
 CRITICAL UNITS — output will be wrong if violated:
 - fcf, ebitda, net_debt: BILLIONS of USD (e.g. 45.0 not 45000000000)
