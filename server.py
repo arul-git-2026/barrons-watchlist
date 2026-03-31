@@ -2909,12 +2909,30 @@ Steps:
 5. Set fcf = estimated FFO"""
         else:
             _sw = "platform/software" if any(x in _industry for x in ("software","internet","platform","streaming")) else ""
+            # Detect depressed FCF: capex-heavy company in investment cycle
+            _fcf_ratio = (yf_fcf / yf_ocf) if (yf_fcf and yf_ocf and yf_ocf > 0) else None
+            _fcf_depressed = _fcf_ratio is not None and _fcf_ratio < 0.40
+            # Normalised FCF proxy = EBITDA × (1 - tax) when FCF is cycle-depressed
+            _norm_fcf = round(yf_ebitda * 0.79, 2) if (_fcf_depressed and yf_ebitda) else None
+            _capex = round(yf_ocf - yf_fcf, 2) if (yf_ocf and yf_fcf) else None
+
+            _capex_note = ""
+            if _fcf_depressed and _norm_fcf:
+                _capex_note = (
+                    f"\nNOTE — FCF IS CYCLE-DEPRESSED: FCF/OCF = {_fcf_ratio:.0%} "
+                    f"(CapEx=${_capex}B = {_capex/_to_usd_b(info.get('totalRevenue',1) or 1)*100:.0f}% of revenue). "
+                    f"This company is in a peak capex investment cycle. "
+                    f"Use NORMALISED FCF = EBITDA × (1−21%%) = ${_norm_fcf}B as your DCF base "
+                    f"(reflects mid-cycle earnings power, not trough FCF). "
+                    f"Set fcf_source to 'Normalised FCF (EBITDA×79%% — peak capex cycle)'."
+                )
+
             model_block = f"""SECTOR: {sector or "General"} — use standard FCF / OCF DCF model.
 Steps:
 1. Choose base cash flow:
    - {"Use OCF — this is a " + _sw + " company, CapEx is growth investment" if _sw else "Use FCF (OCF − CapEx) for capex-heavy companies"}
    - {"" if _sw else "Use OCF if FCF is negative or < 50% of OCF (likely one-off CapEx spike)"}
-   - If both are unreliable, use EBITDA × (1 − 21% tax rate) as proxy
+   - If both are unreliable, use EBITDA × (1 − 21% tax rate) as proxy{_capex_note}
 2. Estimate analyst-consensus 5-year growth rate (g1) and slower phase-2 rate (g2)
 3. Terminal value:
    - Stable compounders / software: perpetuity growth (TGR 2–3%)
