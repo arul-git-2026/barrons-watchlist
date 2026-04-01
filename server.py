@@ -186,26 +186,26 @@ _LOGIN_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Streetwise — Login</title>
+<title>Streetwise \u2014 Login</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{min-height:100vh;display:flex;align-items:center;justify-content:center;
-       background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-  .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:36px 40px;
-        width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-  .logo{font-size:13px;font-weight:700;color:#f1f5f9;display:flex;align-items:center;
-        gap:8px;margin-bottom:28px}
-  .logo span{background:#3b82f6;color:#fff;padding:3px 9px;border-radius:5px;font-size:12px}
-  label{display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;
-        letter-spacing:.06em;margin-bottom:6px}
-  input[type=password]{width:100%;padding:10px 12px;background:#0f172a;border:1px solid #334155;
-        border-radius:7px;color:#e2e8f0;font-size:14px;outline:none;transition:border-color .15s}
-  input[type=password]:focus{border-color:#3b82f6}
-  button{width:100%;padding:11px;background:#3b82f6;color:#fff;border:none;border-radius:7px;
-         font-size:13px;font-weight:600;cursor:pointer;margin-top:16px;transition:background .15s}
-  button:hover{background:#2563eb}
-  .err{background:#2d0f0f;color:#fca5a5;border:1px solid #7f1d1d;border-radius:6px;
-       padding:9px 12px;font-size:12px;margin-bottom:16px}
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}}
+  .card{{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:36px 40px;
+        width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.4)}}
+  .logo{{font-size:13px;font-weight:700;color:#f1f5f9;display:flex;align-items:center;
+        gap:8px;margin-bottom:28px}}
+  .logo span{{background:#3b82f6;color:#fff;padding:3px 9px;border-radius:5px;font-size:12px}}
+  label{{display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;
+        letter-spacing:.06em;margin-bottom:6px}}
+  input[type=password]{{width:100%;padding:10px 12px;background:#0f172a;border:1px solid #334155;
+        border-radius:7px;color:#e2e8f0;font-size:14px;outline:none;transition:border-color .15s}}
+  input[type=password]:focus{{border-color:#3b82f6}}
+  button{{width:100%;padding:11px;background:#3b82f6;color:#fff;border:none;border-radius:7px;
+         font-size:13px;font-weight:600;cursor:pointer;margin-top:16px;transition:background .15s}}
+  button:hover{{background:#2563eb}}
+  .err{{background:#2d0f0f;color:#fca5a5;border:1px solid #7f1d1d;border-radius:6px;
+       padding:9px 12px;font-size:12px;margin-bottom:16px}}
 </style>
 </head>
 <body>
