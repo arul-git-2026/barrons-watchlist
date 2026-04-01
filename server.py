@@ -1234,13 +1234,18 @@ CONTENT:
                 "https://generativelanguage.googleapis.com/v1beta/"
                 f"models/{gemini_model}:generateContent?key={gemini_key}"
             )
+            gen_cfg = {
+                "temperature":     0.2,
+                "maxOutputTokens": max_tokens,
+                "responseMimeType": "application/json",
+            }
+            # Disable thinking for Flash — ticker extraction doesn't need it
+            # and thinking tokens eat into the output budget
+            if "flash" in gemini_model:
+                gen_cfg["thinkingConfig"] = {"thinkingBudget": 0}
             payload = json.dumps({
                 "contents": [{"parts": [{"text": extract_prompt}]}],
-                "generationConfig": {
-                    "temperature":     0.2,
-                    "maxOutputTokens": max_tokens,
-                    "responseMimeType": "application/json",
-                },
+                "generationConfig": gen_cfg,
             }).encode()
             req = urllib.request.Request(url, data=payload,
                     headers={"Content-Type": "application/json"})
