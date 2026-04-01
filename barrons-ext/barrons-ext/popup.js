@@ -36,8 +36,13 @@ function getToken() {
   return (document.getElementById('server-token').value || '').trim();
 }
 function authUrl(path) {
+  return getServerUrl() + path;
+}
+function authHeaders(extra) {
+  var h = Object.assign({'Content-Type': 'application/json'}, extra || {});
   var t = getToken();
-  return getServerUrl() + path + (t ? '?token=' + encodeURIComponent(t) : '');
+  if (t) h['X-Streetwise-Token'] = t;
+  return h;
 }
 function updatePreview() {
   var date   = document.getElementById('inp-date').value.trim()   || 'M/D';
@@ -113,7 +118,7 @@ async function pingServer() {
   var dot = document.getElementById('server-dot');
   var txt = document.getElementById('server-status-txt');
   try {
-    var res = await fetch(authUrl('/api/status'), {signal:AbortSignal.timeout(2500)});
+    var res = await fetch(authUrl('/api/status'), {headers:authHeaders(),signal:AbortSignal.timeout(2500)});
     if (res.ok) {
       var d = await res.json();
       dot.className = 'dot ok';
@@ -129,7 +134,7 @@ async function pingServer() {
 async function loadSources() {
   var container = document.getElementById('quick-btns');
   try {
-    var res = await fetch(authUrl('/api/sources'), {signal:AbortSignal.timeout(3000)});
+    var res = await fetch(authUrl('/api/sources'), {headers:authHeaders(),signal:AbortSignal.timeout(3000)});
     if (!res.ok) throw new Error('HTTP '+res.status);
     var data = await res.json();
     var sources = data.sources || [];
@@ -370,7 +375,7 @@ async function deleteEpisode() {
   btn.disabled=true;btn.textContent='⏳…';
   try{
     var res=await fetch(authUrl('/api/delete-episode'),{
-      method:'POST',headers:{'Content-Type':'application/json'},
+      method:'POST',headers:authHeaders(),
       body:JSON.stringify({ep_key:epKey,remove_empty:rmEmpty})
     });
     var data=await res.json();

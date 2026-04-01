@@ -74,10 +74,11 @@ async function runExtraction(job) {
 
   try {
     _controller = new AbortController();
-    var ingestUrl = job.serverUrl+'/api/ingest-page'+(job.token ? '?token='+encodeURIComponent(job.token) : '');
-    var res = await fetch(ingestUrl, {
+    var ingestHeaders = {'Content-Type':'application/json'};
+    if (job.token) ingestHeaders['X-Streetwise-Token'] = job.token;
+    var res = await fetch(job.serverUrl+'/api/ingest-page', {
       method:  'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: ingestHeaders,
       signal:  _controller.signal,
       body: JSON.stringify({
         text:   job.text,
@@ -179,7 +180,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   document.getElementById('btn-retry').addEventListener('click', retry);
   document.getElementById('btn-close').addEventListener('click', function() { window.close(); });
   document.getElementById('btn-dash').addEventListener('click', function() {
-    var dashUrl = job.serverUrl + (job.token ? '/?token='+encodeURIComponent(job.token) : '/');
+    var dashUrl = job.serverUrl + '/v2';
     chrome.tabs.create({url: dashUrl});
   });
 

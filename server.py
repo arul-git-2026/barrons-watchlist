@@ -80,6 +80,7 @@ logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("STREETWISE_TOKEN", "dev-secret-key-local")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 CORS(app, supports_credentials=True)
 
 @app.errorhandler(Exception)
@@ -148,45 +149,104 @@ def log_cost(service: str, ticker: str, inp: int, out: int, cost: float, model: 
 # When not set (local dev), auth is skipped entirely.
 _AUTH_TOKEN: str = os.environ.get("STREETWISE_TOKEN", "").strip()
 
-_AUTH_EXEMPT = {"/favicon.ico", "/health", "/api/costs", "/api/crisis-monitor"}
-
-# Cloudflare Access JWT header — presence means CF Access already authenticated the user
-_CF_JWT_HEADER = "Cf-Access-Jwt-Assertion"
+_AUTH_EXEMPT = {"/favicon.ico", "/health", "/api/costs", "/api/crisis-monitor", "/login", "/logout"}
 
 @app.before_request
 def _check_token():
-    """Reject requests that don't carry the correct token (when auth is enabled).
+    """Reject requests that don't carry valid auth.
 
     Auth passes if ANY of these are true:
-      1. STREETWISE_TOKEN env var is not set       → local dev, no auth
-      2. Path is in _AUTH_EXEMPT                   → public endpoints
-      3. Cf-Access-Jwt-Assertion header present    → Cloudflare Access already authed
-      4. ?token=<value> matches                    → direct URL access
-      5. X-Streetwise-Token header matches         → programmatic access
-      6. session['auth'] == True                   → browser session already authenticated
+      1. STREETWISE_TOKEN env var is not set    → local dev, no auth
+      2. Path is in _AUTH_EXEMPT               → public endpoints
+      3. session['auth'] == True               → 30-day browser session cookie
+      4. X-Streetwise-Token header matches     → Chrome extension
+    Browser requests that fail redirect to /login.
+    API/AJAX requests that fail return 403 JSON.
     """
     if not _AUTH_TOKEN:
-        return  # auth disabled — local dev mode
+        return
     if request.path in _AUTH_EXEMPT:
         return
-    # Cloudflare Access JWT — if present, CF already verified the user's identity
-    if request.headers.get(_CF_JWT_HEADER):
-        session["auth"] = True
-        return
-    # Already authenticated this browser session via cookie
     if session.get("auth"):
         return
-    # Check token in URL or header (direct access fallback)
-    provided = (
-        request.args.get("token", "")
-        or request.headers.get("X-Streetwise-Token", "")
-    )
-    if provided == _AUTH_TOKEN:
-        session["auth"] = True   # set session cookie for all subsequent requests
-        session.permanent = False
+    # Chrome extension — API key in header
+    if request.headers.get("X-Streetwise-Token", "") == _AUTH_TOKEN:
         return
+    # Not authenticated — redirect browsers to /login, return 403 for API calls
     log.warning(f"  auth: rejected {request.remote_addr} → {request.path}")
-    return jsonify({"ok": False, "error": "Unauthorized — missing or invalid token"}), 403
+    wants_html = "text/html" in request.headers.get("Accept", "")
+    if wants_html and request.method == "GET":
+        from flask import redirect
+        return redirect(f"/login?next={request.path}")
+    return jsonify({"ok": False, "error": "Unauthorized"}), 403
+
+
+_LOGIN_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Streetwise — Login</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+  .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:36px 40px;
+        width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+  .logo{font-size:13px;font-weight:700;color:#f1f5f9;display:flex;align-items:center;
+        gap:8px;margin-bottom:28px}
+  .logo span{background:#3b82f6;color:#fff;padding:3px 9px;border-radius:5px;font-size:12px}
+  label{display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;
+        letter-spacing:.06em;margin-bottom:6px}
+  input[type=password]{width:100%;padding:10px 12px;background:#0f172a;border:1px solid #334155;
+        border-radius:7px;color:#e2e8f0;font-size:14px;outline:none;transition:border-color .15s}
+  input[type=password]:focus{border-color:#3b82f6}
+  button{width:100%;padding:11px;background:#3b82f6;color:#fff;border:none;border-radius:7px;
+         font-size:13px;font-weight:600;cursor:pointer;margin-top:16px;transition:background .15s}
+  button:hover{background:#2563eb}
+  .err{background:#2d0f0f;color:#fca5a5;border:1px solid #7f1d1d;border-radius:6px;
+       padding:9px 12px;font-size:12px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo"><span>STW</span> Streetwise</div>
+  {error}
+  <form method="POST" action="/login">
+    <input type="hidden" name="next" value="{next}">
+    <label>Passphrase</label>
+    <input type="password" name="passphrase" autofocus placeholder="Enter passphrase">
+    <button type="submit">Sign in</button>
+  </form>
+</div>
+</body>
+</html>"""
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    from flask import redirect, make_response as _mr
+    if request.method == "POST":
+        pw   = request.form.get("passphrase", "").strip()
+        next_url = request.form.get("next", "/v2")
+        if pw == _AUTH_TOKEN:
+            session.permanent = True
+            session["auth"]   = True
+            return redirect(next_url or "/v2")
+        html = _LOGIN_PAGE.format(
+            error='<div class="err">⚠ Incorrect passphrase</div>',
+            next=next_url or "/v2"
+        )
+        return html, 401
+    next_url = request.args.get("next", "/v2")
+    return _LOGIN_PAGE.format(error="", next=next_url)
+
+
+@app.route("/logout")
+def logout():
+    from flask import redirect
+    session.clear()
+    return redirect("/login")
 
 
 @app.before_request
