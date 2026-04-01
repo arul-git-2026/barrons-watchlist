@@ -181,6 +181,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
   box-shadow:0 1px 2px rgba(60,64,67,.1)
 }
 
+/* ═══ FEATURE: CHART — START ════════════════════════════════════ */
 /* ── Chart — Google Finance style ────────────────────────────────── */
 .chart-header{
   display:flex;align-items:center;gap:8px;
@@ -291,6 +292,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 }
 .cc-item.active .cc-dot{background:#3b82f6}
 .cc-sep{height:1px;background:#334155;margin:3px 0}
+/* ═══ FEATURE: CHART — END ══════════════════════════════════════ */
 
 /* detail panel */
 .detail-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap}
@@ -1200,6 +1202,64 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       </div>
     </div>
     <!-- ═══ FEATURE: CRISIS MONITOR — END ════════════════════════════ -->
+
+    <!-- ═══ FEATURE: CHART — START ══════════════════════════════════ -->
+    <!-- Chart card — TradingView widget -->
+    <div class="card" style="padding:12px 16px">
+      <!-- Header: title only -->
+      <div class="chart-header" style="border-bottom:none;padding-bottom:6px">
+        <h3>Performance</h3>
+        <span id="tv-symbol-label" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
+      </div>
+
+      <!-- TradingView container — tall enough for the chart to breathe -->
+      <div id="chart-wrap" style="height:380px;border-radius:6px;overflow:hidden;background:var(--card)">
+        <div id="tv-chart" style="width:100%;height:100%;display:flex;align-items:center;
+             justify-content:center;color:var(--muted);font-size:12px">
+          Check tickers in the sidebar to view chart
+        </div>
+      </div>
+
+      <!-- Range buttons below chart — always visible, full width -->
+      <div style="display:flex;flex-wrap:wrap;gap:1px;
+                  margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <button class="rb"    onclick="setRange('1D',this)">1D</button>
+        <button class="rb"    onclick="setRange('5D',this)">5D</button>
+        <button class="rb"    onclick="setRange('1W',this)">1W</button>
+        <button class="rb on" onclick="setRange('1M',this)">1M</button>
+        <button class="rb"    onclick="setRange('3M',this)">3M</button>
+        <button class="rb"    onclick="setRange('6M',this)">6M</button>
+        <button class="rb"    onclick="setRange('YTD',this)">YTD</button>
+        <button class="rb"    onclick="setRange('1Y',this)">1Y</button>
+        <button class="rb"    onclick="setRange('2Y',this)">2Y</button>
+        <button class="rb"    onclick="setRange('3Y',this)">3Y</button>
+      </div>
+
+      <!-- Ticker legend pills -->
+      <div class="chart-legend" id="chart-legend" style="margin-top:8px">
+        <span style="font-size:11px;color:var(--muted)">
+          Check tickers in the sidebar to compare
+        </span>
+      </div>
+    </div>
+    <!-- ═══ FEATURE: CHART — END ════════════════════════════════════ -->
+
+    <!-- Detail card (hidden until row is clicked) -->
+    <div class="card" id="detail-card" style="display:none"></div>
+
+    <!-- Placeholder shown before any row is selected -->
+    <div class="card" id="placeholder-card">
+      <div class="placeholder" style="min-height:160px">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.5">
+          <path d="M3 3h18v18H3zM3 9h18M9 21V9"/>
+        </svg>
+        <span>Click any row to see the full thesis and scenarios</span>
+      </div>
+    </div>
+
+  </div>
+</div>
 
 <script>
 // ── Constants ──────────────────────────────────────────────────────
