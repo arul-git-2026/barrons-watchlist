@@ -3928,6 +3928,107 @@ def health_check():
     })
 
 
+@app.route("/api/table-data")
+def table_data():
+    """
+    Return all tickers with period % returns and sparkline data from price_history.db.
+    Columns: sector, ticker, name, price, change, pct, 1W, 3W, 1M, 3M, 6M, YTD, 1Y,
+             52W high, 52W low, spark_1y (52 weekly closes), spark_1m (22 daily closes)
+    """
+    import sqlite3 as _sq
+    from datetime import date as _date, timedelta as _td
+
+    db = load_data()
+    if not os.path.exists("price_history.db"):
+        return jsonify({"ok": False, "error": "price_history.db not found"}), 404
+
+    today    = _date.today()
+    iso      = lambda d: d.isoformat()
+    d_1w     = iso(today - _td(days=7))
+    d_3w     = iso(today - _td(days=21))
+    d_1m     = iso(today - _td(days=30))
+    d_3m     = iso(today - _td(days=91))
+    d_6m     = iso(today - _td(days=182))
+    d_1y     = iso(today - _td(days=365))
+    d_ytd    = f"{today.year}-01-01"
+
+    conn = _sq.connect("price_history.db")
+    cur  = conn.cursor()
+
+    def last_close(ticker, before):
+        r = cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date<=? ORDER BY date DESC LIMIT 1",
+            (ticker, before)
+        ).fetchone()
+        return r[0] if r else None
+
+    def pct(new, old):
+        if not old or old == 0 or not new: return None
+        return round((new - old) / old * 100, 2)
+
+    rows = []
+    for d in db:
+        t = d.get("t", "")
+        if not t or t.startswith("__"): continue
+
+        # Current price — use stored value or latest DB close
+        cur_price = d.get("p_raw") or last_close(t, today.isoformat())
+        if not cur_price: continue
+
+        # Period anchors
+        p_1w  = last_close(t, d_1w)
+        p_3w  = last_close(t, d_3w)
+        p_1m  = last_close(t, d_1m)
+        p_3m  = last_close(t, d_3m)
+        p_6m  = last_close(t, d_6m)
+        p_6m  = last_close(t, d_6m)
+        p_1y  = last_close(t, d_1y)
+        p_ytd = last_close(t, d_ytd)
+
+        # 52W high / low
+        hl = cur.execute(
+            "SELECT MAX(close), MIN(close) FROM prices WHERE ticker=? AND date>=?",
+            (t, d_1y)
+        ).fetchone()
+        h52 = round(hl[0], 2) if hl and hl[0] else None
+        l52 = round(hl[1], 2) if hl and hl[1] else None
+
+        # 1Y sparkline — sample every 5 trading days (~weekly)
+        closes_1y = [r[0] for r in cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date>=? ORDER BY date", (t, d_1y)
+        ).fetchall()]
+        spark_1y = closes_1y[::5] if len(closes_1y) > 10 else closes_1y
+
+        # 1M sparkline — daily
+        spark_1m = [r[0] for r in cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date>=? ORDER BY date", (t, d_1m)
+        ).fetchall()]
+
+        rows.append({
+            "t":   t,
+            "n":   d.get("n", t),
+            "sec": d.get("sector") or "N/A",
+            "px":  round(float(cur_price), 2),
+            "chg": round(float(d.get("diff_raw") or 0), 2),
+            "pct": round(float(d.get("pct_raw") or 0), 2),
+            "w1":  pct(cur_price, p_1w),
+            "w3":  pct(cur_price, p_3w),
+            "m1":  pct(cur_price, p_1m),
+            "m3":  pct(cur_price, p_3m),
+            "m6":  pct(cur_price, p_6m),
+            "ytd": pct(cur_price, p_ytd),
+            "y1":  pct(cur_price, p_1y),
+            "h52": h52,
+            "l52": l52,
+            "s1y": spark_1y,
+            "s1m": spark_1m,
+        })
+
+    conn.close()
+    rows.sort(key=lambda r: r["t"])
+    return jsonify({"ok": True, "rows": rows, "as_of": today.isoformat()})
+
+
 if __name__ == "__main__":
     sep = "─" * 54
     print(f"\n\033[1m\033[36m{sep}\033[0m")

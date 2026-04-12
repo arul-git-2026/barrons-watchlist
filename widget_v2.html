@@ -304,6 +304,47 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 }
 /* ═══ FEATURE: EPISODE BRIEF — END ════════════════════════════ */
 
+/* ═══ FEATURE: TABLE VIEW — START ══════════════════════════════ */
+#tv-tab-bar{display:flex;gap:0;border-bottom:2px solid var(--border);
+  padding:0 20px;background:var(--card);flex-shrink:0}
+.tv-tab{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);
+  cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;
+  margin-bottom:-2px;transition:color .15s,border-color .15s;font-family:var(--font)}
+.tv-tab:hover{color:var(--text)}
+.tv-tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+#table-view{display:none;flex:1;overflow:auto;background:var(--bg)}
+.tv-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+.tv-table thead th{
+  position:sticky;top:0;z-index:5;
+  background:var(--card);border-bottom:2px solid var(--border);
+  padding:8px 10px;text-align:right;font-size:11px;font-weight:600;
+  color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap
+}
+.tv-table thead th:hover{color:var(--text)}
+.tv-table thead th.sorted-asc::after{content:' ↑'}
+.tv-table thead th.sorted-desc::after{content:' ↓'}
+.tv-table thead th.left{text-align:left}
+.tv-table tbody tr{border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+.tv-table tbody tr:hover{background:var(--accent-light)}
+.tv-table td{padding:6px 10px;text-align:right;color:var(--text)}
+.tv-table td.left{text-align:left}
+.tv-table td.sec-cell{font-size:10px;color:var(--muted);font-weight:500;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.tv-table td.ticker-cell{font-family:'Roboto Mono',monospace;font-weight:700;color:var(--accent)}
+.tv-up{color:#1a7f37}
+.tv-dn{color:#c5221f}
+.tv-neu{color:var(--muted)}
+.tv-spark{vertical-align:middle}
+#tv-loading{display:flex;align-items:center;justify-content:center;
+  height:200px;color:var(--muted);font-size:13px}
+#tv-toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;
+  background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+#tv-toolbar input{padding:5px 10px;border:1px solid var(--border);border-radius:6px;
+  font-size:12px;background:var(--bg);color:var(--text);outline:none;width:200px}
+#tv-toolbar input:focus{border-color:var(--accent)}
+.tv-count{font-size:11px;color:var(--muted);margin-left:auto}
+/* ═══ FEATURE: TABLE VIEW — END ════════════════════════════════ */
+
 /* detail panel */
 .detail-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap}
 .detail-ticker{font-size:26px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:-.5px;color:var(--text)}
@@ -891,6 +932,27 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 </head>
 <body>
 
+<!-- ═══ FEATURE: TABLE VIEW — START ══════════════════════════════ -->
+<!-- Tab bar — sits above the split layout -->
+<div id="tv-tab-bar">
+  <button class="tv-tab on"  id="tv-tab-dash"  onclick="switchMainTab('dash')">📋 Dashboard</button>
+  <button class="tv-tab"     id="tv-tab-table" onclick="switchMainTab('table')">📊 Table View</button>
+</div>
+
+<!-- Table view container (hidden until tab clicked) -->
+<div id="table-view">
+  <div id="tv-toolbar">
+    <input type="text" id="tv-search" placeholder="Filter ticker or name…" oninput="tvRender()">
+    <span class="tv-count" id="tv-count"></span>
+  </div>
+  <div id="tv-loading">Loading…</div>
+  <table class="tv-table" id="tv-table" style="display:none">
+    <thead id="tv-thead"></thead>
+    <tbody id="tv-tbody"></tbody>
+  </table>
+</div>
+<!-- ═══ FEATURE: TABLE VIEW — END ════════════════════════════════ -->
+
 <div id="loader"><div class="spinner"></div></div>
 <div id="toast"></div>
 
@@ -1032,7 +1094,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 <!-- Mobile hamburger FAB -->
 <button id="mob-menu-btn" onclick="toggleMobSidebar()" title="Open watchlist">☰</button>
 
-<div class="layout">
+<div class="layout" id="main-layout">
 
   <!-- ── Sidebar ──────────────────────────────────────────────── -->
   <div class="sidebar" id="sidebar">
@@ -4532,6 +4594,145 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideCtxMenu();
 });
+
+// ═══ FEATURE: TABLE VIEW ════════════════════════════════════════
+let _tvData    = null;   // raw rows from API
+let _tvSort    = {col: 't', asc: true};
+let _tvLoaded  = false;
+
+const TV_COLS = [
+  {k:'sec', label:'Sector',    left:true,  fmt: v => v||'—'},
+  {k:'t',   label:'Ticker',    left:true,  cls:'ticker-cell', fmt: v => v},
+  {k:'n',   label:'Name',      left:true,  fmt: v => `<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;display:inline-block">${v}</span>`},
+  {k:'px',  label:'Price',     fmt: v => v!=null ? '$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'},
+  {k:'chg', label:'Change',    fmt: (v,r) => v==null?'—': `<span class="${v>0?'tv-up':v<0?'tv-dn':'tv-neu'}">${v>0?'+':''}${v.toFixed(2)}</span>`},
+  {k:'pct', label:'% Day',     fmt: (v,r) => fmtPct(v)},
+  {k:'w1',  label:'1 Week',    fmt: v => fmtPct(v)},
+  {k:'w3',  label:'3 Weeks',   fmt: v => fmtPct(v)},
+  {k:'m1',  label:'1 Month',   fmt: v => fmtPct(v)},
+  {k:'m3',  label:'3 Months',  fmt: v => fmtPct(v)},
+  {k:'m6',  label:'6 Months',  fmt: v => fmtPct(v)},
+  {k:'ytd', label:'YTD',       fmt: v => fmtPct(v)},
+  {k:'y1',  label:'12 Months', fmt: v => fmtPct(v)},
+  {k:'h52', label:'52W High',  fmt: v => v!=null?'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'},
+  {k:'l52', label:'52W Low',   fmt: v => v!=null?'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'},
+  {k:'s1y', label:'1 Year',    spark:true, fmt: v => tvSparkline(v, 80, 28)},
+  {k:'s1m', label:'1 Month',   spark:true, fmt: v => tvSparkline(v, 60, 28)},
+];
+
+function fmtPct(v) {
+  if (v == null) return '<span class="tv-neu">—</span>';
+  const cls = v > 0 ? 'tv-up' : v < 0 ? 'tv-dn' : 'tv-neu';
+  return `<span class="${cls}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
+}
+
+function tvSparkline(closes, w, h) {
+  if (!closes || closes.length < 2) return '<span style="color:var(--muted);font-size:10px">—</span>';
+  const mn = Math.min(...closes), mx = Math.max(...closes);
+  const range = mx - mn || 1;
+  const bw = Math.max(1, Math.floor(w / closes.length));
+  const isUp = closes[closes.length-1] >= closes[0];
+  const col = isUp ? '#1a7f37' : '#c5221f';
+  const bars = closes.map((c, i) => {
+    const bh = Math.max(1, Math.round(((c - mn) / range) * (h - 2)) + 1);
+    const y  = h - bh;
+    return `<rect x="${i * bw}" y="${y}" width="${Math.max(1,bw-1)}" height="${bh}" fill="${col}" opacity="0.75"/>`;
+  }).join('');
+  return `<svg class="tv-spark" width="${closes.length*bw}" height="${h}" viewBox="0 0 ${closes.length*bw} ${h}">${bars}</svg>`;
+}
+
+async function switchMainTab(tab) {
+  const dash  = document.getElementById('main-layout');
+  const tview = document.getElementById('table-view');
+  const tabD  = document.getElementById('tv-tab-dash');
+  const tabT  = document.getElementById('tv-tab-table');
+  if (tab === 'table') {
+    if (dash)  dash.style.display  = 'none';
+    if (tview) tview.style.display = 'flex';
+    tview.style.flexDirection = 'column';
+    tabD.classList.remove('on');
+    tabT.classList.add('on');
+    if (!_tvLoaded) await tvLoad();
+  } else {
+    if (dash)  dash.style.display  = '';
+    if (tview) tview.style.display = 'none';
+    tabD.classList.add('on');
+    tabT.classList.remove('on');
+  }
+}
+
+async function tvLoad() {
+  document.getElementById('tv-loading').style.display = 'flex';
+  document.getElementById('tv-table').style.display   = 'none';
+  try {
+    const res  = await fetch('/api/table-data');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    _tvData   = data.rows;
+    _tvLoaded = true;
+    tvBuildHeader();
+    tvRender();
+    document.getElementById('tv-loading').style.display = 'none';
+    document.getElementById('tv-table').style.display   = 'table';
+  } catch(e) {
+    document.getElementById('tv-loading').textContent = 'Error: ' + e.message;
+  }
+}
+
+function tvBuildHeader() {
+  const thead = document.getElementById('tv-thead');
+  thead.innerHTML = '<tr>' + TV_COLS.map(c =>
+    `<th class="${c.left?'left':''}" onclick="tvSortBy('${c.k}')" data-col="${c.k}">
+      ${c.label}
+    </th>`
+  ).join('') + '</tr>';
+}
+
+function tvRender() {
+  if (!_tvData) return;
+  const q = (document.getElementById('tv-search')?.value || '').toLowerCase();
+  let rows = _tvData.filter(r =>
+    !q || r.t.toLowerCase().includes(q) || (r.n||'').toLowerCase().includes(q) || (r.sec||'').toLowerCase().includes(q)
+  );
+  // Sort
+  const col = _tvSort.col;
+  rows = rows.sort((a, b) => {
+    let av = a[col], bv = b[col];
+    if (av == null) av = _tvSort.asc ? Infinity : -Infinity;
+    if (bv == null) bv = _tvSort.asc ? Infinity : -Infinity;
+    if (typeof av === 'string') return _tvSort.asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    return _tvSort.asc ? av - bv : bv - av;
+  });
+
+  document.getElementById('tv-count').textContent = `${rows.length} tickers`;
+
+  // Update sort indicators
+  document.querySelectorAll('#tv-thead th').forEach(th => {
+    th.classList.remove('sorted-asc','sorted-desc');
+    if (th.dataset.col === col)
+      th.classList.add(_tvSort.asc ? 'sorted-asc' : 'sorted-desc');
+  });
+
+  document.getElementById('tv-tbody').innerHTML = rows.map(r =>
+    `<tr onclick="switchMainTab('dash');selectRow('${r.t}')">` +
+    TV_COLS.map(c => {
+      const v   = r[c.k];
+      const cls = c.left ? 'left' : c.k==='sec' ? 'left sec-cell' : c.k==='t' ? 'left ticker-cell' : '';
+      return `<td class="${cls}">${c.fmt(v, r)}</td>`;
+    }).join('') +
+    '</tr>'
+  ).join('');
+}
+
+function tvSortBy(col) {
+  if (_tvSort.col === col) {
+    _tvSort.asc = !_tvSort.asc;
+  } else {
+    _tvSort = {col, asc: col === 't' || col === 'sec' || col === 'n'};
+  }
+  tvRender();
+}
+// ═══ FEATURE: TABLE VIEW — END ══════════════════════════════════
 </script>
 </body>
 </html>
