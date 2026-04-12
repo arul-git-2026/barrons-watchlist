@@ -1434,24 +1434,38 @@ CONTENT:
         article_summary = ep_entry.get("article_summary", "")
         if not article_summary and text:
             try:
-                summary_prompt = f"""You are a financial analyst summarizing a podcast or article for investors.
+                summary_prompt = f"""You are a financial analyst summarising a podcast or article episode for investors.
 
-Write a structured markdown summary of the content below.
+Produce clean markdown using EXACTLY this structure — no deviations:
 
-Format rules:
-- Use ## for major topic sections, ### for individual stock sub-sections
-- Use bullet lists with **Bold label:** for key points per stock
-- Include a compact markdown table at the end for any stocks mentioned (columns: Company, Ticker, P/E or Metric, Key Takeaway)
-- Finish with a one-sentence **Jack's Bottom Line:** or **Bottom Line:** wrap-up
-- Total length: ~400-600 words
-- Write in third person, past tense
+1. One short plain-prose intro paragraph (no heading) setting the scene.
+
+2. One ## section per major theme or stock deep-dive discussed in depth.
+   - Write a 1-2 sentence intro for the theme.
+   - For each individual stock in that theme use ### N. Company Name (TICKER)
+     followed by 3-5 bullet points: * **Bold label:** one sentence of substance.
+   - Separate major sections with ---
+
+3. After all sections, add:
+   ## Summary Table
+   A compact pipe table with columns: Company | Ticker | Key Metric | Key Takeaway
+   Include every stock mentioned anywhere in the episode — even brief mentions.
+   Never skip a company just because it was only named; supply the correct ticker yourself.
+
+4. End with a single bold sentence: **[Host]'s Bottom Line:** ...
+
+Rules:
+- Use * for bullets (not -)
+- Use **Bold label:** style for all bullet labels
+- No preamble, no meta-commentary, just the markdown output
+- Write in present tense, concise and factual
 
 CONTENT:
 {text[:40000]}
 """
                 sum_cfg = {
-                    "temperature":     0.3,
-                    "maxOutputTokens": 4096,
+                    "temperature":     0.2,
+                    "maxOutputTokens": 8192,
                 }
                 if use_gemini:
                     sum_key   = gemini_key
