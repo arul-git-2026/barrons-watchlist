@@ -84,7 +84,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
   background:var(--card);border:1px solid var(--border);
   border-radius:var(--radius);padding:10px 14px;
   box-shadow:0 1px 2px rgba(60,64,67,.1);
-  display:flex;flex-direction:column;gap:8px;flex-shrink:0
+  display:flex;flex-direction:column;gap:8px;flex-shrink:0;
+  position:sticky;top:0;z-index:10
 }
 .top-filter-search{
   position:relative;display:flex;align-items:center
@@ -836,7 +837,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 /* ── Crisis Monitor ──────────────────────────────────────────────── */
 #crisis-panel{display:none;background:var(--card);border:1px solid var(--border);
   border-radius:var(--radius);padding:16px 18px;box-shadow:0 1px 2px rgba(60,64,67,.1)}
-#crisis-panel.on{display:block}
 .crisis-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .crisis-header h3{font-size:13px;font-weight:700;flex:1;color:var(--text)}
 /* Summary bar */
@@ -1194,8 +1194,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <h3>🌍 Hormuz Crisis Monitor</h3>
         <span class="crisis-ts" id="crisis-ts"></span>
         <button onclick="loadCrisisMonitor(true)" style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">↺ Refresh</button>
-        <button onclick="toggleCrisisPanel()" title="Close"
-                style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;padding:0 2px;margin-left:4px">×</button>
       </div>
       <!-- Summary bar -->
       <div id="crisis-summary" style="display:none">
@@ -4240,9 +4238,10 @@ let _crisisLoaded = false;
 function toggleCrisisPanel() {
   const panel = document.getElementById('crisis-panel');
   const btn   = document.getElementById('crisis-toggle-btn');
-  const on    = panel.classList.toggle('on');
-  btn.classList.toggle('on', on);
-  if (on && !_crisisLoaded) loadCrisisMonitor();
+  const isOpen = panel.style.display === 'block';
+  panel.style.display = isOpen ? 'none' : 'block';
+  btn.classList.toggle('on', !isOpen);
+  if (!isOpen && !_crisisLoaded) loadCrisisMonitor();
 }
 
 async function loadCrisisMonitor(force = false) {
