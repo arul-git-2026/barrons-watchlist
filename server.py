@@ -1430,6 +1430,50 @@ CONTENT:
 
         ilog(f"saved {added} new · {updated} updated")
 
+        # ── Auto-generate episode summary (runs in background after response) ──
+        # Only generate if not already present
+        article_summary = ep_entry.get("article_summary", "")
+        if not article_summary:
+            try:
+                sum_key = (gemini_key if use_gemini
+                           else os.environ.get("GEMINI_API_KEY","").strip().strip('"').strip("'"))
+                if sum_key:
+                    import urllib.request as _ur2
+                    sum_prompt = (
+                        f"You are a financial analyst. Summarise this podcast or article for an investor.\n\n"
+                        f"{text[:40000]}"
+                    )
+                    sum_payload = json.dumps({
+                        "contents": [{"parts": [{"text": sum_prompt}]}],
+                        "generationConfig": {
+                            "temperature": 0.2,
+                            "maxOutputTokens": 8192,
+                            "thinkingConfig": {"thinkingBudget": 0},
+                        },
+                    }).encode()
+                    sum_url = (
+                        "https://generativelanguage.googleapis.com/v1beta/"
+                        "models/gemini-2.5-flash:generateContent?key=" + sum_key
+                    )
+                    sum_req  = _ur2.Request(sum_url, data=sum_payload,
+                                            headers={"Content-Type": "application/json"})
+                    sum_resp = _ur2.urlopen(sum_req, timeout=90)
+                    sum_data = json.loads(sum_resp.read())
+                    raw_sum  = ""
+                    for cand in (sum_data.get("candidates") or []):
+                        for part in (cand.get("content", {}).get("parts") or []):
+                            t = part.get("text", "")
+                            if t and not part.get("thought"):
+                                raw_sum += t
+                    raw_sum = raw_sum.strip()
+                    if raw_sum:
+                        ep_entry["article_summary"] = raw_sum
+                        save_sources(sources_reg)
+                        ilog(f"episode summary saved  chars={len(raw_sum)}")
+            except Exception as se:
+                ilog(f"episode summary failed (non-fatal): {se}", "warn")
+                log.warning(f"  ingest-page summary: {se}")
+
         return jsonify({"ok": True, "added": added, "updated": updated,
                         "tickers": tickers_touched, "cost": f"{cost:.4f}",
                         "model": model_used, "log": srv_log})
