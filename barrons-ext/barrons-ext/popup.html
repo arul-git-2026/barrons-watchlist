@@ -154,6 +154,14 @@
   <div class="btn-row">
     <button class="btn btn-send" id="send-btn">📨  Send to Streetwise</button>
   </div>
+  <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+    <input type="checkbox" id="force-reextract"
+           style="accent-color:#f59e0b;cursor:pointer;width:13px;height:13px">
+    <label for="force-reextract"
+           style="font-size:11px;color:#64748b;cursor:pointer;user-select:none">
+      Force re-extract (bypass duplicate check)
+    </label>
+  </div>
 
   <div class="status" id="status-box"></div>
   <div id="progress-log"></div>

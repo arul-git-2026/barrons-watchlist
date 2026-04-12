@@ -1150,10 +1150,11 @@ def ingest_page():
 
     # ── Duplicate / already-processed check ───────────────────────────────────
     import hashlib as _hl
+    force     = bool(body.get("force", False))
     text_hash = _hl.md5(text.encode("utf-8", errors="replace")).hexdigest()[:16]
     sources_reg_early = load_sources()
     ep_entry_early = (sources_reg_early.get(prefix) or {}).get("episodes", {}).get(ep_key, {})
-    if ep_entry_early.get("text_hash") == text_hash:
+    if not force and ep_entry_early.get("text_hash") == text_hash:
         ilog("Article already processed (same content hash) — skipping", "warn")
         return jsonify({
             "ok": True, "skipped": True, "added": 0, "updated": 0,

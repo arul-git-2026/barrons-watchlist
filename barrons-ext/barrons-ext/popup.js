@@ -340,6 +340,7 @@ async function sendPage() {
       model:     model,
       serverUrl: getServerUrl(),
       token:     getToken(),
+      force:     document.getElementById('force-reextract').checked,
     };
 
     await chrome.storage.local.set({pendingJob: job});

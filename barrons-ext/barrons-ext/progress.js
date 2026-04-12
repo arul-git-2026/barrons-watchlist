@@ -88,6 +88,7 @@ async function runExtraction(job) {
         prefix: job.prefix,
         title:  job.title,
         model:  job.model,
+        force:  job.force || false,
       })
     });
 
