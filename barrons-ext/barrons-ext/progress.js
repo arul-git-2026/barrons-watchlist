@@ -106,6 +106,19 @@ async function runExtraction(job) {
       return;
     }
 
+    // Already-processed article
+    if (data.skipped) {
+      log('⚠ ' + (data.message || 'Article already in DB'), 'warn');
+      log('Tickers: ' + (data.tickers||[]).join(', '), 'dim');
+      showTickers(data.tickers, 0, 0);
+      setStats(0, 0, (data.tickers||[]).length, 0);
+      setDot('done');
+      document.getElementById('btn-stop').disabled  = true;
+      document.getElementById('btn-retry').disabled = false;
+      document.getElementById('btn-dash').disabled  = false;
+      return;
+    }
+
     // Cost
     if (data.cost) {
       addSessionCost(data.cost);

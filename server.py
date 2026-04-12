@@ -1148,6 +1148,21 @@ def ingest_page():
 
     ilog(f"source={source_label}  prefix={prefix}  ep={ep_key}  chars={len(text):,}")
 
+    # ── Duplicate / already-processed check ───────────────────────────────────
+    import hashlib as _hl
+    text_hash = _hl.md5(text.encode("utf-8", errors="replace")).hexdigest()[:16]
+    sources_reg_early = load_sources()
+    ep_entry_early = (sources_reg_early.get(prefix) or {}).get("episodes", {}).get(ep_key, {})
+    if ep_entry_early.get("text_hash") == text_hash:
+        ilog("Article already processed (same content hash) — skipping", "warn")
+        return jsonify({
+            "ok": True, "skipped": True, "added": 0, "updated": 0,
+            "tickers": list((ep_entry_early.get("tickers") or [])),
+            "cost": "0.0000", "model": "cached", "log": srv_log,
+            "article_summary": ep_entry_early.get("article_summary", ""),
+            "message": "Article already in DB — skipping extraction",
+        })
+
     # ── Parse tickers / company names from anchors ────────────────────────────
     # Barron's links companies like /market-data/stocks/AAPL or /quote/AAPL
     import re as _re
@@ -1343,17 +1358,15 @@ CONTENT:
             rec.setdefault("src", [source])
             if source not in rec["src"]:
                 rec["src"].append(source)
-            # Summary
-            if is_ian_style:
-                heading  = f"=== {ep_key} | {source_label} · {label} ==="
-                existing = rec.get("sum", "")
-                if heading in existing:
-                    before = existing.split(heading)[0].rstrip()
-                    rec["sum"] = f"{before}\n\n{heading}\n{new_sum}" if before else f"{heading}\n{new_sum}"
-                else:
-                    rec["sum"] = f"{existing.rstrip()}\n\n{heading}\n{new_sum}" if existing.strip() else f"{heading}\n{new_sum}"
+            # Summary — always use === heading === for all sources (enables per-episode separation + dedup)
+            heading  = f"=== {ep_key} | {source_label} · {label} ==="
+            existing = rec.get("sum", "")
+            if heading in existing:
+                # Replace this episode's section in-place
+                before = existing.split(heading)[0].rstrip()
+                rec["sum"] = f"{before}\n\n{heading}\n{new_sum}" if before else f"{heading}\n{new_sum}"
             else:
-                rec["sum"] = (rec.get("sum", "") + "\n\n" + new_sum).strip()
+                rec["sum"] = f"{existing.rstrip()}\n\n{heading}\n{new_sum}" if existing.strip() else f"{heading}\n{new_sum}"
             # Discussion narrative (per-episode dict)
             if new_disc:
                 disc_map = rec.setdefault("disc", {})
@@ -1368,7 +1381,7 @@ CONTENT:
                 rec["rec_analyst"] = e["rec"]
             updated += 1
         else:
-            summary = f"=== {ep_key} | {source_label} · {label} ===\n{new_sum}" if is_ian_style else new_sum
+            summary = f"=== {ep_key} | {source_label} · {label} ===\n{new_sum}"
             new_rec = {
                 "t": ticker, "n": e.get("name", ticker),
                 "y": e.get("type", "Stock"), "e": [ep_key],
@@ -1398,8 +1411,8 @@ CONTENT:
                 "episodes": {}
             }
         ep_entry = sources_reg[prefix]["episodes"].setdefault(ep_key, {})
-        if not ep_entry.get("title") and title:
-            # Parse title from label: "M/D/YYYY — Title" → "Title"
+        # Always update title/date if we have it
+        if title:
             ep_title = title if title else label.split(" — ", 1)[-1] if " — " in label else label
             _dp = date.split("/") if "/" in date else [date]
             if len(_dp) == 2:
@@ -1407,8 +1420,12 @@ CONTENT:
             else:
                 ep_entry["date"] = f"{year}-{date}"
             ep_entry["title"] = ep_title
-            save_sources(sources_reg)
-            ilog(f"registered episode {ep_key} in sources.json")
+        # Save article text + hash + tickers for dedup and future re-processing
+        ep_entry["text"]      = text
+        ep_entry["text_hash"] = text_hash
+        ep_entry["tickers"]   = tickers_touched
+        save_sources(sources_reg)
+        ilog(f"registered episode {ep_key} with {len(tickers_touched)} tickers in sources.json")
 
         ilog(f"saved {added} new · {updated} updated")
 
