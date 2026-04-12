@@ -296,23 +296,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 
 /* ═══ FEATURE: EPISODE BRIEF — START ═══════════════════════════ */
 #ep-brief-card{display:none}
-.ep-brief-body{
-  font-size:12.5px;line-height:1.7;color:var(--text);
-  max-height:480px;overflow-y:auto;padding-top:6px
+.ep-brief-body{max-height:480px;overflow-y:auto;padding-top:6px}
+.ep-brief-raw{
+  font-family:'Roboto Mono',monospace;font-size:11.5px;line-height:1.75;
+  color:var(--text);white-space:pre-wrap;word-break:break-word;margin:0
 }
-.ep-brief-body h2{font-size:13px;font-weight:700;color:var(--text);
-  margin:12px 0 5px;border-bottom:1px solid var(--border);padding-bottom:4px}
-.ep-brief-body h2:first-child{margin-top:0}
-.ep-brief-body h3{font-size:12px;font-weight:600;color:var(--accent);margin:8px 0 3px}
-.ep-brief-body ul{padding-left:16px;margin:3px 0 7px}
-.ep-brief-body li{margin-bottom:2px}
-.ep-brief-body strong{color:var(--text)}
-.ep-brief-body hr{border:none;border-top:1px solid var(--border);margin:8px 0}
-.ep-brief-body table{width:100%;border-collapse:collapse;font-size:11.5px;margin:6px 0}
-.ep-brief-body th{background:var(--bg);color:var(--accent);text-align:left;
-  padding:5px 8px;border:1px solid var(--border);font-weight:600}
-.ep-brief-body td{padding:4px 8px;border:1px solid var(--border);vertical-align:top}
-.ep-brief-body tr:nth-child(even) td{background:var(--bg)}
 /* ═══ FEATURE: EPISODE BRIEF — END ════════════════════════════ */
 
 /* detail panel */
@@ -1654,12 +1642,13 @@ function showEpBrief(epKey) {
   document.getElementById('ep-brief-card').style.display = 'none';
 }
 
-function _renderEpBrief(epKey, md) {
+function _renderEpBrief(epKey, raw) {
   const card  = document.getElementById('ep-brief-card');
   const title = document.getElementById('ep-brief-title');
   const body  = document.getElementById('ep-brief-body');
   title.textContent = `Episode Brief — ${epKey}`;
-  body.innerHTML    = mdToHtml(md);
+  body.innerHTML = '<pre class="ep-brief-raw"></pre>';
+  body.querySelector('pre').textContent = raw;
   card.style.display = 'block';
 }
 
