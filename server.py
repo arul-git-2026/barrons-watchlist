@@ -1234,7 +1234,7 @@ rec    = analyst consensus if mentioned: "Strong Buy", "Buy", "Hold", "Sell", "N
 Return ONLY a valid JSON array. No markdown, no prose, no backticks.
 
 CONTENT:
-{text[:15000]}
+{text[:40000]}
 """
 
     ilog(f"model={gemini_model if use_gemini else claude_model}")
@@ -1446,7 +1446,7 @@ Format rules:
 - Write in third person, past tense
 
 CONTENT:
-{text[:12000]}
+{text[:40000]}
 """
                 sum_cfg = {
                     "temperature":     0.3,
