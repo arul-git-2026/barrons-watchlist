@@ -1194,6 +1194,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <h3>🌍 Hormuz Crisis Monitor</h3>
         <span class="crisis-ts" id="crisis-ts"></span>
         <button onclick="loadCrisisMonitor(true)" style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">↺ Refresh</button>
+        <button onclick="toggleCrisisPanel()" title="Close"
+                style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;padding:0 2px;margin-left:4px">×</button>
       </div>
       <!-- Summary bar -->
       <div id="crisis-summary" style="display:none">
