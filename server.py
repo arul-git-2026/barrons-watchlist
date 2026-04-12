@@ -1411,9 +1411,78 @@ CONTENT:
             ilog(f"registered episode {ep_key} in sources.json")
 
         ilog(f"saved {added} new · {updated} updated")
+
+        # ── Episode-level markdown summary ─────────────────────────────────
+        article_summary = ep_entry.get("article_summary", "")
+        if not article_summary and text:
+            try:
+                summary_prompt = f"""You are a financial analyst summarizing a podcast or article for investors.
+
+Write a structured markdown summary of the content below.
+
+Format rules:
+- Use ## for major topic sections, ### for individual stock sub-sections
+- Use bullet lists with **Bold label:** for key points per stock
+- Include a compact markdown table at the end for any stocks mentioned (columns: Company, Ticker, P/E or Metric, Key Takeaway)
+- Finish with a one-sentence **Jack's Bottom Line:** or **Bottom Line:** wrap-up
+- Total length: ~400-600 words
+- Write in third person, past tense
+
+CONTENT:
+{text[:12000]}
+"""
+                sum_cfg = {
+                    "temperature":     0.3,
+                    "maxOutputTokens": 4096,
+                }
+                if use_gemini:
+                    sum_key   = gemini_key
+                    sum_model = gemini_model
+                else:
+                    sum_key   = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+                    sum_model = "gemini-2.5-flash"
+
+                # Always disable thinking for summary (speed + token budget)
+                sum_cfg["thinkingConfig"] = {"thinkingBudget": 0}
+
+                if sum_key:
+                    import urllib.request as _ur2
+                    sum_url = (
+                        "https://generativelanguage.googleapis.com/v1beta/"
+                        f"models/{sum_model}:generateContent?key={sum_key}"
+                    )
+                    sum_payload = json.dumps({
+                        "contents": [{"parts": [{"text": summary_prompt}]}],
+                        "generationConfig": sum_cfg,
+                    }).encode()
+                    sum_req  = _ur2.Request(sum_url, data=sum_payload,
+                                            headers={"Content-Type": "application/json"})
+                    sum_resp = _ur2.urlopen(sum_req, timeout=60)
+                    sum_data = json.loads(sum_resp.read())
+                    for cand in (sum_data.get("candidates") or []):
+                        for part in (cand.get("content", {}).get("parts") or []):
+                            t = part.get("text", "")
+                            if t and not part.get("thought"):
+                                article_summary += t
+                    article_summary = article_summary.strip()
+
+                    sum_usage = sum_data.get("usageMetadata", {})
+                    sum_cost  = (sum_usage.get("promptTokenCount", 0) * 0.30 +
+                                 sum_usage.get("candidatesTokenCount", 0) * 2.50) / 1_000_000
+                    cost += sum_cost
+                    ilog(f"article summary done  cost=${sum_cost:.4f}")
+
+                    if article_summary:
+                        ep_entry["article_summary"] = article_summary
+                        save_sources(sources_reg)
+            except Exception as se:
+                ilog(f"article summary failed (non-fatal): {se}", "warn")
+                log.warning(f"  ingest-page: article summary failed: {se}")
+
         return jsonify({"ok": True, "added": added, "updated": updated,
                         "tickers": tickers_touched, "cost": f"{cost:.4f}",
-                        "model": model_used, "log": srv_log})
+                        "model": model_used, "log": srv_log,
+                        "article_summary": article_summary})
     except Exception as e:
         log.error(f"  ingest-page save error: {e}"); srv_log.append(f"save error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500

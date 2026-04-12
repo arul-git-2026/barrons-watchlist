@@ -119,6 +119,10 @@ async function runExtraction(job) {
     setStats(data.added, data.updated, data.tickers.length, data.cost);
     setDot('done');
 
+    if (data.article_summary) {
+      renderSummary(data.article_summary);
+    }
+
     document.getElementById('btn-stop').disabled  = true;
     document.getElementById('btn-retry').disabled = false;
     document.getElementById('btn-dash').disabled  = false;
@@ -134,6 +138,76 @@ async function runExtraction(job) {
     document.getElementById('btn-retry').disabled = false;
     document.getElementById('btn-stop').disabled  = true;
   }
+}
+
+// ── Render markdown summary ────────────────────────────────────────────────
+function mdToHtml(md) {
+  var lines = md.split('\n');
+  var html  = '';
+  var inUl  = false, inTbl = false;
+
+  function closeUl()  { if (inUl)  { html += '</ul>';   inUl  = false; } }
+  function closeTbl() { if (inTbl) { html += '</tbody></table>'; inTbl = false; } }
+
+  lines.forEach(function(raw) {
+    var line = raw;
+
+    // Inline: bold
+    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Inline: italic
+    line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // HR
+    if (/^---+$/.test(raw.trim())) {
+      closeUl(); closeTbl();
+      html += '<hr>'; return;
+    }
+    // H2
+    if (/^## /.test(raw)) {
+      closeUl(); closeTbl();
+      html += '<h2>' + line.replace(/^## /, '') + '</h2>'; return;
+    }
+    // H3
+    if (/^### /.test(raw)) {
+      closeUl(); closeTbl();
+      html += '<h3>' + line.replace(/^### /, '') + '</h3>'; return;
+    }
+    // Table row
+    if (/^\|/.test(raw.trim())) {
+      if (/^[\|\s\-:]+$/.test(raw.replace(/[|]/g,''))) return; // separator row
+      var cells = raw.split('|').filter(function(c,i,a){ return i>0 && i<a.length-1; });
+      var cellHtml = cells.map(function(c){ return '<td>'+c.trim().replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')+'</td>'; }).join('');
+      if (!inTbl) {
+        closeUl();
+        // First row → header
+        var thHtml = cells.map(function(c){ return '<th>'+c.trim()+'</th>'; }).join('');
+        html += '<table><thead><tr>'+thHtml+'</tr></thead><tbody>';
+        inTbl = true;
+      } else {
+        html += '<tr>'+cellHtml+'</tr>';
+      }
+      return;
+    }
+    closeTbl();
+    // Bullet
+    if (/^[\*\-] /.test(raw.trim())) {
+      if (!inUl) { html += '<ul>'; inUl = true; }
+      html += '<li>' + line.replace(/^[\s\*\-]+ /, '') + '</li>'; return;
+    }
+    closeUl();
+    // Blank line
+    if (!raw.trim()) { html += ''; return; }
+    // Paragraph
+    html += '<p>' + line + '</p>';
+  });
+  closeUl(); closeTbl();
+  return html;
+}
+
+function renderSummary(md) {
+  var el = document.getElementById('article-summary');
+  el.innerHTML = mdToHtml(md);
+  el.style.display = 'block';
 }
 
 // ── Stop ───────────────────────────────────────────────────────────────────
