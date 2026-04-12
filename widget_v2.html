@@ -1214,10 +1214,32 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 
     <!-- ═══ FEATURE: EPISODE BRIEF — START ══════════════════════════ -->
     <div class="card" id="ep-brief-card">
-      <div class="card-header" style="display:flex;align-items:center;gap:8px;margin-bottom:0">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <h3 id="ep-brief-title" style="flex:1;font-size:13px;font-weight:600">Episode Brief</h3>
+        <button onclick="toggleEpBriefEdit()" id="ep-brief-edit-btn"
+                title="Paste summary"
+                style="background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;
+                       color:var(--muted);font-size:11px;padding:2px 8px;line-height:1.6">✏ Edit</button>
         <button onclick="document.getElementById('ep-brief-card').style.display='none'"
                 style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:0">×</button>
+      </div>
+      <!-- Paste editor (hidden by default) -->
+      <div id="ep-brief-editor" style="display:none;margin-bottom:10px">
+        <textarea id="ep-brief-paste"
+                  placeholder="Paste your Gemini / Claude output here…"
+                  style="width:100%;height:260px;background:var(--bg);border:1px solid var(--border);
+                         border-radius:6px;padding:10px;font-family:'Roboto Mono',monospace;
+                         font-size:11.5px;color:var(--text);resize:vertical;outline:none;
+                         line-height:1.65"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button onclick="saveEpBrief()" id="ep-brief-save-btn"
+                  style="background:var(--accent);color:#fff;border:none;border-radius:6px;
+                         padding:6px 18px;font-size:12px;font-weight:600;cursor:pointer">Save</button>
+          <button onclick="toggleEpBriefEdit()"
+                  style="background:none;border:1px solid var(--border);border-radius:6px;
+                         padding:6px 14px;font-size:12px;color:var(--muted);cursor:pointer">Cancel</button>
+          <span id="ep-brief-save-status" style="font-size:11px;color:var(--muted);align-self:center"></span>
+        </div>
       </div>
       <div class="ep-brief-body" id="ep-brief-body"></div>
     </div>
@@ -1638,18 +1660,71 @@ function showEpBrief(epKey) {
       }
     }
   }
-  // No summary available — hide the card
-  document.getElementById('ep-brief-card').style.display = 'none';
+  // No summary yet — show card with empty state so user can paste one
+  _renderEpBrief(epKey, '');
 }
 
+let _epBriefCurrentKey = null;
+
 function _renderEpBrief(epKey, raw) {
+  _epBriefCurrentKey = epKey;
   const card  = document.getElementById('ep-brief-card');
   const title = document.getElementById('ep-brief-title');
   const body  = document.getElementById('ep-brief-body');
   title.textContent = `Episode Brief — ${epKey}`;
-  body.innerHTML = '<pre class="ep-brief-raw"></pre>';
-  body.querySelector('pre').textContent = raw;
+  if (raw) {
+    body.innerHTML = '<pre class="ep-brief-raw"></pre>';
+    body.querySelector('pre').textContent = raw;
+  } else {
+    body.innerHTML = '<p style="color:var(--muted);font-size:12px;padding:8px 0">No summary yet — click ✏ Edit to paste one.</p>';
+  }
+  // Reset editor state
+  document.getElementById('ep-brief-editor').style.display = 'none';
+  document.getElementById('ep-brief-paste').value = raw || '';
+  document.getElementById('ep-brief-save-status').textContent = '';
   card.style.display = 'block';
+}
+
+function toggleEpBriefEdit() {
+  const editor = document.getElementById('ep-brief-editor');
+  const isOpen = editor.style.display !== 'none';
+  editor.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) document.getElementById('ep-brief-paste').focus();
+}
+
+async function saveEpBrief() {
+  const epKey   = _epBriefCurrentKey;
+  const summary = document.getElementById('ep-brief-paste').value.trim();
+  const status  = document.getElementById('ep-brief-save-status');
+  const btn     = document.getElementById('ep-brief-save-btn');
+  if (!epKey) return;
+  btn.disabled = true;
+  status.textContent = 'Saving…';
+  try {
+    const res  = await fetch('/api/save-episode-summary', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ep_key: epKey, summary})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      // Update cache and re-render
+      _epSummaryCache[epKey] = summary;
+      if (window._sourcesData) {
+        for (const src of (window._sourcesData.sources || [])) {
+          const ep = (src.episodes || []).find(e => e.key === epKey);
+          if (ep) ep.summary = summary;
+        }
+      }
+      _renderEpBrief(epKey, summary);
+      status.textContent = '✓ Saved';
+    } else {
+      status.textContent = '✗ ' + (data.error || 'Error');
+    }
+  } catch(e) {
+    status.textContent = '✗ ' + e.message;
+  }
+  btn.disabled = false;
 }
 
 // Cache of prefix → label from /api/sources (loaded once on startup)

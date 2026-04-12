@@ -1430,94 +1430,42 @@ CONTENT:
 
         ilog(f"saved {added} new · {updated} updated")
 
-        # ── Episode-level markdown summary ─────────────────────────────────
-        article_summary = ep_entry.get("article_summary", "")
-        if not article_summary and text:
-            try:
-                summary_prompt = f"""You are a financial analyst summarising a podcast or article episode for investors.
-
-Produce clean markdown using EXACTLY this structure — no deviations:
-
-1. One short plain-prose intro paragraph (no heading) setting the scene.
-
-2. One ## section per major theme or stock deep-dive discussed in depth.
-   - Write a 1-2 sentence intro for the theme.
-   - For each individual stock in that theme use ### N. Company Name (TICKER)
-     followed by 3-5 bullet points: * **Bold label:** one sentence of substance.
-   - Separate major sections with ---
-
-3. After all sections, add:
-   ## Summary Table
-   A compact pipe table with columns: Company | Ticker | Key Metric | Key Takeaway
-   Include every stock mentioned anywhere in the episode — even brief mentions.
-   Never skip a company just because it was only named; supply the correct ticker yourself.
-
-4. End with a single bold sentence: **[Host]'s Bottom Line:** ...
-
-Rules:
-- Use * for bullets (not -)
-- Use **Bold label:** style for all bullet labels
-- No preamble, no meta-commentary, just the markdown output
-- Write in present tense, concise and factual
-
-CONTENT:
-{text[:40000]}
-"""
-                sum_cfg = {
-                    "temperature":     0.2,
-                    "maxOutputTokens": 8192,
-                }
-                if use_gemini:
-                    sum_key   = gemini_key
-                    sum_model = gemini_model
-                else:
-                    sum_key   = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
-                    sum_model = "gemini-2.5-flash"
-
-                # Always disable thinking for summary (speed + token budget)
-                sum_cfg["thinkingConfig"] = {"thinkingBudget": 0}
-
-                if sum_key:
-                    import urllib.request as _ur2
-                    sum_url = (
-                        "https://generativelanguage.googleapis.com/v1beta/"
-                        f"models/{sum_model}:generateContent?key={sum_key}"
-                    )
-                    sum_payload = json.dumps({
-                        "contents": [{"parts": [{"text": summary_prompt}]}],
-                        "generationConfig": sum_cfg,
-                    }).encode()
-                    sum_req  = _ur2.Request(sum_url, data=sum_payload,
-                                            headers={"Content-Type": "application/json"})
-                    sum_resp = _ur2.urlopen(sum_req, timeout=60)
-                    sum_data = json.loads(sum_resp.read())
-                    for cand in (sum_data.get("candidates") or []):
-                        for part in (cand.get("content", {}).get("parts") or []):
-                            t = part.get("text", "")
-                            if t and not part.get("thought"):
-                                article_summary += t
-                    article_summary = article_summary.strip()
-
-                    sum_usage = sum_data.get("usageMetadata", {})
-                    sum_cost  = (sum_usage.get("promptTokenCount", 0) * 0.30 +
-                                 sum_usage.get("candidatesTokenCount", 0) * 2.50) / 1_000_000
-                    cost += sum_cost
-                    ilog(f"article summary done  cost=${sum_cost:.4f}")
-
-                    if article_summary:
-                        ep_entry["article_summary"] = article_summary
-                        save_sources(sources_reg)
-            except Exception as se:
-                ilog(f"article summary failed (non-fatal): {se}", "warn")
-                log.warning(f"  ingest-page: article summary failed: {se}")
-
         return jsonify({"ok": True, "added": added, "updated": updated,
                         "tickers": tickers_touched, "cost": f"{cost:.4f}",
-                        "model": model_used, "log": srv_log,
-                        "article_summary": article_summary})
+                        "model": model_used, "log": srv_log})
     except Exception as e:
         log.error(f"  ingest-page save error: {e}"); srv_log.append(f"save error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/save-episode-summary", methods=["POST"])
+def save_episode_summary():
+    """
+    Save a manually pasted summary for an episode.
+    Body: { "ep_key": "stw:2026/4/10", "summary": "...raw text..." }
+    """
+    body    = request.get_json(force=True)
+    ep_key  = (body.get("ep_key") or "").strip()
+    summary = (body.get("summary") or "").strip()
+    if not ep_key:
+        return jsonify({"ok": False, "error": "ep_key required"}), 400
+
+    prefix = ep_key.split(":")[0]
+    sources_reg = load_sources()
+    if prefix not in sources_reg:
+        return jsonify({"ok": False, "error": f"Source '{prefix}' not found"}), 404
+    ep_entry = sources_reg[prefix]["episodes"].get(ep_key)
+    if ep_entry is None:
+        return jsonify({"ok": False, "error": f"Episode '{ep_key}' not found"}), 404
+
+    if summary:
+        ep_entry["article_summary"] = summary
+    else:
+        ep_entry.pop("article_summary", None)
+
+    save_sources(sources_reg)
+    log.info(f"  save-episode-summary: {ep_key}  chars={len(summary)}")
+    return jsonify({"ok": True, "ep_key": ep_key, "chars": len(summary)})
 
 
 @app.route("/api/regen-cases", methods=["POST"])
