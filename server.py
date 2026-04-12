@@ -1229,7 +1229,7 @@ CONTENT:
     try:
         if use_gemini:
             import urllib.request, urllib.error as _ue
-            max_tokens = 16000 if gemini_model == "gemini-2.5-pro" else 8192
+            max_tokens = 16000 if gemini_model == "gemini-2.5-pro" else 16384
             url = (
                 "https://generativelanguage.googleapis.com/v1beta/"
                 f"models/{gemini_model}:generateContent?key={gemini_key}"
@@ -1749,7 +1749,8 @@ def get_sources():
         result = []
         for prefix, info in registry.items():
             episodes = [
-                {"key": k, "date": v.get("date",""), "title": v.get("title","")}
+                {"key": k, "date": v.get("date",""), "title": v.get("title",""),
+                 "summary": v.get("article_summary", "")}
                 for k, v in (info.get("episodes") or {}).items()
             ]
             result.append({

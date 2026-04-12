@@ -294,6 +294,27 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 .cc-sep{height:1px;background:#334155;margin:3px 0}
 /* ═══ FEATURE: CHART — END ══════════════════════════════════════ */
 
+/* ═══ FEATURE: EPISODE BRIEF — START ═══════════════════════════ */
+#ep-brief-card{display:none}
+.ep-brief-body{
+  font-size:12.5px;line-height:1.7;color:var(--text);
+  max-height:480px;overflow-y:auto;padding-top:6px
+}
+.ep-brief-body h2{font-size:13px;font-weight:700;color:var(--text);
+  margin:12px 0 5px;border-bottom:1px solid var(--border);padding-bottom:4px}
+.ep-brief-body h2:first-child{margin-top:0}
+.ep-brief-body h3{font-size:12px;font-weight:600;color:var(--accent);margin:8px 0 3px}
+.ep-brief-body ul{padding-left:16px;margin:3px 0 7px}
+.ep-brief-body li{margin-bottom:2px}
+.ep-brief-body strong{color:var(--text)}
+.ep-brief-body hr{border:none;border-top:1px solid var(--border);margin:8px 0}
+.ep-brief-body table{width:100%;border-collapse:collapse;font-size:11.5px;margin:6px 0}
+.ep-brief-body th{background:var(--bg);color:var(--accent);text-align:left;
+  padding:5px 8px;border:1px solid var(--border);font-weight:600}
+.ep-brief-body td{padding:4px 8px;border:1px solid var(--border);vertical-align:top}
+.ep-brief-body tr:nth-child(even) td{background:var(--bg)}
+/* ═══ FEATURE: EPISODE BRIEF — END ════════════════════════════ */
+
 /* detail panel */
 .detail-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap}
 .detail-ticker{font-size:26px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:-.5px;color:var(--text)}
@@ -1078,7 +1099,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <option value="flat">Neutral</option>
       </select>
       <select id="f-rec"     onchange="render()"><option value="">All Recs</option></select>
-      <select id="f-episode" onchange="render()"><option value="">All Episodes</option></select>
+      <select id="f-episode" onchange="render();showEpBrief(this.value)"><option value="">All Episodes</option></select>
       <select id="f-move"    onchange="render()">
         <option value="">All Movers</option>
         <option value="up">Up today</option>
@@ -1157,7 +1178,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
           <option value="flat">Neutral</option>
         </select>
         <select id="tf-rec"     onchange="syncFilter('f-rec',this)"><option value="">All Recs</option></select>
-        <select id="tf-episode" onchange="syncFilter('f-episode',this)"><option value="">All Episodes</option></select>
+        <select id="tf-episode" onchange="syncFilter('f-episode',this);showEpBrief(document.getElementById('f-episode').value)"><option value="">All Episodes</option></select>
         <select id="tf-move"    onchange="syncFilter('f-move',this)">
           <option value="">All Movers</option>
           <option value="up">Up today</option>
@@ -1202,6 +1223,17 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       </div>
     </div>
     <!-- ═══ FEATURE: CRISIS MONITOR — END ════════════════════════════ -->
+
+    <!-- ═══ FEATURE: EPISODE BRIEF — START ══════════════════════════ -->
+    <div class="card" id="ep-brief-card">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;margin-bottom:0">
+        <h3 id="ep-brief-title" style="flex:1;font-size:13px;font-weight:600">Episode Brief</h3>
+        <button onclick="document.getElementById('ep-brief-card').style.display='none'"
+                style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:0">×</button>
+      </div>
+      <div class="ep-brief-body" id="ep-brief-body"></div>
+    </div>
+    <!-- ═══ FEATURE: EPISODE BRIEF — END ══════════════════════════ -->
 
     <!-- ═══ FEATURE: CHART — START ══════════════════════════════════ -->
     <!-- Chart card — TradingView widget -->
@@ -1555,6 +1587,82 @@ function populateEpisodesForSource(prefixFilter) {
     document.getElementById('f-episode').value = '';
 }
 
+// ── Episode Brief ─────────────────────────────────────────────────────────
+// Cache: ep_key → summary text
+const _epSummaryCache = {};
+
+function mdToHtml(md) {
+  const lines = md.split('\n');
+  let html = '', inUl = false, inTbl = false, tblHead = true;
+  const closeUl  = () => { if (inUl)   { html += '</ul>';              inUl = false; } };
+  const closeTbl = () => { if (inTbl)  { html += '</tbody></table>';   inTbl = false; tblHead = true; } };
+  for (const raw of lines) {
+    let line = raw
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+?)\*/g,  '<em>$1</em>');
+    if (/^---+$/.test(raw.trim()))           { closeUl(); closeTbl(); html += '<hr>'; continue; }
+    if (/^## /.test(raw))                    { closeUl(); closeTbl(); html += `<h2>${line.replace(/^## /,'')}</h2>`; continue; }
+    if (/^### /.test(raw))                   { closeUl(); closeTbl(); html += `<h3>${line.replace(/^### /,'')}</h3>`; continue; }
+    if (/^\|/.test(raw.trim())) {
+      const cells = raw.split('|').filter((_,i,a) => i > 0 && i < a.length - 1);
+      if (/^[\|\s\-:]+$/.test(raw.replace(/\|/g, ''))) continue; // separator
+      if (!inTbl) {
+        closeUl();
+        html += '<table><thead><tr>' + cells.map(c => `<th>${c.trim()}</th>`).join('') + '</tr></thead><tbody>';
+        inTbl = true;
+      } else {
+        html += '<tr>' + cells.map(c => `<td>${c.trim().replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</td>`).join('') + '</tr>';
+      }
+      continue;
+    }
+    closeTbl();
+    if (/^[\*\-] /.test(raw.trim())) {
+      if (!inUl) { html += '<ul>'; inUl = true; }
+      html += `<li>${line.replace(/^[\s*\-]+ /,'')}</li>`;
+      continue;
+    }
+    closeUl();
+    if (!raw.trim()) continue;
+    html += `<p>${line}</p>`;
+  }
+  closeUl(); closeTbl();
+  return html;
+}
+
+function showEpBrief(epKey) {
+  if (!epKey) {
+    document.getElementById('ep-brief-card').style.display = 'none';
+    return;
+  }
+  // Try cache first
+  if (_epSummaryCache[epKey]) {
+    _renderEpBrief(epKey, _epSummaryCache[epKey]);
+    return;
+  }
+  // Look up from sourcesData (loaded at startup)
+  if (window._sourcesData) {
+    for (const src of (window._sourcesData.sources || [])) {
+      const ep = (src.episodes || []).find(e => e.key === epKey);
+      if (ep && ep.summary) {
+        _epSummaryCache[epKey] = ep.summary;
+        _renderEpBrief(epKey, ep.summary);
+        return;
+      }
+    }
+  }
+  // No summary available — hide the card
+  document.getElementById('ep-brief-card').style.display = 'none';
+}
+
+function _renderEpBrief(epKey, md) {
+  const card  = document.getElementById('ep-brief-card');
+  const title = document.getElementById('ep-brief-title');
+  const body  = document.getElementById('ep-brief-body');
+  title.textContent = `Episode Brief — ${epKey}`;
+  body.innerHTML    = mdToHtml(md);
+  card.style.display = 'block';
+}
+
 // Cache of prefix → label from /api/sources (loaded once on startup)
 let _sourceLabels = {
   stw: "Barron's Streetwise",
@@ -1568,6 +1676,7 @@ async function loadSourceLabels() {
     const res  = await fetch('/api/sources');
     if (!res.ok) return;
     const data = await res.json();
+    window._sourcesData = data;
     (data.sources || []).forEach(s => {
       if (s.prefix && s.label) _sourceLabels[s.prefix] = s.label;
     });
