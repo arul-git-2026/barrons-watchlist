@@ -1216,8 +1216,12 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
     <div class="card" id="ep-brief-card">
       <div class="card-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <h3 id="ep-brief-title" style="flex:1;font-size:13px;font-weight:600">Episode Brief</h3>
+        <button onclick="regenEpBrief()" id="ep-brief-regen-btn"
+                title="Re-generate summary from saved article text"
+                style="background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;
+                       color:var(--muted);font-size:11px;padding:2px 8px;line-height:1.6">↺ Regen</button>
         <button onclick="toggleEpBriefEdit()" id="ep-brief-edit-btn"
-                title="Paste summary"
+                title="Paste summary manually"
                 style="background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;
                        color:var(--muted);font-size:11px;padding:2px 8px;line-height:1.6">✏ Edit</button>
         <button onclick="document.getElementById('ep-brief-card').style.display='none'"
@@ -1725,6 +1729,40 @@ async function saveEpBrief() {
     status.textContent = '✗ ' + e.message;
   }
   btn.disabled = false;
+}
+
+async function regenEpBrief() {
+  const epKey = _epBriefCurrentKey;
+  if (!epKey) return;
+  const btn  = document.getElementById('ep-brief-regen-btn');
+  const body = document.getElementById('ep-brief-body');
+  btn.disabled = true;
+  btn.textContent = '↺ …';
+  body.innerHTML = '<p style="color:var(--muted);font-size:12px;padding:8px 0">Generating with Gemini Flash… this may take 20-30s</p>';
+  try {
+    const res  = await fetch('/api/regen-episode-summary', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ep_key: epKey})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _epSummaryCache[epKey] = data.summary;
+      if (window._sourcesData) {
+        for (const src of (window._sourcesData.sources || [])) {
+          const ep = (src.episodes || []).find(e => e.key === epKey);
+          if (ep) ep.summary = data.summary;
+        }
+      }
+      _renderEpBrief(epKey, data.summary);
+    } else {
+      body.innerHTML = `<p style="color:var(--down);font-size:12px;padding:8px 0">Error: ${data.error}</p>`;
+    }
+  } catch(e) {
+    body.innerHTML = `<p style="color:var(--down);font-size:12px;padding:8px 0">Error: ${e.message}</p>`;
+  }
+  btn.disabled = false;
+  btn.textContent = '↺ Regen';
 }
 
 // Cache of prefix → label from /api/sources (loaded once on startup)

@@ -1446,9 +1446,8 @@ CONTENT:
                     sum_payload = json.dumps({
                         "contents": [{"parts": [{"text": sum_prompt}]}],
                         "generationConfig": {
-                            "temperature": 0.2,
-                            "maxOutputTokens": 8192,
-                            "thinkingConfig": {"thinkingBudget": 0},
+                            "temperature": 1.0,
+                            "maxOutputTokens": 16000,
                         },
                     }).encode()
                     sum_url = (
@@ -1479,6 +1478,68 @@ CONTENT:
                         "model": model_used, "log": srv_log})
     except Exception as e:
         log.error(f"  ingest-page save error: {e}"); srv_log.append(f"save error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/regen-episode-summary", methods=["POST"])
+def regen_episode_summary():
+    """
+    Re-run Gemini summary for an episode using the saved article text.
+    Body: { "ep_key": "stw:2026/4/10" }
+    """
+    body   = request.get_json(force=True)
+    ep_key = (body.get("ep_key") or "").strip()
+    if not ep_key:
+        return jsonify({"ok": False, "error": "ep_key required"}), 400
+
+    prefix = ep_key.split(":")[0]
+    sources_reg = load_sources()
+    ep_entry = (sources_reg.get(prefix) or {}).get("episodes", {}).get(ep_key)
+    if not ep_entry:
+        return jsonify({"ok": False, "error": f"Episode '{ep_key}' not found"}), 404
+
+    text = ep_entry.get("text", "")
+    if not text:
+        return jsonify({"ok": False, "error": "No article text saved for this episode — re-extract first"}), 400
+
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip().strip('"').strip("'")
+    if not gemini_key:
+        return jsonify({"ok": False, "error": "GEMINI_API_KEY not set"}), 400
+
+    try:
+        import urllib.request as _ur2
+        sum_prompt = (
+            "You are a financial analyst. Summarise this podcast or article for an investor.\n\n"
+            + text[:40000]
+        )
+        sum_payload = json.dumps({
+            "contents": [{"parts": [{"text": sum_prompt}]}],
+            "generationConfig": {"temperature": 1.0, "maxOutputTokens": 16000},
+        }).encode()
+        sum_url = (
+            "https://generativelanguage.googleapis.com/v1beta/"
+            "models/gemini-2.5-flash:generateContent?key=" + gemini_key
+        )
+        resp = _ur2.urlopen(
+            _ur2.Request(sum_url, data=sum_payload,
+                         headers={"Content-Type": "application/json"}), timeout=120)
+        data = json.loads(resp.read())
+        raw = ""
+        for cand in (data.get("candidates") or []):
+            for part in (cand.get("content", {}).get("parts") or []):
+                t = part.get("text", "")
+                if t and not part.get("thought"):
+                    raw += t
+        raw = raw.strip()
+        if not raw:
+            return jsonify({"ok": False, "error": "Gemini returned empty output"}), 500
+
+        ep_entry["article_summary"] = raw
+        save_sources(sources_reg)
+        log.info(f"  regen-episode-summary: {ep_key}  chars={len(raw)}")
+        return jsonify({"ok": True, "ep_key": ep_key, "summary": raw, "chars": len(raw)})
+    except Exception as e:
+        log.error(f"  regen-episode-summary: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
