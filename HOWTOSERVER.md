@@ -2,15 +2,15 @@
 
 ## Access the dashboard
 ```
-https://app.barrons-watchlist-research.com/v2?token=YOUR_TOKEN
+https://app.barrons-watchlist-research.com/v2
 ```
-Token is required — CF Access blocks without it.
+Log in with the passphrase (same value as the token in your `.env` — `AUTH_TOKEN`).
 
 ---
 
 ## SSH into the server
 ```bash
-ssh -i C:\Users\vasanthaganesh.arulm\Downloads\ssh-key-streetwise.key opc@YOUR_SERVER_IP
+ssh -i C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-27.key opc@132.145.243.138
 ```
 
 ---
@@ -21,7 +21,7 @@ ssh -i C:\Users\vasanthaganesh.arulm\Downloads\ssh-key-streetwise.key opc@YOUR_S
 git push
 
 # 2. SSH in, then:
-cd ~/streetwise
+cd /opt/streetwise
 git pull
 sudo systemctl restart streetwise
 ```
@@ -42,6 +42,8 @@ sudo journalctl -u streetwise -n 100  # last 100 log lines
 
 ## Clear a stuck cache (on server)
 ```bash
+cd /opt/streetwise
+
 # Single ticker
 python3 -c "import sqlite3; c=sqlite3.connect('price_history.db'); c.execute(\"DELETE FROM dcf_cache WHERE ticker='TSM'\"); c.commit()"
 
@@ -69,11 +71,17 @@ sudo systemctl restart cloudflared
 
 ## Key file locations (on server)
 ```
-~/streetwise/server.py          # Flask app
-~/streetwise/widget_v2.html     # Dashboard UI
-~/streetwise/price_history.db   # SQLite — price history + DCF cache
-~/streetwise/.env               # API keys (GEMINI_API_KEY, etc.)
+/opt/streetwise/server.py          # Flask app
+/opt/streetwise/widget_v2.html     # Dashboard UI
+/opt/streetwise/price_history.db   # SQLite — price history + DCF cache
+/opt/streetwise/.env               # API keys (GEMINI_API_KEY, AUTH_TOKEN, etc.)
 ```
+
+---
+
+## Chrome extension auth
+The extension sends `X-Streetwise-Token: <token>` as a request header.
+Set the token in the extension popup — same value as `AUTH_TOKEN` in `.env`.
 
 ---
 
