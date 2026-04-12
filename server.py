@@ -1894,6 +1894,17 @@ def delete_episode():
         with open(ep_file, "w") as f:
             json.dump(registry, f, indent=2)
 
+    # Reset duplicate-check hash in sources.json so the episode can be re-extracted
+    prefix_key = ep_key.split(":")[0]
+    sources_reg = load_sources()
+    ep_src_entry = (sources_reg.get(prefix_key) or {}).get("episodes", {}).get(ep_key)
+    if ep_src_entry:
+        ep_src_entry.pop("text_hash", None)
+        ep_src_entry.pop("text",      None)
+        ep_src_entry.pop("tickers",   None)
+        save_sources(sources_reg)
+        log.info(f"  delete-episode: cleared text_hash for {ep_key} in sources.json")
+
     log.info(f"  delete-episode: {ep_key}  touched={touched}  removed_tickers={len(removed_tickers)}")
     return jsonify({
         "ok":              True,
