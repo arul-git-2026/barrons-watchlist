@@ -4005,6 +4005,11 @@ def table_data():
         ).fetchall()]
         spark_1y = closes_1y[::5] if len(closes_1y) > 10 else closes_1y
 
+        # YTD sparkline — daily
+        spark_ytd = [r[0] for r in cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date>=? ORDER BY date", (t, d_ytd)
+        ).fetchall()]
+
         # 1M sparkline — daily
         spark_1m = [r[0] for r in cur.execute(
             "SELECT close FROM prices WHERE ticker=? AND date>=? ORDER BY date", (t, d_1m)
@@ -4034,6 +4039,7 @@ def table_data():
             "h52": h52,
             "l52": l52,
             "s1y": spark_1y,
+            "sytd": spark_ytd,
             "s1m": spark_1m,
         })
 
@@ -4162,6 +4168,10 @@ def refresh_table():
         ).fetchall()]
         spark_1y = closes_1y[::5] if len(closes_1y) > 10 else closes_1y
 
+        spark_ytd = [r[0] for r in cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date>=? ORDER BY date", (t, d_ytd)
+        ).fetchall()]
+
         spark_1m = [r[0] for r in cur.execute(
             "SELECT close FROM prices WHERE ticker=? AND date>=? ORDER BY date", (t, d_1m)
         ).fetchall()]
@@ -4190,6 +4200,7 @@ def refresh_table():
             "h52": h52,
             "l52": l52,
             "s1y": spark_1y,
+            "sytd": spark_ytd,
             "s1m": spark_1m,
         })
 

@@ -4761,6 +4761,7 @@ const TV_COLS = [
   {k:'h52', label:'52W High',  fmt: v => v!=null?'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'},
   {k:'l52', label:'52W Low',   fmt: v => v!=null?'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'},
   {k:'s1y', label:'1 Year',    spark:true, fmt: v => tvSparkline(v, 80, 28)},
+  {k:'sytd',label:'YTD',       spark:true, fmt: v => tvSparkline(v, 70, 28)},
   {k:'s1m', label:'1 Month',   spark:true, fmt: v => tvSparkline(v, 60, 28)},
 ];
 
