@@ -506,6 +506,7 @@ def fetch_quote(ticker: str) -> dict:
         data  = {
             "price_fmt":  f"{currency_symbol(cur)}{price:,.2f}",
             "price_raw":  price,
+            "diff_raw":   round(diff, 3),
             "diff_fmt":   f"{'+' if diff >= 0 else ''}{diff:,.2f}",
             "pct_fmt":    f"{'+' if pct >= 0 else ''}{pct:.2f}%",
             "pct_raw":    round(pct, 3),
@@ -3971,16 +3972,20 @@ def table_data():
         t = d.get("t", "")
         if not t or t.startswith("__"): continue
 
-        # Current price — use stored value or latest DB close
-        cur_price = d.get("p_raw") or last_close(t, today.isoformat())
-        if not cur_price: continue
+        # Last 2 closes for current price + daily change
+        last2 = cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date<=? ORDER BY date DESC LIMIT 2",
+            (t, today.isoformat())
+        ).fetchall()
+        db_cur  = last2[0][0] if last2 else None
+        db_prev = last2[1][0] if len(last2) > 1 else None
+        cur_price = d.get("price_raw") or db_cur
 
         # Period anchors
         p_1w  = last_close(t, d_1w)
         p_3w  = last_close(t, d_3w)
         p_1m  = last_close(t, d_1m)
         p_3m  = last_close(t, d_3m)
-        p_6m  = last_close(t, d_6m)
         p_6m  = last_close(t, d_6m)
         p_1y  = last_close(t, d_1y)
         p_ytd = last_close(t, d_ytd)
@@ -4008,9 +4013,16 @@ def table_data():
             "t":   t,
             "n":   d.get("n", t),
             "sec": d.get("sector") or "N/A",
-            "px":  round(float(cur_price), 2),
-            "chg": round(float(d.get("diff_raw") or 0), 2),
-            "pct": round(float(d.get("pct_raw") or 0), 2),
+            "type": d.get("type", "Stock"),
+            "status": d.get("status", ""),
+            "rec":  d.get("rec", ""),
+            "wl":   d.get("watchlists") or [],
+            "e":    d.get("e") or [],
+            "currency": d.get("currency", "USD"),
+            "px":  round(float(cur_price), 2) if cur_price else None,
+            "chg": round(float(d.get("diff_raw")), 2) if d.get("diff_raw") is not None
+                   else (round(float(cur_price) - float(db_prev), 2) if cur_price and db_prev else None),
+            "pct": round(float(d.get("pct_raw") or 0), 2) if d.get("pct_raw") is not None else None,
             "w1":  pct(cur_price, p_1w),
             "w3":  pct(cur_price, p_3w),
             "m1":  pct(cur_price, p_1m),
@@ -4027,6 +4039,210 @@ def table_data():
     conn.close()
     rows.sort(key=lambda r: r["t"])
     return jsonify({"ok": True, "rows": rows, "as_of": today.isoformat()})
+
+
+@app.route("/api/refresh-table", methods=["POST"])
+def refresh_table():
+    """
+    Full refresh for Table View:
+      1. Fetch live quotes for ALL tickers (price, change, pct, sector, rec)
+         — updates in-memory cache + persists sector/rec back to JSON
+      2. Fetch 1Y daily history from Yahoo for ALL tickers
+         — saves/upserts rows into price_history.db
+      3. Returns the full table-data payload (same as /api/table-data)
+         so the frontend can re-render immediately.
+    Runs synchronously; expect ~30-60 seconds for 200+ tickers.
+    Accepts optional JSON body: {"tickers": ["AAPL","MSFT",...]} to restrict scope.
+    """
+    import sqlite3 as _sq
+    from datetime import date as _date, timedelta as _td
+
+    body       = request.get_json(silent=True) or {}
+    db         = load_data()
+    all_tickers = [d["t"] for d in db if d.get("t") and not d["t"].startswith("__")]
+
+    wanted_set = None
+    if body.get("tickers"):
+        wanted_set = {t.strip().upper() for t in body["tickers"]}
+        all_tickers = [t for t in all_tickers if t in wanted_set]
+
+    log.info(f"refresh-table: {len(all_tickers)} tickers — quotes + 1Y history")
+
+    # ── Step 1: live quotes ───────────────────────────────────────────────────
+    changed = False
+    for item in db:
+        t = item.get("t","")
+        if not t or t.startswith("__"): continue
+        if wanted_set and t not in wanted_set: continue
+        cache_expire([t])
+        q = fetch_quote(t)
+        item.update(q)
+        if q.get("sector") and q["sector"] != "N/A":
+            item["sector"] = q["sector"]; changed = True
+        if q.get("rec") and q["rec"] != "N/A":
+            item["rec"] = q["rec"]; changed = True
+        if q.get("div_yield") is not None:
+            item["div_yield"] = q["div_yield"]; changed = True
+
+    if changed:
+        try: save_tickers(db)
+        except Exception as e: log.warning(f"refresh-table: could not persist: {e}")
+
+    # ── Step 2: 1Y daily history → price_history.db ──────────────────────────
+    # Fetch 1Y daily for all tickers; db_upsert saves rows automatically
+    for t in all_tickers:
+        try:
+            fetch_yf_history(t, "1Y")   # internally calls db_upsert
+        except Exception as e:
+            log.warning(f"refresh-table: history failed for {t}: {e}")
+
+    log.info(f"refresh-table: done — rebuilding table rows")
+
+    # ── Step 3: rebuild table rows (same logic as /api/table-data) ───────────
+    today    = _date.today()
+    iso      = lambda d: d.isoformat()
+    d_1w     = iso(today - _td(days=7))
+    d_3w     = iso(today - _td(days=21))
+    d_1m     = iso(today - _td(days=30))
+    d_3m     = iso(today - _td(days=91))
+    d_6m     = iso(today - _td(days=182))
+    d_1y     = iso(today - _td(days=365))
+    d_ytd    = f"{today.year}-01-01"
+
+    if not os.path.exists("price_history.db"):
+        return jsonify({"ok": False, "error": "price_history.db not found"}), 404
+
+    conn = _sq.connect("price_history.db")
+    cur  = conn.cursor()
+
+    def last_close(ticker, before):
+        r = cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date<=? ORDER BY date DESC LIMIT 1",
+            (ticker, before)
+        ).fetchone()
+        return r[0] if r else None
+
+    def pct(new, old):
+        if not old or old == 0 or not new: return None
+        return round((new - old) / old * 100, 2)
+
+    rows = []
+    for d in db:
+        t = d.get("t", "")
+        if not t or t.startswith("__"): continue
+        if wanted_set and t not in wanted_set: continue
+
+        # Last 2 closes for current price + daily change
+        last2 = cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date<=? ORDER BY date DESC LIMIT 2",
+            (t, today.isoformat())
+        ).fetchall()
+        db_cur  = last2[0][0] if last2 else None
+        db_prev = last2[1][0] if len(last2) > 1 else None
+        cur_price = d.get("price_raw") or db_cur
+
+        p_1w  = last_close(t, d_1w)
+        p_3w  = last_close(t, d_3w)
+        p_1m  = last_close(t, d_1m)
+        p_3m  = last_close(t, d_3m)
+        p_6m  = last_close(t, d_6m)
+        p_1y  = last_close(t, d_1y)
+        p_ytd = last_close(t, d_ytd)
+
+        hl = cur.execute(
+            "SELECT MAX(close), MIN(close) FROM prices WHERE ticker=? AND date>=?",
+            (t, d_1y)
+        ).fetchone()
+        h52 = round(hl[0], 2) if hl and hl[0] else None
+        l52 = round(hl[1], 2) if hl and hl[1] else None
+
+        closes_1y = [r[0] for r in cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date>=? ORDER BY date", (t, d_1y)
+        ).fetchall()]
+        spark_1y = closes_1y[::5] if len(closes_1y) > 10 else closes_1y
+
+        spark_1m = [r[0] for r in cur.execute(
+            "SELECT close FROM prices WHERE ticker=? AND date>=? ORDER BY date", (t, d_1m)
+        ).fetchall()]
+
+        rows.append({
+            "t":      t,
+            "n":      d.get("n", t),
+            "sec":    d.get("sector") or "N/A",
+            "type":   d.get("type", "Stock"),
+            "status": d.get("status", ""),
+            "rec":    d.get("rec", ""),
+            "wl":     d.get("watchlists") or [],
+            "e":      d.get("e") or [],
+            "currency": d.get("currency", "USD"),
+            "px":  round(float(cur_price), 2) if cur_price else None,
+            "chg": round(float(d.get("diff_raw")), 2) if d.get("diff_raw") is not None
+                   else (round(float(cur_price) - float(db_prev), 2) if cur_price and db_prev else None),
+            "pct": round(float(d.get("pct_raw") or 0), 2) if d.get("pct_raw") is not None else None,
+            "w1":  pct(cur_price, p_1w),
+            "w3":  pct(cur_price, p_3w),
+            "m1":  pct(cur_price, p_1m),
+            "m3":  pct(cur_price, p_3m),
+            "m6":  pct(cur_price, p_6m),
+            "ytd": pct(cur_price, p_ytd),
+            "y1":  pct(cur_price, p_1y),
+            "h52": h52,
+            "l52": l52,
+            "s1y": spark_1y,
+            "s1m": spark_1m,
+        })
+
+    conn.close()
+    rows.sort(key=lambda r: r["t"])
+    return jsonify({"ok": True, "rows": rows, "as_of": today.isoformat(),
+                    "refreshed": len(all_tickers)})
+
+
+@app.route("/api/delete-tickers", methods=["POST"])
+def delete_tickers():
+    """
+    Delete one or more tickers from streetwise_data.json AND price_history.db.
+    Body: {"tickers": ["AAPL", "MSFT"]}
+    """
+    body    = request.get_json(silent=True) or {}
+    targets = {str(t).strip().upper() for t in (body.get("tickers") or []) if t and str(t).strip()}
+    if not targets:
+        return jsonify({"ok": False, "error": "No tickers provided"}), 400
+
+    db = load_data()
+    before = len(db)
+    db_new = [d for d in db if d.get("t", "").upper() not in targets]
+    removed_json = before - len(db_new)
+
+    try:
+        save_tickers(db_new)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Failed to save JSON: {e}"}), 500
+
+    # Also remove from price_history.db
+    removed_db = 0
+    if os.path.exists(DB_FILE):
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cur  = conn.cursor()
+            for t in targets:
+                cur.execute("DELETE FROM prices WHERE ticker=?", (t,))
+                removed_db += cur.rowcount
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            log.warning(f"delete-tickers: DB error: {e}")
+
+    # Also expire from memory cache
+    cache_expire(list(targets))
+
+    log.info(f"delete-tickers: removed {removed_json} JSON entries, {removed_db} price rows for {sorted(targets)}")
+    return jsonify({
+        "ok": True,
+        "removed_tickers": removed_json,
+        "removed_price_rows": removed_db,
+        "tickers": sorted(targets),
+    })
 
 
 if __name__ == "__main__":
