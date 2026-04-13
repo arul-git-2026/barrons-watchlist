@@ -4906,6 +4906,7 @@ function tvFilteredRows() {
   const fMove  = document.getElementById('tf-move')?.value     || '';
   const fWl    = document.getElementById('tf-watchlist')?.value || '';
   const fEp    = document.getElementById('tf-episode')?.value   || '';
+  const fSrc   = document.getElementById('tf-source')?.value    || '';
   return _tvData.filter(r => {
     if (!r.t) return false;   // skip records with null/empty ticker
     if (q     && !r.t.toLowerCase().includes(q) && !(r.n||'').toLowerCase().includes(q) && !(r.sec||'').toLowerCase().includes(q)) return false;
@@ -4916,6 +4917,7 @@ function tvFilteredRows() {
     if (fMove === 'up'   && (r.pct || 0) <= 0)      return false;
     if (fMove === 'down' && (r.pct || 0) >= 0)      return false;
     if (fWl   && !(r.wl    || []).includes(fWl))    return false;
+    if (fSrc  && !(r.e || []).some(ep => ep.toLowerCase().startsWith(fSrc.toLowerCase() + ':'))) return false;
     if (fEp   && !(r.e     || []).includes(fEp))    return false;
     return true;
   });

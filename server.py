@@ -506,6 +506,7 @@ def fetch_quote(ticker: str) -> dict:
         data  = {
             "price_fmt":  f"{currency_symbol(cur)}{price:,.2f}",
             "price_raw":  price,
+            "currency":   cur,
             "diff_raw":   round(diff, 3),
             "diff_fmt":   f"{'+' if diff >= 0 else ''}{diff:,.2f}",
             "pct_fmt":    f"{'+' if pct >= 0 else ''}{pct:.2f}%",
