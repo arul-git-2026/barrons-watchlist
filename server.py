@@ -465,24 +465,50 @@ _QUOTE_TYPE_NOISE = {
     "CURRENCY", "CRYPTOCURRENCY", "FUTURE", "OPTION",
 }
 
+# Map quoteType → human-readable asset type (stored as "y" in JSON)
+_QT_TO_TYPE = {
+    "EQUITY":         "Stock",
+    "ETF":            "ETF",
+    "MUTUALFUND":     "Mutual Fund",
+    "INDEX":          "Index",
+    "CURRENCY":       "Currency",
+    "CRYPTOCURRENCY": "Crypto",
+    "FUTURE":         "Future",
+    "OPTION":         "Option",
+}
+
+# Map quoteType → sector label (overrides Yahoo sector for non-equity types)
+_QT_TO_SECTOR = {
+    "ETF":        "ETF",
+    "MUTUALFUND": "Mutual Fund",
+    "INDEX":      "Index",
+    "CURRENCY":   "Currency",
+    "CRYPTOCURRENCY": "Crypto",
+}
+
+def _qt_to_type(info: dict) -> str:
+    """Return asset type string derived from Yahoo quoteType."""
+    qt = (info.get("quoteType") or "").upper()
+    return _QT_TO_TYPE.get(qt, "Stock")
+
 def _clean_sector(info: dict) -> str:
     """
     Return a clean sector string from a Yahoo Finance info dict.
-    Yahoo returns sector=None for many international stocks and falls back
-    to quoteType which contains internal codes like ECNQQUOTE, EQUITY etc.
-    We only use quoteType if it looks like a real sector name.
+    - For non-equity types (ETF, MutualFund…) returns a readable label
+      instead of N/A so they group properly in the sector filter.
+    - For equities uses Yahoo sector; falls back to N/A.
     """
+    qt = (info.get("quoteType") or "").upper()
+
+    # Non-equity types get their own sector label
+    if qt in _QT_TO_SECTOR:
+        return _QT_TO_SECTOR[qt]
+
     sector = info.get("sector", "") or ""
     if sector and sector.upper() not in _QUOTE_TYPE_NOISE:
         return sector
 
-    # No real sector — try quoteType but only keep human-readable values
-    qt = (info.get("quoteType") or "").upper()
-    if qt in _QUOTE_TYPE_NOISE:
-        return "N/A"
-
-    # quoteType has a real label (rare but possible)
-    return qt.title() if qt else "N/A"
+    return "N/A"
 
 
 def fetch_quote(ticker: str) -> dict:
@@ -512,6 +538,7 @@ def fetch_quote(ticker: str) -> dict:
             "pct_fmt":    f"{'+' if pct >= 0 else ''}{pct:.2f}%",
             "pct_raw":    round(pct, 3),
             "is_up":      diff >= 0,
+            "y":          _qt_to_type(info),
             "sector":     _clean_sector(info),
             "industry":   info.get("industry", "") or "",
             "rec":        rec,
@@ -4021,7 +4048,7 @@ def table_data():
             "n":   d.get("n", t),
             "sec": d.get("sector") or "N/A",
             "ind": d.get("industry", ""),
-            "type": d.get("type", "Stock"),
+            "type": d.get("y", "Stock"),
             "status": d.get("status", ""),
             "rec":  d.get("rec", ""),
             "wl":   d.get("watchlists") or [],
