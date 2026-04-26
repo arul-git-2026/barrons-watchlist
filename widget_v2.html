@@ -2321,6 +2321,16 @@ function selectRow(ticker) {
     : '';
 
   const activeTab = _rcTab || 'perplexity';
+  // ETF Holdings tab + pane — computed before template to avoid triple-nested backticks
+  const holdingsTabBtn = d.y === 'ETF'
+    ? '<button class="rctab ' + (activeTab==='holdings'?'on':'') + '" id="rctab-holdings" onclick="setRCTab(\'holdings\',this)">'
+      + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+      + '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>'
+      + '<line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Holdings</button>'
+    : '';
+  const holdingsPane = d.y === 'ETF'
+    ? '<div class="tab-pane ' + (activeTab==='holdings'?'on':'') + '" id="rc-tab-holdings" style="padding-top:10px"></div>'
+    : '';
 
   card.innerHTML = `
     <div class="detail-header">
@@ -2413,9 +2423,7 @@ function selectRow(ticker) {
       </button>
       <button class="rctab ${activeTab==='scenarios'?'on':''}" id="rctab-scenarios" onclick="setRCTab('scenarios',this)"
               style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">Scenarios</button>
-      ${d.y === 'ETF' ? `<button class="rctab ${activeTab==='holdings'?'on':''}" id="rctab-holdings" onclick="setRCTab('holdings',this)">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-        Holdings</button>` : ''}
+      ${holdingsTabBtn}
     </div>
 
     <!-- Research panes (content loaded by loadRCTabContent) -->
@@ -2426,7 +2434,7 @@ function selectRow(ticker) {
     <div class="tab-pane ${activeTab==='finnhub'?'on':''}" id="rc-tab-finnhub" style="padding-top:10px"></div>
 
     <!-- ETF Holdings pane -->
-    ${d.y === 'ETF' ? `<div class="tab-pane ${activeTab==='holdings'?'on':''}" id="rc-tab-holdings" style="padding-top:10px"></div>` : ''}
+    ${holdingsPane}
 
     <!-- Barrons: episode-tagged research notes -->
     <div class="tab-pane ${activeTab==='barrons'?'on':''}" id="rc-tab-barrons" style="padding-top:10px">
