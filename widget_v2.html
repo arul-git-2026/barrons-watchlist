@@ -2269,9 +2269,9 @@ function toggleSumSection(toggleEl) {
 // ── Detail panel ───────────────────────────────────────────────────
 function selectRow(ticker) {
   activeRow = ticker;
-  const d = (allData || []).find(r => r.t === ticker);
   // Auto-switch to Holdings for ETFs; reset away from Holdings for non-ETFs
-  if (d?.y === 'ETF') {
+  const _selType = (allData || []).find(r => r.t === ticker)?.y;
+  if (_selType === 'ETF') {
     if (_rcTab !== 'holdings') _rcTab = 'holdings';
   } else {
     if (_rcTab === 'holdings') _rcTab = 'perplexity';
