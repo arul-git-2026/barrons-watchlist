@@ -2301,13 +2301,18 @@ def etf_industry_breakdown(ticker):
         if not holdings:
             return jsonify({"ok": False, "error": "No holdings data for this ETF"}), 404
 
-        # ── 2. DB industry cache ──────────────────────────────────────────────
-        db_ind = {}
+        # ── 2. DB industry + sector cache ────────────────────────────────────
+        db_ind    = {}
+        db_sector = {}
+        _NOISE = {"N/A", "ETF", "MUTUAL FUND", "INDEX", "CURRENCY", "CRYPTO"}
         for rec in load_data():
-            s = (rec.get("t") or "").upper()
-            i = (rec.get("industry") or "").strip()
+            s   = (rec.get("t")        or "").upper()
+            i   = (rec.get("industry") or "").strip()
+            sec = (rec.get("sector")   or "").strip()
             if s and i:
                 db_ind[s] = i
+            if s and sec and sec.upper() not in _NOISE:
+                db_sector[s] = sec
 
         # ── 3. YTD from price_history.db (fast, no extra API calls) ──────────
         db_ytd = {}   # sym → float (%)
@@ -2342,13 +2347,14 @@ def etf_industry_breakdown(ticker):
         #   Priority for industry:
         #     1. DB record (db_ind)
         #     2. yf.Ticker(sym).info  (only fetched when industry unknown)
-        industry_data = {}  # ind → {pct, ytd_wsum, ytd_wpct, symbols}
+        industry_data = {}  # ind → {sector, pct, ytd_wsum, ytd_wpct, symbols}
 
-        def _add(ind, pct, ytd, sym_label):
+        def _add(sector, ind, pct, ytd, sym_label):
             """Accumulate pct weight and weighted YTD into industry_data."""
             if ind not in industry_data:
-                industry_data[ind] = {"pct": 0.0, "ytd_wsum": 0.0,
-                                      "ytd_wpct": 0.0, "symbols": []}
+                industry_data[ind] = {"sector": sector, "pct": 0.0,
+                                      "ytd_wsum": 0.0, "ytd_wpct": 0.0,
+                                      "symbols": []}
             industry_data[ind]["pct"]     += pct
             industry_data[ind]["symbols"].append(sym_label)
             if ytd is not None:
@@ -2370,26 +2376,31 @@ def etf_industry_breakdown(ticker):
                 return None
 
         for h in holdings:
-            sym = h["symbol"].upper()
-            pct = h["pct"]
-            ind = db_ind.get(sym, "")
-            ytd = db_ytd.get(sym)          # None if not in price_history.db
+            sym    = h["symbol"].upper()
+            pct    = h["pct"]
+            ind    = db_ind.get(sym, "")
+            sector = db_sector.get(sym, "")
+            ytd    = db_ytd.get(sym)       # None if not in price_history.db
 
-            # Always try to get YTD from price history if not already resolved
+            # YTD from price history (reliable for individual stocks)
             if ytd is None:
                 ytd = _ytd_from_history(sym)
 
-            # Resolve industry if not in DB (one .info call)
-            if not ind:
+            # Resolve industry and/or sector if not in DB (one .info call)
+            if not ind or not sector:
                 try:
                     info = yf.Ticker(sym).info
-                    ind  = (info.get("industry") or "").strip()
                     if not ind:
-                        ind = (info.get("sector") or "").strip() or "Other"
+                        ind = (info.get("industry") or "").strip()
+                        if not ind:
+                            ind = (info.get("sector") or "").strip() or "Other"
+                    if not sector:
+                        sector = (info.get("sector") or "").strip()
                 except Exception:
-                    ind = "Other"
+                    if not ind:
+                        ind = "Other"
 
-            _add(ind or "Other", pct, ytd, h["symbol"])
+            _add(sector or "Other", ind or "Other", pct, ytd, h["symbol"])
 
         # ── 5. Build output ───────────────────────────────────────────────────
         industries = []
@@ -2398,6 +2409,7 @@ def etf_industry_breakdown(ticker):
                        if d["ytd_wpct"] > 0 else None)
             industries.append({
                 "name":    name,
+                "sector":  d["sector"],
                 "pct":     round(d["pct"], 2),
                 "ytd":     ytd_avg,
                 "symbols": d["symbols"],

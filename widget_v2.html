@@ -765,6 +765,11 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 .etf-sw-track{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
 .etf-sw-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .3s}
 .etf-sw-pct{flex:0 0 48px;text-align:right;font-weight:600;font-size:12px}
+.etf-sw-row.clickable{cursor:pointer;border-radius:5px;padding:5px 6px;margin:0 -6px;transition:background .12s}
+.etf-sw-row.clickable:hover{background:var(--border)}
+.etf-sw-row.clickable.active{background:color-mix(in srgb,var(--accent) 12%,transparent);outline:1px solid var(--accent)}
+.etf-sw-arrow{flex:0 0 14px;text-align:right;color:var(--muted);font-size:11px;transition:color .12s}
+.etf-sw-row.clickable:hover .etf-sw-arrow,.etf-sw-row.clickable.active .etf-sw-arrow{color:var(--accent)}
 @media(max-width:700px){.etf-grid{grid-template-columns:1fr}}
 /* ETF Industry Breakdown */
 .etf-ind-section{margin-top:22px;border-top:1px solid var(--border);padding-top:16px}
@@ -3211,14 +3216,17 @@ async function loadETFHoldings(ticker) {
       : '<div style="color:var(--muted);font-size:12px">No holdings data available.</div>';
 
     const sectorsHTML = data.sectors.length
-      ? data.sectors.map(s => `
-          <div class="etf-sw-row">
-            <div class="etf-sw-label">${_ETF_SECTOR_LABELS[s.key] || s.key}</div>
-            <div class="etf-sw-track">
-              <div class="etf-sw-fill" style="width:${(s.pct / maxPct * 100).toFixed(1)}%"></div>
-            </div>
-            <div class="etf-sw-pct">${s.pct.toFixed(2)}%</div>
-          </div>`).join('')
+      ? data.sectors.map(s => {
+          const label = _ETF_SECTOR_LABELS[s.key] || s.key;
+          const w = (s.pct / maxPct * 100).toFixed(1);
+          return '<div class="etf-sw-row clickable" id="etf-sw-' + ticker + '-' + s.key + '"'
+            + ' onclick="drillSector(\'' + ticker + '\',\'' + label.replace(/'/g,"\\'") + '\',this)">'
+            + '<div class="etf-sw-label">' + label + '</div>'
+            + '<div class="etf-sw-track"><div class="etf-sw-fill" style="width:' + w + '%"></div></div>'
+            + '<div class="etf-sw-pct">' + s.pct.toFixed(2) + '%</div>'
+            + '<div class="etf-sw-arrow">›</div>'
+            + '</div>';
+        }).join('')
       : '<div style="color:var(--muted);font-size:12px">No sector weighting data available.</div>';
 
     pane.innerHTML = `
@@ -3231,19 +3239,20 @@ async function loadETFHoldings(ticker) {
           ${holdingsHTML}
         </div>
         <div>
-          <div class="etf-section-title">Sector Weightings</div>
+          <div class="etf-section-title">Sector Weightings <span style="font-size:10px;font-weight:400;color:var(--muted)">(click to drill down)</span></div>
           ${sectorsHTML}
         </div>
       </div>
       <div class="etf-ind-section" id="etf-ind-wrap-${ticker}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
-          <span style="font-size:12px;font-weight:700;color:var(--text)">Industry Breakdown</span>
-          <button class="etf-load-btn" id="etf-ind-btn-${ticker}"
-            onclick="loadETFIndustryBreakdown('${ticker}')">
-            &#9783; Load Industry Breakdown
-          </button>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:700;color:var(--text)" id="etf-ind-title-${ticker}">Industries in This Sector</span>
+          <span id="etf-ind-breadcrumb-${ticker}" style="font-size:11px;color:var(--muted)"></span>
         </div>
-        <div id="etf-ind-content-${ticker}"></div>
+        <div id="etf-ind-content-${ticker}">
+          <div style="padding:18px 0;text-align:center;color:var(--muted);font-size:12px">
+            ↑ Click a sector above to see its industry breakdown
+          </div>
+        </div>
       </div>`;
 
   } catch(e) {
@@ -3258,7 +3267,7 @@ async function loadETFHoldings(ticker) {
   }
 }
 
-// ── ETF Industry Breakdown Treemap ───────────────────────────────────────────
+// ── ETF Industry Breakdown — sector drill-down ───────────────────────────────
 
 function escHtml(s) {
   return String(s)
@@ -3273,151 +3282,185 @@ const _TREEMAP_PALETTE = [
   '#0ea5e9','#d946ef','#fb923c','#4ade80','#38bdf8',
 ];
 
+// Client-side cache: ticker → full breakdown data from API
+const _etfBreakCache = {};
+
 /**
  * Binary-split treemap layout.
- * items: [{name, pct, ...}]  (sorted descending by pct)
- * Returns [{name, pct, x, y, w, h, ...}]
+ * items: [{name, pct, ...}]  sorted descending by pct
+ * Returns [{...item, x, y, w, h}]
  */
 function _treemapLayout(items, x, y, w, h) {
   if (!items.length) return [];
   if (items.length === 1) return [Object.assign({}, items[0], {x, y, w, h})];
-
   const total = items.reduce((s, i) => s + i.pct, 0);
-  // Find split nearest to half-total
   let best = 1, bestDiff = Infinity, cumSum = 0;
   for (let i = 0; i < items.length - 1; i++) {
     cumSum += items[i].pct;
     const diff = Math.abs(cumSum - total / 2);
     if (diff < bestDiff) { bestDiff = diff; best = i + 1; }
   }
-  const left  = items.slice(0, best);
-  const right = items.slice(best);
+  const left = items.slice(0, best), right = items.slice(best);
   const lRatio = left.reduce((s, i) => s + i.pct, 0) / total;
-
   if (w >= h) {
     const lw = w * lRatio;
-    return [..._treemapLayout(left, x, y, lw, h),
-            ..._treemapLayout(right, x + lw, y, w - lw, h)];
+    return [..._treemapLayout(left, x, y, lw, h), ..._treemapLayout(right, x+lw, y, w-lw, h)];
   } else {
     const lh = h * lRatio;
-    return [..._treemapLayout(left, x, y, w, lh),
-            ..._treemapLayout(right, x, y + lh, w, h - lh)];
+    return [..._treemapLayout(left, x, y, w, lh), ..._treemapLayout(right, x, y+lh, w, h-lh)];
   }
 }
 
 function _renderTreemapSVG(industries) {
-  const W = 480, H = 300;
+  const W = 480, H = 300, PAD = 2;
   const rects = _treemapLayout(industries, 0, 0, W, H);
-  const PAD = 2;  // gap between cells
-
   const cells = rects.map((r, idx) => {
     const color = _TREEMAP_PALETTE[idx % _TREEMAP_PALETTE.length];
-    const x = r.x + PAD, y = r.y + PAD;
-    const w = Math.max(0, r.w - PAD * 2);
-    const h = Math.max(0, r.h - PAD * 2);
-    const cx = x + w / 2, cy = y + h / 2;
-
-    // Show label only if cell is big enough
-    const showLabel = w > 40 && h > 26;
-    const showPct   = w > 50 && h > 42;
-    const fontSize  = Math.min(12, Math.max(9, w / 10));
-
-    const labelLines = showLabel
-      ? '<text x="' + cx + '" y="' + (cy - (showPct ? 7 : 0)) + '" '
-        + 'text-anchor="middle" dominant-baseline="middle" '
-        + 'font-size="' + fontSize + '" font-weight="600" fill="#fff" '
-        + 'style="pointer-events:none">'
-        + escHtml(r.name.length > 20 ? r.name.slice(0, 18) + '…' : r.name)
-        + '</text>'
-      : '';
-    const pctLine = showPct
-      ? '<text x="' + cx + '" y="' + (cy + 9) + '" '
-        + 'text-anchor="middle" dominant-baseline="middle" '
-        + 'font-size="' + Math.max(9, fontSize - 1) + '" fill="rgba(255,255,255,.85)" '
-        + 'style="pointer-events:none">' + r.pct.toFixed(1) + '%</text>'
-      : '';
-
-    return '<g>'
-      + '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" '
-      + 'rx="3" fill="' + color + '" opacity="0.88">'
-      + '<title>' + escHtml(r.name) + ': ' + r.pct.toFixed(2) + '%</title></rect>'
-      + labelLines + pctLine
-      + '</g>';
+    const x = r.x+PAD, y = r.y+PAD, w = Math.max(0,r.w-PAD*2), h = Math.max(0,r.h-PAD*2);
+    const cx = x+w/2, cy = y+h/2;
+    const showLabel = w>40&&h>26, showPct = w>50&&h>42;
+    const fs = Math.min(12, Math.max(9, w/10));
+    const lbl = showLabel
+      ? '<text x="'+cx+'" y="'+(cy-(showPct?7:0))+'" text-anchor="middle" dominant-baseline="middle"'
+        +' font-size="'+fs+'" font-weight="600" fill="#fff" style="pointer-events:none">'
+        +escHtml(r.name.length>20?r.name.slice(0,18)+'…':r.name)+'</text>' : '';
+    const pln = showPct
+      ? '<text x="'+cx+'" y="'+(cy+9)+'" text-anchor="middle" dominant-baseline="middle"'
+        +' font-size="'+Math.max(9,fs-1)+'" fill="rgba(255,255,255,.85)" style="pointer-events:none">'
+        +r.pct.toFixed(1)+'%</text>' : '';
+    return '<g><rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="3" fill="'+color+'" opacity="0.88">'
+      +'<title>'+escHtml(r.name)+': '+r.pct.toFixed(2)+'%</title></rect>'+lbl+pln+'</g>';
   });
-
-  return '<svg viewBox="0 0 ' + W + ' ' + H + '" '
-    + 'style="width:100%;height:100%;display:block;border-radius:6px">'
-    + cells.join('')
-    + '</svg>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:100%;display:block;border-radius:6px">'
+    +cells.join('')+'</svg>';
 }
 
-async function loadETFIndustryBreakdown(ticker) {
-  const btn     = document.getElementById('etf-ind-btn-' + ticker);
+/**
+ * Called when user clicks a sector row in Sector Weightings.
+ * Lazy-fetches breakdown data, then renders industries for that sector.
+ */
+async function drillSector(ticker, sectorLabel, rowEl) {
   const content = document.getElementById('etf-ind-content-' + ticker);
+  const title   = document.getElementById('etf-ind-title-' + ticker);
+  const crumb   = document.getElementById('etf-ind-breadcrumb-' + ticker);
   if (!content) return;
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
-  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Fetching industry data for each holding…<br><span style="font-size:11px">(first load may take 10–20 s)</span></div>';
+  // Highlight active sector row
+  document.querySelectorAll('[id^="etf-sw-' + ticker + '-"]').forEach(el => el.classList.remove('active'));
+  if (rowEl) rowEl.classList.add('active');
 
-  try {
-    const res  = await fetch('/api/etf-industry-breakdown/' + ticker);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error);
-
-    if (!data.industries.length) {
-      content.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No industry data available.</div>';
-      if (btn) btn.style.display = 'none';
+  // Lazy-load breakdown data (cached after first fetch)
+  if (!_etfBreakCache[ticker]) {
+    content.innerHTML = '<div style="padding:18px 0;text-align:center;color:var(--muted);font-size:12px">'
+      +'Fetching industry data… <span style="font-size:11px">(first load ~10–20 s)</span></div>';
+    try {
+      const res  = await fetch('/api/etf-industry-breakdown/' + ticker);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      _etfBreakCache[ticker] = data;
+    } catch(e) {
+      content.innerHTML = '<div style="color:var(--down);font-size:12px;padding:8px 0">⚠ '
+        + escHtml(e.message)
+        + ' <button onclick="drillSector(\''+ticker+'\',\''+escHtml(sectorLabel)+'\',null)"'
+        +' style="margin-left:8px;border:1px solid var(--border);background:var(--bg);'
+        +'border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px">↺ Retry</button></div>';
       return;
     }
-
-    // Hide button after success
-    if (btn) btn.style.display = 'none';
-
-    const maxPct = data.industries[0].pct;
-    const hasYTD = data.industries.some(i => i.ytd !== null && i.ytd !== undefined);
-
-    // Column header
-    const hdrHTML = '<div class="etf-ind-hdr">'
-      + '<div style="flex:0 0 155px">Industry</div>'
-      + '<div style="flex:1">Market Weight</div>'
-      + '<div style="flex:0 0 50px;text-align:right">Weight</div>'
-      + (hasYTD ? '<div style="flex:0 0 58px;text-align:right">YTD Return</div>' : '')
-      + '</div>';
-
-    // Rows
-    const tableHTML = data.industries.map((ind, idx) => {
-      const color  = _TREEMAP_PALETTE[idx % _TREEMAP_PALETTE.length];
-      const barW   = (ind.pct / maxPct * 100).toFixed(1);
-      const tip    = ind.symbols.slice(0, 6).join(', ') + (ind.symbols.length > 6 ? '…' : '');
-      const ytdVal = (ind.ytd !== null && ind.ytd !== undefined);
-      const ytdCls = !ytdVal ? 'na' : ind.ytd >= 0 ? 'up' : 'dn';
-      const ytdTxt = ytdVal
-        ? (ind.ytd >= 0 ? '+' : '') + ind.ytd.toFixed(2) + '%'
-        : '—';
-      return '<div class="etf-ind-row" title="' + escHtml(tip) + '">'
-        + '<div class="etf-ind-label">' + escHtml(ind.name) + '</div>'
-        + '<div class="etf-ind-track"><div class="etf-ind-fill" style="width:' + barW + '%;background:' + color + '"></div></div>'
-        + '<div class="etf-ind-pct">' + ind.pct.toFixed(2) + '%</div>'
-        + (hasYTD ? '<div class="etf-ind-ytd ' + ytdCls + '">' + ytdTxt + '</div>' : '')
-        + '</div>';
-    }).join('');
-
-    const treeSVG = _renderTreemapSVG(data.industries);
-
-    content.innerHTML = '<div class="etf-ind-grid">'
-      + '<div>' + hdrHTML + tableHTML + '</div>'
-      + '<div class="etf-treemap-wrap">' + treeSVG + '</div>'
-      + '</div>'
-      + '<div style="font-size:10px;color:var(--muted);margin-top:8px">'
-      + 'Based on top ' + data.industries.reduce((s,i) => s + i.symbols.length, 0)
-      + ' holdings · ' + data.total_pct.toFixed(1) + '% of assets covered'
-      + (hasYTD ? ' · YTD = weighted avg by position size' : '')
-      + '</div>';
-
-  } catch(e) {
-    content.innerHTML = '<div style="color:var(--down);font-size:12px;padding:8px 0">⚠ ' + escHtml(e.message) + '</div>';
-    if (btn) { btn.disabled = false; btn.textContent = '↺ Retry'; }
   }
+
+  const allIndustries = _etfBreakCache[ticker].industries || [];
+
+  // Filter to selected sector (normalise for fuzzy match)
+  const norm = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const filtered = allIndustries.filter(i => norm(i.sector) === norm(sectorLabel));
+
+  if (!filtered.length) {
+    content.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px 0">'
+      +'No industry data found for <strong>'+escHtml(sectorLabel)+'</strong> in top holdings.</div>';
+    if (title) title.textContent = sectorLabel + ' — Industries';
+    if (crumb) crumb.textContent = '(no data from top holdings sample)';
+    return;
+  }
+
+  _renderSectorIndustries(ticker, sectorLabel, filtered);
+}
+
+/**
+ * Render the industry table + treemap for a filtered set of industries.
+ * Weights are re-normalised to sum to 100% within the sector sample.
+ */
+function _renderSectorIndustries(ticker, sectorLabel, industries) {
+  const content = document.getElementById('etf-ind-content-' + ticker);
+  const title   = document.getElementById('etf-ind-title-' + ticker);
+  const crumb   = document.getElementById('etf-ind-breadcrumb-' + ticker);
+
+  if (title) title.textContent = sectorLabel + ' — Industries';
+
+  // Normalise to 100% within this sector
+  const sectorTotal = industries.reduce((s,i) => s + i.pct, 0);
+  const rows = industries
+    .map(i => Object.assign({}, i, { rel_pct: sectorTotal > 0 ? Math.round(i.pct/sectorTotal*10000)/100 : 0 }))
+    .sort((a,b) => b.rel_pct - a.rel_pct);
+
+  // Overall weighted YTD for sector
+  let ytdWsum = 0, ytdWpct = 0;
+  rows.forEach(i => { if (i.ytd !== null && i.ytd !== undefined) { ytdWsum += i.ytd * i.rel_pct; ytdWpct += i.rel_pct; } });
+  const allYTD = ytdWpct > 0 ? Math.round(ytdWsum / ytdWpct * 100) / 100 : null;
+
+  const hasYTD = rows.some(i => i.ytd !== null && i.ytd !== undefined);
+  const maxPct = rows[0]?.rel_pct || 100;
+
+  // Update breadcrumb
+  if (crumb) {
+    const ytdStr = allYTD !== null ? ' · YTD ' + (allYTD>=0?'+':'') + allYTD.toFixed(2) + '%' : '';
+    crumb.textContent = rows.length + ' industries · ' + sectorTotal.toFixed(2) + '% ETF weight' + ytdStr;
+    crumb.style.color = allYTD === null ? 'var(--muted)' : allYTD >= 0 ? 'var(--up)' : 'var(--down)';
+  }
+
+  // Column header
+  const hdr = '<div class="etf-ind-hdr">'
+    + '<div style="flex:0 0 155px">Industry</div>'
+    + '<div style="flex:1">Market Weight</div>'
+    + '<div style="flex:0 0 50px;text-align:right">Weight</div>'
+    + (hasYTD ? '<div style="flex:0 0 58px;text-align:right">YTD Return</div>' : '')
+    + '</div>';
+
+  // "All Industries" summary row
+  const allRow = '<div class="etf-ind-row" style="font-weight:700;background:color-mix(in srgb,var(--accent) 8%,transparent);border-radius:4px;padding:5px 4px;margin-bottom:2px">'
+    + '<div class="etf-ind-label" style="flex:0 0 155px">All Industries</div>'
+    + '<div class="etf-ind-track"><div class="etf-ind-fill" style="width:100%;background:var(--muted)"></div></div>'
+    + '<div class="etf-ind-pct">100.00%</div>'
+    + (hasYTD ? '<div class="etf-ind-ytd ' + (allYTD===null?'na':allYTD>=0?'up':'dn') + '">'
+        + (allYTD!==null?(allYTD>=0?'+':'')+allYTD.toFixed(2)+'%':'—') + '</div>' : '')
+    + '</div>';
+
+  // Industry rows
+  const tableRows = rows.map((ind, idx) => {
+    const color  = _TREEMAP_PALETTE[idx % _TREEMAP_PALETTE.length];
+    const barW   = (ind.rel_pct / maxPct * 100).toFixed(1);
+    const tip    = ind.symbols.slice(0,6).join(', ') + (ind.symbols.length>6?'…':'');
+    const ytdVal = ind.ytd !== null && ind.ytd !== undefined;
+    const ytdCls = !ytdVal ? 'na' : ind.ytd >= 0 ? 'up' : 'dn';
+    const ytdTxt = ytdVal ? (ind.ytd>=0?'+':'')+ind.ytd.toFixed(2)+'%' : '—';
+    return '<div class="etf-ind-row" title="'+escHtml(tip)+'">'
+      +'<div class="etf-ind-label">'+escHtml(ind.name)+'</div>'
+      +'<div class="etf-ind-track"><div class="etf-ind-fill" style="width:'+barW+'%;background:'+color+'"></div></div>'
+      +'<div class="etf-ind-pct">'+ind.rel_pct.toFixed(2)+'%</div>'
+      +(hasYTD?'<div class="etf-ind-ytd '+ytdCls+'">'+ytdTxt+'</div>':'')
+      +'</div>';
+  }).join('');
+
+  // Treemap uses rel_pct for sizing
+  const treemapData = rows.map(i => Object.assign({}, i, {pct: i.rel_pct}));
+  const treeSVG = _renderTreemapSVG(treemapData);
+
+  content.innerHTML = '<div class="etf-ind-grid">'
+    + '<div>' + hdr + allRow + tableRows + '</div>'
+    + '<div class="etf-treemap-wrap">' + treeSVG + '</div>'
+    + '</div>'
+    + '<div style="font-size:10px;color:var(--muted);margin-top:8px">'
+    + 'Based on top holdings sample · weights relative to sector · YTD = weighted avg by position size'
+    + '</div>';
 }
 
 // ── Finnhub ──────────────────────────────────────────────────────────────────
