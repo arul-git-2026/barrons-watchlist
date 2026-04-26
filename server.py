@@ -2334,44 +2334,62 @@ def etf_industry_breakdown(ticker):
             pass
 
         # ── 4. Resolve industry + YTD for each holding ───────────────────────
-        #   - Symbols with both industry (DB) and YTD (price DB) → no API call
-        #   - Everything else → one yfinance .info call
+        #   Priority for YTD:
+        #     1. price_history.db  (already in db_ytd, no API)
+        #     2. yf.Ticker(sym).history(period="ytd")  — computed from closes
+        #        NOTE: info['ytdReturn'] is only reliable for ETFs/mutual funds,
+        #        NOT for individual stocks — always use price history instead.
+        #   Priority for industry:
+        #     1. DB record (db_ind)
+        #     2. yf.Ticker(sym).info  (only fetched when industry unknown)
         industry_data = {}  # ind → {pct, ytd_wsum, ytd_wpct, symbols}
 
-        def _add(ind, pct, ytd):
+        def _add(ind, pct, ytd, sym_label):
             """Accumulate pct weight and weighted YTD into industry_data."""
             if ind not in industry_data:
                 industry_data[ind] = {"pct": 0.0, "ytd_wsum": 0.0,
                                       "ytd_wpct": 0.0, "symbols": []}
             industry_data[ind]["pct"]     += pct
-            industry_data[ind]["symbols"].append(h["symbol"])
+            industry_data[ind]["symbols"].append(sym_label)
             if ytd is not None:
-                industry_data[ind]["ytd_wsum"]  += ytd * pct
-                industry_data[ind]["ytd_wpct"]  += pct   # denominator
+                industry_data[ind]["ytd_wsum"] += ytd * pct
+                industry_data[ind]["ytd_wpct"] += pct        # denominator
+
+        def _ytd_from_history(sym):
+            """Fetch YTD return (%) via price history — works for any stock."""
+            try:
+                hist = yf.Ticker(sym).history(period="ytd", auto_adjust=True)
+                if hist.empty or len(hist) < 2:
+                    return None
+                first = float(hist["Close"].iloc[0])
+                last  = float(hist["Close"].iloc[-1])
+                if first == 0:
+                    return None
+                return round((last - first) / first * 100, 2)
+            except Exception:
+                return None
 
         for h in holdings:
             sym = h["symbol"].upper()
             pct = h["pct"]
             ind = db_ind.get(sym, "")
-            ytd = db_ytd.get(sym)          # None if not in price DB
+            ytd = db_ytd.get(sym)          # None if not in price_history.db
 
-            need_api = (not ind) or (ytd is None)
-            if need_api:
+            # Always try to get YTD from price history if not already resolved
+            if ytd is None:
+                ytd = _ytd_from_history(sym)
+
+            # Resolve industry if not in DB (one .info call)
+            if not ind:
                 try:
-                    info    = yf.Ticker(sym).info
+                    info = yf.Ticker(sym).info
+                    ind  = (info.get("industry") or "").strip()
                     if not ind:
-                        ind = (info.get("industry") or "").strip()
-                        if not ind:
-                            ind = (info.get("sector") or "").strip() or "Other"
-                    if ytd is None:
-                        ytd_raw = info.get("ytdReturn")
-                        if ytd_raw is not None:
-                            ytd = round(float(ytd_raw) * 100, 2)
+                        ind = (info.get("sector") or "").strip() or "Other"
                 except Exception:
-                    if not ind:
-                        ind = "Other"
+                    ind = "Other"
 
-            _add(ind or "Other", pct, ytd)
+            _add(ind or "Other", pct, ytd, h["symbol"])
 
         # ── 5. Build output ───────────────────────────────────────────────────
         industries = []
