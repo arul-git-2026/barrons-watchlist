@@ -119,6 +119,7 @@ def build_record(symbol, info, episode_key):
         "y":          ty,
         "s":          "flat",
         "sector":     clean_sector(info),
+        "industry":   info.get("industry", "") or "",
         "currency":   cur,
         "price_fmt":  f"{price:,.2f}",
         "price_raw":  price,

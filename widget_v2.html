@@ -985,7 +985,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
   </div>
   <!-- Filter selects row -->
   <div class="top-filter-row">
-    <select id="tf-sector"  onchange="syncFilter('f-sector',this)"><option value="">Financial Servi</option></select>
+    <select id="tf-sector"   onchange="syncSectorFilter(this)"><option value="">All Sectors</option></select>
+    <select id="tf-industry" onchange="syncFilter('f-industry',this)"><option value="">All Industries</option></select>
     <select id="tf-type"    onchange="syncFilter('f-type',this)">
       <option value="">ETF + Stock</option>
       <option value="ETF">ETF</option>
@@ -1233,7 +1234,8 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
     <!-- Hidden filter elements — moved to top-filter-bar in workspace -->
     <div style="display:none">
       <input type="text" id="srch" oninput="render()">
-      <select id="f-sector"  onchange="render()"><option value="">All Sectors</option></select>
+      <select id="f-sector"   onchange="populateIndustriesForSector(this.value);render();tvRender()"><option value="">All Sectors</option></select>
+      <select id="f-industry" onchange="render();tvRender()"><option value="">All Industries</option></select>
       <select id="f-type"    onchange="render()">
         <option value="">ETF + Stock</option>
         <option value="ETF">ETF</option>
@@ -1958,6 +1960,7 @@ function populateFilters() {
   fillSelectSector('f-sector', knownSectors, hasETF, hasNA);
   fillSelect('f-rec',     recs,     'All Recs');
   fillSelect('f-episode', episodes, 'All Episodes');
+  populateIndustriesForSector(document.getElementById('f-sector').value);
   // Mirror dynamic options to top filter bar
   setTimeout(mirrorDynamicFilters, 0);
   populateSourceDropdown();
@@ -2003,13 +2006,14 @@ function sortVal(d, k) {
 
 // ── Render table ───────────────────────────────────────────────────
 function render() {
-  const q       = document.getElementById('srch').value.toLowerCase();
-  const fSector = document.getElementById('f-sector').value;
-  const fType   = document.getElementById('f-type').value;
-  const fStatus = document.getElementById('f-status').value;
-  const fRec    = document.getElementById('f-rec').value;
-  const fEp     = document.getElementById('f-episode').value;
-  const fMove   = document.getElementById('f-move').value;
+  const q         = document.getElementById('srch').value.toLowerCase();
+  const fSector   = document.getElementById('f-sector').value;
+  const fIndustry = document.getElementById('f-industry')?.value || '';
+  const fType     = document.getElementById('f-type').value;
+  const fStatus   = document.getElementById('f-status').value;
+  const fRec      = document.getElementById('f-rec').value;
+  const fEp       = document.getElementById('f-episode').value;
+  const fMove     = document.getElementById('f-move').value;
 
   let rows = allData.filter(d => {
     if (!d.t) return false;   // skip records with null/empty ticker
@@ -2018,6 +2022,7 @@ function render() {
       if (fSector === 'N/A') { if (d.sector && d.sector !== 'N/A') return false; }
       else if (d.sector !== fSector) return false;
     }
+    if (fIndustry && (d.industry || '') !== fIndustry)            return false;
     if (fType   && d.y      !== fType)                            return false;
     if (fStatus && d.s      !== fStatus)                          return false;
     if (fRec    && d.rec !== fRec && d.rec_analyst !== fRec)     return false;
@@ -2750,6 +2755,53 @@ function syncFilter(hiddenId, topSel) {
   tvRender();
 }
 
+// Sector filter — cascades into Industry dropdown
+function syncSectorFilter(topSel) {
+  if (_mirrorInProgress) return;
+  const hidden = document.getElementById('f-sector');
+  if (hidden) hidden.value = topSel.value;
+  topSel.classList.toggle('active-filter', !!topSel.value);
+  populateIndustriesForSector(topSel.value);
+  render();
+  tvRender();
+}
+
+// Populate f-industry (and mirror to tf-industry) scoped to sectorVal
+function populateIndustriesForSector(sectorVal) {
+  const industries = [...new Set(
+    allData
+      .filter(d => {
+        if (!d.t) return false;
+        if (!sectorVal) return true;
+        if (sectorVal === 'N/A') return !d.sector || d.sector === 'N/A';
+        return d.sector === sectorVal;
+      })
+      .map(d => d.industry)
+      .filter(i => i && i !== 'N/A')
+  )].sort();
+
+  const curInd = document.getElementById('f-industry')?.value || '';
+  fillSelect('f-industry', industries, 'All Industries');
+  // Reset if current industry no longer valid for new sector
+  if (curInd && !industries.includes(curInd)) {
+    const fi = document.getElementById('f-industry');
+    if (fi) fi.value = '';
+  }
+  // Mirror to top bar
+  setTimeout(() => {
+    _mirrorInProgress = true;
+    const src = document.getElementById('f-industry');
+    const dst = document.getElementById('tf-industry');
+    if (src && dst) {
+      const prev = dst.value;
+      dst.innerHTML = src.innerHTML;
+      dst.value = industries.includes(prev) ? prev : '';
+      dst.classList.toggle('active-filter', !!dst.value);
+    }
+    _mirrorInProgress = false;
+  }, 0);
+}
+
 function syncSrcFilter(topSel) {
   if (_mirrorInProgress) return;   // ignore spurious change during innerHTML copy
   topSel.classList.toggle('active-filter', !!topSel.value);
@@ -2776,10 +2828,11 @@ let _mirrorInProgress = false;  // blocks change events during innerHTML copy
 function mirrorDynamicFilters() {
   _mirrorInProgress = true;
   const pairs = [
-    ['f-sector',  'tf-sector'],
-    ['f-rec',     'tf-rec'],
-    ['f-episode', 'tf-episode'],
-    ['f-source',  'tf-source'],
+    ['f-sector',   'tf-sector'],
+    ['f-industry', 'tf-industry'],
+    ['f-rec',      'tf-rec'],
+    ['f-episode',  'tf-episode'],
+    ['f-source',   'tf-source'],
   ];
   pairs.forEach(([srcId, dstId]) => {
     const src = document.getElementById(srcId);
@@ -4740,6 +4793,7 @@ let _tvSelected = new Set(); // selected ticker symbols
 const TV_COLS = [
   {k:'_chk', label:'<input type="checkbox" id="tv-chk-all" onclick="tvToggleAll(this)" style="width:14px;height:14px;cursor:pointer;accent-color:#c5221f">', left:true, fmt: (v,r) => r.t ? `<input type="checkbox" class="tv-chk" value="${r.t}" onclick="tvChkChange(event)">` : ''},
   {k:'sec', label:'Sector',    left:true,  fmt: v => v||'—'},
+  {k:'ind', label:'Industry',  left:true,  fmt: v => v||'—'},
   {k:'t',   label:'Ticker',    left:true,  cls:'ticker-cell', fmt: v => v},
   {k:'n',   label:'Name',      left:true,  fmt: v => `<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;display:inline-block">${v}</span>`},
   {k:'px',  label:'Price',     fmt: (v,r) => {
@@ -4900,18 +4954,20 @@ function tvBuildHeader() {
 function tvFilteredRows() {
   if (!_tvData) return [];
   const q      = (document.getElementById('srch-top')?.value || '').toLowerCase();
-  const fSec   = document.getElementById('tf-sector')?.value   || '';
-  const fType  = document.getElementById('tf-type')?.value     || '';
-  const fStat  = document.getElementById('tf-status')?.value   || '';
-  const fRec   = document.getElementById('tf-rec')?.value      || '';
-  const fMove  = document.getElementById('tf-move')?.value     || '';
-  const fWl    = document.getElementById('tf-watchlist')?.value || '';
-  const fEp    = document.getElementById('tf-episode')?.value   || '';
-  const fSrc   = document.getElementById('tf-source')?.value    || '';
+  const fSec   = document.getElementById('tf-sector')?.value    || '';
+  const fInd   = document.getElementById('tf-industry')?.value  || '';
+  const fType  = document.getElementById('tf-type')?.value      || '';
+  const fStat  = document.getElementById('tf-status')?.value    || '';
+  const fRec   = document.getElementById('tf-rec')?.value       || '';
+  const fMove  = document.getElementById('tf-move')?.value      || '';
+  const fWl    = document.getElementById('tf-watchlist')?.value  || '';
+  const fEp    = document.getElementById('tf-episode')?.value    || '';
+  const fSrc   = document.getElementById('tf-source')?.value     || '';
   return _tvData.filter(r => {
     if (!r.t) return false;   // skip records with null/empty ticker
     if (q     && !r.t.toLowerCase().includes(q) && !(r.n||'').toLowerCase().includes(q) && !(r.sec||'').toLowerCase().includes(q)) return false;
     if (fSec  && (r.sec    || '') !== fSec)         return false;
+    if (fInd  && (r.ind    || '') !== fInd)         return false;
     if (fType && (r.type   || 'Stock') !== fType)   return false;
     if (fStat && (r.status || '') !== fStat)         return false;
     if (fRec  && (r.rec    || '') !== fRec)          return false;
