@@ -2253,12 +2253,20 @@ def etf_holdings(ticker):
 @app.route("/api/etf-industry-breakdown/<ticker>")
 def etf_industry_breakdown(ticker):
     """
-    For each holding in an ETF, look up its industry (DB first, then Yahoo),
-    then aggregate weights by industry → treemap data.
+    For each ETF holding resolve industry + YTD return, then aggregate by
+    industry: sum of position weights, weighted-average YTD.
 
-    Cached 24 h in-memory.  Slow first call (1 Yahoo fetch per unknown holding).
+    Resolution priority:
+      industry  → DB record first, then yfinance .info
+      YTD       → price_history.db first (first-close-of-year vs latest),
+                  then yfinance .info['ytdReturn']
+
+    Cached 24 h in-memory.
     """
     import time as _time
+    import sqlite3 as _sqlite3
+    from datetime import date as _date
+
     ticker = ticker.upper()
     cache_key = f"__etf_ind_breakdown_{ticker}__"
     cached = _cache.get(cache_key)
@@ -2267,7 +2275,7 @@ def etf_industry_breakdown(ticker):
         return jsonify(payload)
 
     try:
-        # ── 1. Get holdings (reuse cached ETF data if available) ─────────────
+        # ── 1. Get holdings list ──────────────────────────────────────────────
         h_key = f"__etf_holdings_{ticker}__"
         h_cached = _cache.get(h_key)
         if h_cached:
@@ -2293,61 +2301,91 @@ def etf_industry_breakdown(ticker):
         if not holdings:
             return jsonify({"ok": False, "error": "No holdings data for this ETF"}), 404
 
-        # ── 2. Build a quick symbol→industry lookup from our DB ───────────────
+        # ── 2. DB industry cache ──────────────────────────────────────────────
         db_ind = {}
         for rec in load_data():
-            sym = (rec.get("t") or "").upper()
-            ind = (rec.get("industry") or "").strip()
-            if sym and ind:
-                db_ind[sym] = ind
+            s = (rec.get("t") or "").upper()
+            i = (rec.get("industry") or "").strip()
+            if s and i:
+                db_ind[s] = i
 
-        # ── 3. For each holding, resolve industry ────────────────────────────
-        industry_weights = {}   # industry → {"pct": float, "symbols": [str]}
-        unknown_symbols  = []
+        # ── 3. YTD from price_history.db (fast, no extra API calls) ──────────
+        db_ytd = {}   # sym → float (%)
+        year_start = str(_date.today().year) + "-01-01"
+        try:
+            conn = _sqlite3.connect(DB_FILE)
+            for h in holdings:
+                s = h["symbol"].upper()
+                try:
+                    first = conn.execute(
+                        "SELECT close FROM prices WHERE ticker=? AND date>=? "
+                        "ORDER BY date ASC LIMIT 1", (s, year_start)
+                    ).fetchone()
+                    last = conn.execute(
+                        "SELECT close FROM prices WHERE ticker=? "
+                        "ORDER BY date DESC LIMIT 1", (s,)
+                    ).fetchone()
+                    if first and last and first[0]:
+                        db_ytd[s] = round((last[0] - first[0]) / first[0] * 100, 2)
+                except Exception:
+                    pass
+            conn.close()
+        except Exception:
+            pass
+
+        # ── 4. Resolve industry + YTD for each holding ───────────────────────
+        #   - Symbols with both industry (DB) and YTD (price DB) → no API call
+        #   - Everything else → one yfinance .info call
+        industry_data = {}  # ind → {pct, ytd_wsum, ytd_wpct, symbols}
+
+        def _add(ind, pct, ytd):
+            """Accumulate pct weight and weighted YTD into industry_data."""
+            if ind not in industry_data:
+                industry_data[ind] = {"pct": 0.0, "ytd_wsum": 0.0,
+                                      "ytd_wpct": 0.0, "symbols": []}
+            industry_data[ind]["pct"]     += pct
+            industry_data[ind]["symbols"].append(h["symbol"])
+            if ytd is not None:
+                industry_data[ind]["ytd_wsum"]  += ytd * pct
+                industry_data[ind]["ytd_wpct"]  += pct   # denominator
 
         for h in holdings:
             sym = h["symbol"].upper()
             pct = h["pct"]
             ind = db_ind.get(sym, "")
-            if not ind:
-                unknown_symbols.append((sym, pct))
-            else:
-                if ind not in industry_weights:
-                    industry_weights[ind] = {"pct": 0.0, "symbols": []}
-                industry_weights[ind]["pct"]     += pct
-                industry_weights[ind]["symbols"].append(sym)
+            ytd = db_ytd.get(sym)          # None if not in price DB
 
-        # Fetch industries for unknowns (cap at 20 to keep it snappy)
-        for sym, pct in unknown_symbols[:20]:
-            try:
-                info = yf.Ticker(sym).info
-                ind  = (info.get("industry") or "").strip()
-                if not ind:
-                    # Use sector as fallback
-                    ind = (info.get("sector") or "").strip() or "Other"
-                if ind not in industry_weights:
-                    industry_weights[ind] = {"pct": 0.0, "symbols": []}
-                industry_weights[ind]["pct"]     += pct
-                industry_weights[ind]["symbols"].append(sym)
-            except Exception:
-                ind = "Other"
-                if ind not in industry_weights:
-                    industry_weights[ind] = {"pct": 0.0, "symbols": []}
-                industry_weights[ind]["pct"]     += pct
-                industry_weights[ind]["symbols"].append(sym)
+            need_api = (not ind) or (ytd is None)
+            if need_api:
+                try:
+                    info    = yf.Ticker(sym).info
+                    if not ind:
+                        ind = (info.get("industry") or "").strip()
+                        if not ind:
+                            ind = (info.get("sector") or "").strip() or "Other"
+                    if ytd is None:
+                        ytd_raw = info.get("ytdReturn")
+                        if ytd_raw is not None:
+                            ytd = round(float(ytd_raw) * 100, 2)
+                except Exception:
+                    if not ind:
+                        ind = "Other"
 
-        # Remaining unknowns (beyond 20 cap) → "Other"
-        for sym, pct in unknown_symbols[20:]:
-            industry_weights.setdefault("Other", {"pct": 0.0, "symbols": []})
-            industry_weights["Other"]["pct"]    += pct
-            industry_weights["Other"]["symbols"].append(sym)
+            _add(ind or "Other", pct, ytd)
 
-        # ── 4. Sort descending by weight ─────────────────────────────────────
-        industries = sorted(
-            [{"name": k, "pct": round(v["pct"], 2), "symbols": v["symbols"]}
-             for k, v in industry_weights.items()],
-            key=lambda x: -x["pct"]
-        )
+        # ── 5. Build output ───────────────────────────────────────────────────
+        industries = []
+        for name, d in industry_data.items():
+            ytd_avg = (round(d["ytd_wsum"] / d["ytd_wpct"], 2)
+                       if d["ytd_wpct"] > 0 else None)
+            industries.append({
+                "name":    name,
+                "pct":     round(d["pct"], 2),
+                "ytd":     ytd_avg,
+                "symbols": d["symbols"],
+            })
+
+        industries.sort(key=lambda x: -x["pct"])
         total_pct = round(sum(i["pct"] for i in industries), 2)
 
         result = {"ok": True, "ticker": ticker,

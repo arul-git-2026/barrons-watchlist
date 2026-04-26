@@ -769,11 +769,15 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 /* ETF Industry Breakdown */
 .etf-ind-section{margin-top:22px;border-top:1px solid var(--border);padding-top:16px}
 .etf-ind-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:10px}
+.etf-ind-hdr{display:flex;align-items:center;gap:8px;padding:0 0 5px;
+  font-size:10px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:2px}
 .etf-ind-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px}
-.etf-ind-label{flex:0 0 160px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.etf-ind-label{flex:0 0 155px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .etf-ind-track{flex:1;height:7px;background:var(--border);border-radius:3px;overflow:hidden}
 .etf-ind-fill{height:100%;border-radius:3px}
-.etf-ind-pct{flex:0 0 42px;text-align:right;font-weight:600;font-size:11px}
+.etf-ind-pct{flex:0 0 50px;text-align:right;font-weight:600;font-size:11px}
+.etf-ind-ytd{flex:0 0 58px;text-align:right;font-weight:700;font-size:11px}
+.etf-ind-ytd.up{color:var(--up)}.etf-ind-ytd.dn{color:var(--down)}.etf-ind-ytd.na{color:var(--muted)}
 .etf-treemap-wrap{position:relative;width:100%;aspect-ratio:1.6/1;min-height:180px}
 .etf-treemap-wrap svg{width:100%;height:100%;display:block}
 .etf-load-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
@@ -3370,28 +3374,45 @@ async function loadETFIndustryBreakdown(ticker) {
     if (btn) btn.style.display = 'none';
 
     const maxPct = data.industries[0].pct;
+    const hasYTD = data.industries.some(i => i.ytd !== null && i.ytd !== undefined);
 
-    // Left: bar-chart table
+    // Column header
+    const hdrHTML = '<div class="etf-ind-hdr">'
+      + '<div style="flex:0 0 155px">Industry</div>'
+      + '<div style="flex:1">Market Weight</div>'
+      + '<div style="flex:0 0 50px;text-align:right">Weight</div>'
+      + (hasYTD ? '<div style="flex:0 0 58px;text-align:right">YTD Return</div>' : '')
+      + '</div>';
+
+    // Rows
     const tableHTML = data.industries.map((ind, idx) => {
-      const color = _TREEMAP_PALETTE[idx % _TREEMAP_PALETTE.length];
-      const barW  = (ind.pct / maxPct * 100).toFixed(1);
-      const tip   = ind.symbols.slice(0, 6).join(', ') + (ind.symbols.length > 6 ? '…' : '');
+      const color  = _TREEMAP_PALETTE[idx % _TREEMAP_PALETTE.length];
+      const barW   = (ind.pct / maxPct * 100).toFixed(1);
+      const tip    = ind.symbols.slice(0, 6).join(', ') + (ind.symbols.length > 6 ? '…' : '');
+      const ytdVal = (ind.ytd !== null && ind.ytd !== undefined);
+      const ytdCls = !ytdVal ? 'na' : ind.ytd >= 0 ? 'up' : 'dn';
+      const ytdTxt = ytdVal
+        ? (ind.ytd >= 0 ? '+' : '') + ind.ytd.toFixed(2) + '%'
+        : '—';
       return '<div class="etf-ind-row" title="' + escHtml(tip) + '">'
         + '<div class="etf-ind-label">' + escHtml(ind.name) + '</div>'
         + '<div class="etf-ind-track"><div class="etf-ind-fill" style="width:' + barW + '%;background:' + color + '"></div></div>'
-        + '<div class="etf-ind-pct">' + ind.pct.toFixed(1) + '%</div>'
+        + '<div class="etf-ind-pct">' + ind.pct.toFixed(2) + '%</div>'
+        + (hasYTD ? '<div class="etf-ind-ytd ' + ytdCls + '">' + ytdTxt + '</div>' : '')
         + '</div>';
     }).join('');
 
     const treeSVG = _renderTreemapSVG(data.industries);
 
     content.innerHTML = '<div class="etf-ind-grid">'
-      + '<div>' + tableHTML + '</div>'
+      + '<div>' + hdrHTML + tableHTML + '</div>'
       + '<div class="etf-treemap-wrap">' + treeSVG + '</div>'
       + '</div>'
       + '<div style="font-size:10px;color:var(--muted);margin-top:8px">'
       + 'Based on top ' + data.industries.reduce((s,i) => s + i.symbols.length, 0)
-      + ' holdings · ' + data.total_pct.toFixed(1) + '% of assets covered</div>';
+      + ' holdings · ' + data.total_pct.toFixed(1) + '% of assets covered'
+      + (hasYTD ? ' · YTD = weighted avg by position size' : '')
+      + '</div>';
 
   } catch(e) {
     content.innerHTML = '<div style="color:var(--down);font-size:12px;padding:8px 0">⚠ ' + escHtml(e.message) + '</div>';
