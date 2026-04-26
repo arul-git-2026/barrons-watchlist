@@ -3143,17 +3143,25 @@ function loadRCTabContent(tab) {
 
 // ── ETF Holdings ─────────────────────────────────────────────────────────────
 const _ETF_SECTOR_LABELS = {
-  technology:              'Technology',
-  financialServices:       'Financial Services',
-  communicationServices:   'Communication Services',
-  consumerCyclical:        'Consumer Cyclical',
-  healthcare:              'Healthcare',
-  industrials:             'Industrials',
-  consumerDefensive:       'Consumer Defensive',
-  energy:                  'Energy',
-  utilities:               'Utilities',
-  realEstate:              'Real Estate',
-  basicMaterials:          'Basic Materials',
+  // yfinance returns underscore_case keys
+  technology:               'Technology',
+  financial_services:       'Financial Services',
+  communication_services:   'Communication Services',
+  consumer_cyclical:        'Consumer Cyclical',
+  healthcare:               'Healthcare',
+  industrials:              'Industrials',
+  consumer_defensive:       'Consumer Defensive',
+  energy:                   'Energy',
+  utilities:                'Utilities',
+  realestate:               'Real Estate',
+  basic_materials:          'Basic Materials',
+  // camelCase fallbacks (older yfinance versions)
+  financialServices:        'Financial Services',
+  communicationServices:    'Communication Services',
+  consumerCyclical:         'Consumer Cyclical',
+  consumerDefensive:        'Consumer Defensive',
+  realEstate:               'Real Estate',
+  basicMaterials:           'Basic Materials',
 };
 
 async function loadETFHoldings(ticker) {

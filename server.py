@@ -2211,16 +2211,24 @@ def etf_holdings(ticker):
         y_sym = YAHOO_MAP.get(ticker, ticker)
         fd    = yf.Ticker(y_sym).funds_data
 
-        # Top holdings
+        # Top holdings — symbol is the DataFrame index, not a column
         holdings = []
         if fd.top_holdings is not None and not fd.top_holdings.empty:
-            for _, row in fd.top_holdings.iterrows():
-                pct = row.get("holdingPercent", 0) or 0
-                holdings.append({
-                    "symbol": str(row.get("symbol", "")),
-                    "name":   str(row.get("holdingName", "")),
-                    "pct":    round(float(pct) * 100, 2),
-                })
+            df = fd.top_holdings.reset_index()   # move index → column
+            cols = [c.lower() for c in df.columns]
+            # Locate columns flexibly (yfinance column names vary by version)
+            sym_col  = next((df.columns[i] for i, c in enumerate(cols) if 'symbol' in c), None)
+            name_col = next((df.columns[i] for i, c in enumerate(cols) if 'name' in c or 'holding' in c), None)
+            pct_col  = next((df.columns[i] for i, c in enumerate(cols) if 'percent' in c or 'asset' in c or 'weight' in c), None)
+            log.info(f"  etf-holdings cols: {list(df.columns)} → sym={sym_col} name={name_col} pct={pct_col}")
+            for _, row in df.iterrows():
+                sym  = str(row[sym_col])  if sym_col  else ""
+                name = str(row[name_col]) if name_col else ""
+                pct  = float(row[pct_col]) if pct_col and row[pct_col] is not None else 0
+                # yfinance returns fraction (0.07) or percent (7.0) — normalise
+                if pct_col and pct < 2:
+                    pct = pct * 100
+                holdings.append({"symbol": sym, "name": name, "pct": round(pct, 2)})
 
         # Sector weightings — sorted descending
         sectors = []
