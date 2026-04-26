@@ -2193,6 +2193,55 @@ def enrich_yields():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/etf-holdings/<ticker>")
+def etf_holdings(ticker):
+    """
+    Return top holdings + sector weightings for an ETF via yfinance funds_data.
+    Cached in-memory for 6 hours to avoid repeated slow fetches.
+    """
+    import time as _time
+    ticker = ticker.upper()
+    cache_key = f"__etf_holdings_{ticker}__"
+    cached = _cache.get(cache_key)
+    if cached and (_time.time() - cached.get("_ts", 0)) < 21600:   # 6h TTL
+        payload = {k: v for k, v in cached.items() if k != "_ts"}
+        return jsonify(payload)
+
+    try:
+        y_sym = YAHOO_MAP.get(ticker, ticker)
+        fd    = yf.Ticker(y_sym).funds_data
+
+        # Top holdings
+        holdings = []
+        if fd.top_holdings is not None and not fd.top_holdings.empty:
+            for _, row in fd.top_holdings.iterrows():
+                pct = row.get("holdingPercent", 0) or 0
+                holdings.append({
+                    "symbol": str(row.get("symbol", "")),
+                    "name":   str(row.get("holdingName", "")),
+                    "pct":    round(float(pct) * 100, 2),
+                })
+
+        # Sector weightings — sorted descending
+        sectors = []
+        sw = fd.sector_weightings or {}
+        for k, v in sorted(sw.items(), key=lambda x: -(x[1] or 0)):
+            if v:
+                sectors.append({"key": k, "pct": round(float(v) * 100, 2)})
+
+        total_pct = round(sum(h["pct"] for h in holdings), 2)
+        result = {"ok": True, "ticker": ticker,
+                  "holdings": holdings, "sectors": sectors,
+                  "total_pct": total_pct}
+
+        _cache[cache_key] = {**result, "_ts": _time.time()}
+        return jsonify(result)
+
+    except Exception as e:
+        log.warning(f"etf-holdings {ticker}: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/add-ticker", methods=["POST"])
 def add_ticker():
     """

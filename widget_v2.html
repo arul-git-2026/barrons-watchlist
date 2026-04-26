@@ -749,6 +749,23 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 .rctab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
 .tab-pane{display:none}.tab-pane.on{display:block}
 .rc-placeholder{text-align:center;padding:24px;color:var(--muted);font-size:12px}
+/* ── ETF Holdings panel ──────────────────────────────────────── */
+.etf-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:4px 0}
+.etf-section-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;
+  padding-bottom:6px;border-bottom:2px solid var(--accent)}
+.etf-holdings-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.etf-holdings-tbl th{text-align:left;color:var(--muted);font-weight:500;padding:4px 6px 6px;
+  border-bottom:1px solid var(--border);font-size:11px}
+.etf-holdings-tbl td{padding:5px 6px;border-bottom:1px solid var(--border)}
+.etf-holdings-tbl tr:last-child td{border-bottom:none}
+.etf-holdings-tbl td.sym{color:var(--accent);font-family:'Roboto Mono',monospace;font-weight:700}
+.etf-holdings-tbl td.pct{text-align:right;font-weight:600}
+.etf-sw-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px}
+.etf-sw-label{flex:0 0 170px;color:var(--text)}
+.etf-sw-track{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.etf-sw-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .3s}
+.etf-sw-pct{flex:0 0 48px;text-align:right;font-weight:600;font-size:12px}
+@media(max-width:700px){.etf-grid{grid-template-columns:1fr}}
 /* Perplexity */
 .rc-run-btn{padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;
   font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:opacity .15s}
@@ -2252,6 +2269,13 @@ function toggleSumSection(toggleEl) {
 // ── Detail panel ───────────────────────────────────────────────────
 function selectRow(ticker) {
   activeRow = ticker;
+  const d = (allData || []).find(r => r.t === ticker);
+  // Auto-switch to Holdings for ETFs; reset away from Holdings for non-ETFs
+  if (d?.y === 'ETF') {
+    if (_rcTab !== 'holdings') _rcTab = 'holdings';
+  } else {
+    if (_rcTab === 'holdings') _rcTab = 'perplexity';
+  }
   showResearchCard(ticker);
   render();
   // Auto-fetch Finnhub in background so sidebar earn-pill + sentiment dot populate
@@ -2389,6 +2413,9 @@ function selectRow(ticker) {
       </button>
       <button class="rctab ${activeTab==='scenarios'?'on':''}" id="rctab-scenarios" onclick="setRCTab('scenarios',this)"
               style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">Scenarios</button>
+      ${d.y === 'ETF' ? `<button class="rctab ${activeTab==='holdings'?'on':''}" id="rctab-holdings" onclick="setRCTab('holdings',this)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        Holdings</button>` : ''}
     </div>
 
     <!-- Research panes (content loaded by loadRCTabContent) -->
@@ -2397,6 +2424,9 @@ function selectRow(ticker) {
     <div class="tab-pane ${activeTab==='sec'?'on':''}" id="rc-tab-sec" style="padding-top:10px"></div>
     <div class="tab-pane ${activeTab==='tos'?'on':''}" id="rc-tab-tos" style="padding-top:10px"></div>
     <div class="tab-pane ${activeTab==='finnhub'?'on':''}" id="rc-tab-finnhub" style="padding-top:10px"></div>
+
+    <!-- ETF Holdings pane -->
+    ${d.y === 'ETF' ? `<div class="tab-pane ${activeTab==='holdings'?'on':''}" id="rc-tab-holdings" style="padding-top:10px"></div>` : ''}
 
     <!-- Barrons: episode-tagged research notes -->
     <div class="tab-pane ${activeTab==='barrons'?'on':''}" id="rc-tab-barrons" style="padding-top:10px">
@@ -3088,6 +3118,7 @@ function loadRCTabContent(tab) {
     else if (tab === 'sec')          renderSECLinks(ticker);
     else if (tab === 'tos')          renderTOS(ticker);
     else if (tab === 'finnhub')      loadFinnhub(ticker);
+    else if (tab === 'holdings')     loadETFHoldings(ticker);
     // barrons / liveresearch / scenarios: content rendered inline — nothing to load
   } catch(e) {
     const pane = document.getElementById('rc-tab-' + tab);
@@ -3099,6 +3130,85 @@ function loadRCTabContent(tab) {
         <button onclick="loadRCTabContent('${tab}')" style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">↺ Retry</button>
       </div>`;
     console.error('Tab error [' + tab + ']:', e);
+  }
+}
+
+// ── ETF Holdings ─────────────────────────────────────────────────────────────
+const _ETF_SECTOR_LABELS = {
+  technology:              'Technology',
+  financialServices:       'Financial Services',
+  communicationServices:   'Communication Services',
+  consumerCyclical:        'Consumer Cyclical',
+  healthcare:              'Healthcare',
+  industrials:             'Industrials',
+  consumerDefensive:       'Consumer Defensive',
+  energy:                  'Energy',
+  utilities:               'Utilities',
+  realEstate:              'Real Estate',
+  basicMaterials:          'Basic Materials',
+};
+
+async function loadETFHoldings(ticker) {
+  const pane = document.getElementById('rc-tab-holdings');
+  if (!pane) return;
+  pane.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading holdings…</div>';
+
+  try {
+    const res  = await fetch(`/api/etf-holdings/${ticker}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+
+    const maxPct = data.sectors.length > 0 ? data.sectors[0].pct : 100;
+
+    const holdingsHTML = data.holdings.length
+      ? `<table class="etf-holdings-tbl">
+          <thead><tr><th>Symbol</th><th>Company</th><th style="text-align:right">% Assets</th></tr></thead>
+          <tbody>
+            ${data.holdings.map(h => `
+              <tr>
+                <td class="sym">${h.symbol}</td>
+                <td style="color:var(--muted)">${h.name}</td>
+                <td class="pct">${h.pct.toFixed(2)}%</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`
+      : '<div style="color:var(--muted);font-size:12px">No holdings data available.</div>';
+
+    const sectorsHTML = data.sectors.length
+      ? data.sectors.map(s => `
+          <div class="etf-sw-row">
+            <div class="etf-sw-label">${_ETF_SECTOR_LABELS[s.key] || s.key}</div>
+            <div class="etf-sw-track">
+              <div class="etf-sw-fill" style="width:${(s.pct / maxPct * 100).toFixed(1)}%"></div>
+            </div>
+            <div class="etf-sw-pct">${s.pct.toFixed(2)}%</div>
+          </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px">No sector weighting data available.</div>';
+
+    pane.innerHTML = `
+      <div style="margin-bottom:10px">
+        <span style="font-size:15px;font-weight:700">Holdings: ${ticker}</span>
+      </div>
+      <div class="etf-grid">
+        <div>
+          <div class="etf-section-title">Top ${data.holdings.length} Holdings (${data.total_pct}% of Total Assets)</div>
+          ${holdingsHTML}
+        </div>
+        <div>
+          <div class="etf-section-title">Sector Weightings</div>
+          ${sectorsHTML}
+        </div>
+      </div>`;
+
+  } catch(e) {
+    pane.innerHTML = `
+      <div style="padding:24px;text-align:center;color:var(--down)">
+        <div style="font-size:18px;margin-bottom:8px">⚠</div>
+        <div style="font-weight:600;margin-bottom:4px">Could not load holdings</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${e.message}</div>
+        <button onclick="loadETFHoldings('${ticker}')"
+          style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">↺ Retry</button>
+      </div>`;
   }
 }
 
