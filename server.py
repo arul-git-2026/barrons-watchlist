@@ -2250,6 +2250,116 @@ def etf_holdings(ticker):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/etf-industry-breakdown/<ticker>")
+def etf_industry_breakdown(ticker):
+    """
+    For each holding in an ETF, look up its industry (DB first, then Yahoo),
+    then aggregate weights by industry → treemap data.
+
+    Cached 24 h in-memory.  Slow first call (1 Yahoo fetch per unknown holding).
+    """
+    import time as _time
+    ticker = ticker.upper()
+    cache_key = f"__etf_ind_breakdown_{ticker}__"
+    cached = _cache.get(cache_key)
+    if cached and (_time.time() - cached.get("_ts", 0)) < 86400:   # 24 h TTL
+        payload = {k: v for k, v in cached.items() if k != "_ts"}
+        return jsonify(payload)
+
+    try:
+        # ── 1. Get holdings (reuse cached ETF data if available) ─────────────
+        h_key = f"__etf_holdings_{ticker}__"
+        h_cached = _cache.get(h_key)
+        if h_cached:
+            holdings = h_cached.get("holdings", [])
+        else:
+            y_sym = YAHOO_MAP.get(ticker, ticker)
+            fd    = yf.Ticker(y_sym).funds_data
+            holdings = []
+            if fd.top_holdings is not None and not fd.top_holdings.empty:
+                df   = fd.top_holdings.reset_index()
+                cols = [c.lower() for c in df.columns]
+                sym_col = next((df.columns[i] for i, c in enumerate(cols) if "symbol" in c), None)
+                pct_col = next((df.columns[i] for i, c in enumerate(cols)
+                                if "percent" in c or "asset" in c or "weight" in c), None)
+                for _, row in df.iterrows():
+                    sym = str(row[sym_col]) if sym_col else ""
+                    pct = float(row[pct_col]) if pct_col and row[pct_col] is not None else 0
+                    if pct_col and pct < 2:
+                        pct = pct * 100
+                    if sym:
+                        holdings.append({"symbol": sym, "pct": round(pct, 2)})
+
+        if not holdings:
+            return jsonify({"ok": False, "error": "No holdings data for this ETF"}), 404
+
+        # ── 2. Build a quick symbol→industry lookup from our DB ───────────────
+        db_ind = {}
+        for rec in load_data():
+            sym = (rec.get("t") or "").upper()
+            ind = (rec.get("industry") or "").strip()
+            if sym and ind:
+                db_ind[sym] = ind
+
+        # ── 3. For each holding, resolve industry ────────────────────────────
+        industry_weights = {}   # industry → {"pct": float, "symbols": [str]}
+        unknown_symbols  = []
+
+        for h in holdings:
+            sym = h["symbol"].upper()
+            pct = h["pct"]
+            ind = db_ind.get(sym, "")
+            if not ind:
+                unknown_symbols.append((sym, pct))
+            else:
+                if ind not in industry_weights:
+                    industry_weights[ind] = {"pct": 0.0, "symbols": []}
+                industry_weights[ind]["pct"]     += pct
+                industry_weights[ind]["symbols"].append(sym)
+
+        # Fetch industries for unknowns (cap at 20 to keep it snappy)
+        for sym, pct in unknown_symbols[:20]:
+            try:
+                info = yf.Ticker(sym).info
+                ind  = (info.get("industry") or "").strip()
+                if not ind:
+                    # Use sector as fallback
+                    ind = (info.get("sector") or "").strip() or "Other"
+                if ind not in industry_weights:
+                    industry_weights[ind] = {"pct": 0.0, "symbols": []}
+                industry_weights[ind]["pct"]     += pct
+                industry_weights[ind]["symbols"].append(sym)
+            except Exception:
+                ind = "Other"
+                if ind not in industry_weights:
+                    industry_weights[ind] = {"pct": 0.0, "symbols": []}
+                industry_weights[ind]["pct"]     += pct
+                industry_weights[ind]["symbols"].append(sym)
+
+        # Remaining unknowns (beyond 20 cap) → "Other"
+        for sym, pct in unknown_symbols[20:]:
+            industry_weights.setdefault("Other", {"pct": 0.0, "symbols": []})
+            industry_weights["Other"]["pct"]    += pct
+            industry_weights["Other"]["symbols"].append(sym)
+
+        # ── 4. Sort descending by weight ─────────────────────────────────────
+        industries = sorted(
+            [{"name": k, "pct": round(v["pct"], 2), "symbols": v["symbols"]}
+             for k, v in industry_weights.items()],
+            key=lambda x: -x["pct"]
+        )
+        total_pct = round(sum(i["pct"] for i in industries), 2)
+
+        result = {"ok": True, "ticker": ticker,
+                  "industries": industries, "total_pct": total_pct}
+        _cache[cache_key] = {**result, "_ts": _time.time()}
+        return jsonify(result)
+
+    except Exception as e:
+        log.warning(f"etf-industry-breakdown {ticker}: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/add-ticker", methods=["POST"])
 def add_ticker():
     """

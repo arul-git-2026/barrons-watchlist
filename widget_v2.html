@@ -766,6 +766,22 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 .etf-sw-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .3s}
 .etf-sw-pct{flex:0 0 48px;text-align:right;font-weight:600;font-size:12px}
 @media(max-width:700px){.etf-grid{grid-template-columns:1fr}}
+/* ETF Industry Breakdown */
+.etf-ind-section{margin-top:22px;border-top:1px solid var(--border);padding-top:16px}
+.etf-ind-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:10px}
+.etf-ind-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px}
+.etf-ind-label{flex:0 0 160px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.etf-ind-track{flex:1;height:7px;background:var(--border);border-radius:3px;overflow:hidden}
+.etf-ind-fill{height:100%;border-radius:3px}
+.etf-ind-pct{flex:0 0 42px;text-align:right;font-weight:600;font-size:11px}
+.etf-treemap-wrap{position:relative;width:100%;aspect-ratio:1.6/1;min-height:180px}
+.etf-treemap-wrap svg{width:100%;height:100%;display:block}
+.etf-load-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);
+  border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--font);
+  font-weight:600;transition:background .15s}
+.etf-load-btn:hover{background:var(--border)}
+@media(max-width:700px){.etf-ind-grid{grid-template-columns:1fr}}
 /* Perplexity */
 .rc-run-btn{padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;
   font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:opacity .15s}
@@ -3214,6 +3230,16 @@ async function loadETFHoldings(ticker) {
           <div class="etf-section-title">Sector Weightings</div>
           ${sectorsHTML}
         </div>
+      </div>
+      <div class="etf-ind-section" id="etf-ind-wrap-${ticker}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+          <span style="font-size:12px;font-weight:700;color:var(--text)">Industry Breakdown</span>
+          <button class="etf-load-btn" id="etf-ind-btn-${ticker}"
+            onclick="loadETFIndustryBreakdown('${ticker}')">
+            &#9783; Load Industry Breakdown
+          </button>
+        </div>
+        <div id="etf-ind-content-${ticker}"></div>
       </div>`;
 
   } catch(e) {
@@ -3225,6 +3251,151 @@ async function loadETFHoldings(ticker) {
         <button onclick="loadETFHoldings('${ticker}')"
           style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">↺ Retry</button>
       </div>`;
+  }
+}
+
+// ── ETF Industry Breakdown Treemap ───────────────────────────────────────────
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const _TREEMAP_PALETTE = [
+  '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+  '#06b6d4','#84cc16','#f97316','#ec4899','#6366f1',
+  '#14b8a6','#a855f7','#eab308','#22c55e','#f43f5e',
+  '#0ea5e9','#d946ef','#fb923c','#4ade80','#38bdf8',
+];
+
+/**
+ * Binary-split treemap layout.
+ * items: [{name, pct, ...}]  (sorted descending by pct)
+ * Returns [{name, pct, x, y, w, h, ...}]
+ */
+function _treemapLayout(items, x, y, w, h) {
+  if (!items.length) return [];
+  if (items.length === 1) return [Object.assign({}, items[0], {x, y, w, h})];
+
+  const total = items.reduce((s, i) => s + i.pct, 0);
+  // Find split nearest to half-total
+  let best = 1, bestDiff = Infinity, cumSum = 0;
+  for (let i = 0; i < items.length - 1; i++) {
+    cumSum += items[i].pct;
+    const diff = Math.abs(cumSum - total / 2);
+    if (diff < bestDiff) { bestDiff = diff; best = i + 1; }
+  }
+  const left  = items.slice(0, best);
+  const right = items.slice(best);
+  const lRatio = left.reduce((s, i) => s + i.pct, 0) / total;
+
+  if (w >= h) {
+    const lw = w * lRatio;
+    return [..._treemapLayout(left, x, y, lw, h),
+            ..._treemapLayout(right, x + lw, y, w - lw, h)];
+  } else {
+    const lh = h * lRatio;
+    return [..._treemapLayout(left, x, y, w, lh),
+            ..._treemapLayout(right, x, y + lh, w, h - lh)];
+  }
+}
+
+function _renderTreemapSVG(industries) {
+  const W = 480, H = 300;
+  const rects = _treemapLayout(industries, 0, 0, W, H);
+  const PAD = 2;  // gap between cells
+
+  const cells = rects.map((r, idx) => {
+    const color = _TREEMAP_PALETTE[idx % _TREEMAP_PALETTE.length];
+    const x = r.x + PAD, y = r.y + PAD;
+    const w = Math.max(0, r.w - PAD * 2);
+    const h = Math.max(0, r.h - PAD * 2);
+    const cx = x + w / 2, cy = y + h / 2;
+
+    // Show label only if cell is big enough
+    const showLabel = w > 40 && h > 26;
+    const showPct   = w > 50 && h > 42;
+    const fontSize  = Math.min(12, Math.max(9, w / 10));
+
+    const labelLines = showLabel
+      ? '<text x="' + cx + '" y="' + (cy - (showPct ? 7 : 0)) + '" '
+        + 'text-anchor="middle" dominant-baseline="middle" '
+        + 'font-size="' + fontSize + '" font-weight="600" fill="#fff" '
+        + 'style="pointer-events:none">'
+        + escHtml(r.name.length > 20 ? r.name.slice(0, 18) + '…' : r.name)
+        + '</text>'
+      : '';
+    const pctLine = showPct
+      ? '<text x="' + cx + '" y="' + (cy + 9) + '" '
+        + 'text-anchor="middle" dominant-baseline="middle" '
+        + 'font-size="' + Math.max(9, fontSize - 1) + '" fill="rgba(255,255,255,.85)" '
+        + 'style="pointer-events:none">' + r.pct.toFixed(1) + '%</text>'
+      : '';
+
+    return '<g>'
+      + '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" '
+      + 'rx="3" fill="' + color + '" opacity="0.88">'
+      + '<title>' + escHtml(r.name) + ': ' + r.pct.toFixed(2) + '%</title></rect>'
+      + labelLines + pctLine
+      + '</g>';
+  });
+
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" '
+    + 'style="width:100%;height:100%;display:block;border-radius:6px">'
+    + cells.join('')
+    + '</svg>';
+}
+
+async function loadETFIndustryBreakdown(ticker) {
+  const btn     = document.getElementById('etf-ind-btn-' + ticker);
+  const content = document.getElementById('etf-ind-content-' + ticker);
+  if (!content) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Fetching industry data for each holding…<br><span style="font-size:11px">(first load may take 10–20 s)</span></div>';
+
+  try {
+    const res  = await fetch('/api/etf-industry-breakdown/' + ticker);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+
+    if (!data.industries.length) {
+      content.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No industry data available.</div>';
+      if (btn) btn.style.display = 'none';
+      return;
+    }
+
+    // Hide button after success
+    if (btn) btn.style.display = 'none';
+
+    const maxPct = data.industries[0].pct;
+
+    // Left: bar-chart table
+    const tableHTML = data.industries.map((ind, idx) => {
+      const color = _TREEMAP_PALETTE[idx % _TREEMAP_PALETTE.length];
+      const barW  = (ind.pct / maxPct * 100).toFixed(1);
+      const tip   = ind.symbols.slice(0, 6).join(', ') + (ind.symbols.length > 6 ? '…' : '');
+      return '<div class="etf-ind-row" title="' + escHtml(tip) + '">'
+        + '<div class="etf-ind-label">' + escHtml(ind.name) + '</div>'
+        + '<div class="etf-ind-track"><div class="etf-ind-fill" style="width:' + barW + '%;background:' + color + '"></div></div>'
+        + '<div class="etf-ind-pct">' + ind.pct.toFixed(1) + '%</div>'
+        + '</div>';
+    }).join('');
+
+    const treeSVG = _renderTreemapSVG(data.industries);
+
+    content.innerHTML = '<div class="etf-ind-grid">'
+      + '<div>' + tableHTML + '</div>'
+      + '<div class="etf-treemap-wrap">' + treeSVG + '</div>'
+      + '</div>'
+      + '<div style="font-size:10px;color:var(--muted);margin-top:8px">'
+      + 'Based on top ' + data.industries.reduce((s,i) => s + i.symbols.length, 0)
+      + ' holdings · ' + data.total_pct.toFixed(1) + '% of assets covered</div>';
+
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--down);font-size:12px;padding:8px 0">⚠ ' + escHtml(e.message) + '</div>';
+    if (btn) { btn.disabled = false; btn.textContent = '↺ Retry'; }
   }
 }
 
