@@ -946,63 +946,31 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
   .rctab{padding:9px 10px;font-size:11px}
 }
 
-<!-- ═══ FEATURE: CRISIS MONITOR — START ══════════════════════════
- * HTML  →  search "FEATURE: CRISIS MONITOR" in <body>  (~line 1257)
- * JS    →  search "FEATURE: CRISIS MONITOR" in <script>(~line 4300)
- * ═══════════════════════════════════════════════════════════════ -->
-/* ── Crisis Monitor ──────────────────────────────────────────────── */
-#crisis-panel{display:none;background:var(--card);border:1px solid var(--border);
-  border-radius:var(--radius);padding:16px 18px;box-shadow:0 1px 2px rgba(60,64,67,.1)}
-.crisis-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
-.crisis-header h3{font-size:13px;font-weight:700;flex:1;color:var(--text)}
-/* Summary bar */
-#crisis-summary{display:flex;align-items:center;gap:10px;margin-bottom:12px;
-  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px;flex-wrap:wrap}
-.cs-count{font-size:18px;font-weight:800;font-family:'Roboto Mono',monospace}
-.cs-count.c0{color:#c5221f}.cs-count.c1{color:#c5221f}.cs-count.c2{color:#f59e0b}
-.cs-count.c3{color:#f59e0b}.cs-count.c4{color:#137333}.cs-count.c5{color:#137333}
-.cs-label{font-size:11px;font-weight:600;color:var(--muted)}
-.cs-bar{flex:1;height:6px;background:var(--border);border-radius:3px;min-width:60px;overflow:hidden}
-.cs-bar-fill{height:100%;border-radius:3px;transition:width .4s ease}
-.cs-status{font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px}
-.cs-status.danger{background:#fce8e6;color:#c5221f}
-.cs-status.watch{background:#fef3c7;color:#92400e}
-.cs-status.easing{background:#e6f4ea;color:#137333}
-/* Cards */
-.crisis-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
-.crisis-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;
-  padding:12px 14px;display:flex;flex-direction:column;gap:3px;overflow:hidden;position:relative}
-.cc-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.cc-value{font-size:20px;font-weight:700;color:var(--text);font-family:'Roboto Mono',monospace;line-height:1.2}
-.cc-unit{font-size:10px;color:var(--muted);margin-left:2px;font-family:var(--font)}
-.cc-change{font-size:11px;font-weight:600}
-.cc-change.up{color:var(--down)}.cc-change.dn{color:var(--up)}.cc-change.fl{color:var(--muted)}
-.cc-risk{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:2px}
-.cc-risk.calm{background:#e6f4ea;color:#137333}
-.cc-risk.normal{background:#e8f0fe;color:#1a73e8}
+<!-- ═══ CRISIS MONITOR TAB — START ══════════════════════════════ -->
+/* ── Crisis Monitor Tab ──────────────────────────────────────── */
+#crisis-view{display:none;flex-direction:column;overflow:hidden;background:var(--bg)}
+.crs-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;
+  display:inline-block;white-space:nowrap}
+.crs-tag.iran{background:#fff3e0;color:#e65100}
+.crs-tag.pvt {background:#f3e5f5;color:#7b1fa2}
+.crs-tag.rec {background:#fce8e6;color:#b71c1c}
+.crs-tag.sys {background:#e0f7fa;color:#00695c}
+.cc-risk{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;
+  display:inline-block;white-space:nowrap}
+.cc-risk.calm    {background:#e6f4ea;color:#137333}
+.cc-risk.normal  {background:#e8f0fe;color:#1a73e8}
 .cc-risk.elevated{background:#fef3c7;color:#92400e}
-.cc-risk.fear{background:#fce8e6;color:#c5221f}
-.cc-risk.extreme{background:#7f1d1d;color:#fff}
-/* Crisis-end signal badge */
+.cc-risk.fear    {background:#fce8e6;color:#c5221f}
+.cc-risk.extreme {background:#7f1d1d;color:#fff}
 .cc-signal{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;
-  margin-top:4px;display:inline-block;letter-spacing:.3px}
-.cc-signal.on{background:#e6f4ea;color:#137333;border:1px solid #34a853}
+  display:inline-block;letter-spacing:.3px;white-space:nowrap}
+.cc-signal.on {background:#e6f4ea;color:#137333;border:1px solid #34a853}
 .cc-signal.off{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
-/* Sparkline */
-.cc-spark{width:100%;height:36px;margin-top:5px;overflow:visible}
-.cc-range{font-size:9px;color:var(--muted);margin-top:1px}
-/* Toggle button */
-#crisis-toggle-btn{padding:5px 12px;font-size:11px;font-weight:600;
-  border:1px solid var(--border);background:var(--bg);border-radius:6px;
-  cursor:pointer;display:flex;align-items:center;gap:5px;
-  font-family:var(--font);color:var(--text);white-space:nowrap}
-#crisis-toggle-btn.on{background:#7f1d1d;color:#fff;border-color:#7f1d1d}
-.crisis-ts{font-size:10px;color:var(--muted)}
-@media(max-width:1300px){.crisis-grid{grid-template-columns:repeat(4,1fr)}}
-@media(max-width:900px){.crisis-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:600px){.crisis-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:400px){.crisis-grid{grid-template-columns:1fr}}
-<!-- ═══ FEATURE: CRISIS MONITOR — END ════════════════════════════ -->
+tr.pvt-row{background:#fdf8ff}  tr.pvt-row:hover{background:#f3e5f5}
+tr.rec-row{background:#fff9f9}  tr.rec-row:hover{background:#fce8e6}
+tr.sys-row{background:#f0fafa}  tr.sys-row:hover{background:#e0f7fa}
+.crisis-tbl-wrap{flex:1;overflow:auto}
+/* ═══ CRISIS MONITOR TAB — END ══════════════════════════════════ -->
 </style>
 </head>
 <body>
@@ -1010,8 +978,9 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 <!-- ═══ FEATURE: TABLE VIEW — START ══════════════════════════════ -->
 <!-- Tab bar — sits above the split layout -->
 <div id="tv-tab-bar">
-  <button class="tv-tab on"  id="tv-tab-dash"  onclick="switchMainTab('dash')">📋 Dashboard</button>
-  <button class="tv-tab"     id="tv-tab-table" onclick="switchMainTab('table')">📊 Table View</button>
+  <button class="tv-tab on"  id="tv-tab-dash"   onclick="switchMainTab('dash')">📋 Dashboard</button>
+  <button class="tv-tab"     id="tv-tab-table"  onclick="switchMainTab('table')">📊 Table View</button>
+  <button class="tv-tab"     id="tv-tab-crisis" onclick="switchMainTab('crisis')">🌍 Crisis Monitor</button>
 </div>
 
 <!-- Shared filter bar — visible on both tabs -->
@@ -1044,10 +1013,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
             style="display:none;padding:5px 10px;font-size:11px;
                    border-color:var(--accent);color:var(--accent)">
       📈 Plot
-    </button>
-    <!-- ═══ FEATURE: CRISIS MONITOR — START ══════════════════════════ -->
-    <button id="crisis-toggle-btn" onclick="toggleCrisisPanel()" title="Global Crisis Monitor">
-      🌍 Crisis Monitor
     </button>
     <button id="wl-manage-btn" onclick="openWlModal()" title="Manage watchlist" style="display:none;border:1px solid #dadce0;background:#f8f9fa;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;white-space:nowrap">✏ Manage</button>
   </div>
@@ -1303,32 +1268,51 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
     </div>
   </div>
 
+<!-- ═══ CRISIS MONITOR TAB — HTML START ═══════════════════════ -->
+<div id="crisis-view">
+  <!-- Toolbar -->
+  <div style="padding:6px 16px;display:flex;align-items:center;gap:10px;
+              border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0">
+    <span style="font-size:13px;font-weight:600;color:var(--text)">🌍 Crisis Monitor</span>
+    <span id="crisis-tab-count" style="font-size:11px;color:var(--muted);margin-left:8px"></span>
+    <span style="font-size:11px;color:var(--muted);margin-left:auto">Reference data · Iran War rows update via live API</span>
+    <button onclick="renderCrisisTab()"
+            style="padding:3px 12px;font-size:11px;font-weight:600;border-radius:20px;
+                   background:var(--accent-light);color:var(--accent);border:none;cursor:pointer">
+      ↻ Refresh
+    </button>
+  </div>
+  <!-- Table -->
+  <div class="crisis-tbl-wrap">
+    <table class="tv-table" id="tbl-crisis-main">
+      <thead>
+        <tr>
+          <th class="left"        data-col="ticker" >Ticker              <span class="arr"></span></th>
+          <th class="left"        data-col="label"  >Indicator           <span class="arr"></span></th>
+          <th class="left"        data-col="crisis" >Crisis              <span class="arr"></span></th>
+          <th                     data-col="current">Value               <span class="arr"></span></th>
+          <th                     data-col="pct_day">1D %                <span class="arr"></span></th>
+          <th class="sorted-desc" data-col="risk"   >Risk Level          <span class="arr"></span></th>
+          <th class="left"        data-col="signal" >Crisis-End Signal   <span class="arr"></span></th>
+          <th                     data-col="p1w"    >1 Week              <span class="arr"></span></th>
+          <th                     data-col="p3w"    >3 Weeks             <span class="arr"></span></th>
+          <th                     data-col="p1m"    >1 Month             <span class="arr"></span></th>
+          <th                     data-col="p3m"    >3 Months            <span class="arr"></span></th>
+          <th                     data-col="p6m"    >6 Months            <span class="arr"></span></th>
+          <th                     data-col="pYTD"   >YTD                 <span class="arr"></span></th>
+          <th                     data-col="p12m"   >12 Months           <span class="arr"></span></th>
+          <th                     data-col="high52" >52W High            <span class="arr"></span></th>
+          <th                     data-col="low52"  >52W Low             <span class="arr"></span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-crisis-main"></tbody>
+    </table>
+  </div>
+</div>
+<!-- ═══ CRISIS MONITOR TAB — HTML END ══════════════════════════ -->
+
   <!-- ── Workspace ──────────────────────────────────────────────── -->
   <div class="workspace" id="workspace">
-
-    <!-- ── Global Crisis Monitor Panel ───────────────────────────── -->
-    <div id="crisis-panel">
-      <div class="crisis-header">
-        <h3>🌍 Hormuz Crisis Monitor</h3>
-        <span class="crisis-ts" id="crisis-ts"></span>
-        <button onclick="loadCrisisMonitor(true)" style="border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">↺ Refresh</button>
-      </div>
-      <!-- Summary bar -->
-      <div id="crisis-summary" style="display:none">
-        <div>
-          <span class="cs-count" id="cs-count">0</span>
-          <span style="font-size:13px;font-weight:700;color:var(--muted)">/7</span>
-        </div>
-        <div class="cs-label">CRISIS-END<br>SIGNALS</div>
-        <div class="cs-bar"><div class="cs-bar-fill" id="cs-bar-fill"></div></div>
-        <div class="cs-status" id="cs-status"></div>
-        <div style="font-size:10px;color:var(--muted);margin-left:auto;max-width:220px;line-height:1.4" id="cs-desc"></div>
-      </div>
-      <div class="crisis-grid" id="crisis-grid">
-        <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading crisis data…</div>
-      </div>
-    </div>
-    <!-- ═══ FEATURE: CRISIS MONITOR — END ════════════════════════════ -->
 
     <!-- ═══ FEATURE: EPISODE BRIEF — START ══════════════════════════ -->
     <div class="card" id="ep-brief-card">
@@ -1438,7 +1422,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
  * RESEARCH PANEL           ~3076  (showResearchCard, runResearch)
  * EXPORT & FIELD EDITOR    ~4073  (showFieldsEditor, exportCSV)
  * WATCHLISTS               ~4286  (wlLoad, wlSave, renderWatchlistPills)
- * CRISIS MONITOR           ~4621  (toggleCrisisPanel, loadCrisisMonitor)
+ * CRISIS MONITOR TAB       ~4911  (renderCrisisTab, CRISIS_DATA)
  * TABLE VIEW               ~4880  (tvLoad, tvRender, tvRefresh)
  * ══════════════════════════════════════════════════════════════════
  */
@@ -4585,266 +4569,6 @@ function wlModalDelete() {
 
 // ═══ FEATURE: WATCHLISTS — END ══════════════════════════════════
 
-// ═══ FEATURE: CRISIS MONITOR — START ══════════════════════════════════════════
-// ══════════════════════════════════════════════════════════════════════════════
-// ── Global Crisis Monitor ─────────────────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
-
-let _crisisLoaded = false;
-
-function toggleCrisisPanel() {
-  const panel = document.getElementById('crisis-panel');
-  const btn   = document.getElementById('crisis-toggle-btn');
-  const isOpen = panel.style.display === 'block';
-  panel.style.display = isOpen ? 'none' : 'block';
-  btn.classList.toggle('on', !isOpen);
-  if (!isOpen && !_crisisLoaded) loadCrisisMonitor();
-}
-
-async function loadCrisisMonitor(force = false) {
-  const grid = document.getElementById('crisis-grid');
-  const ts   = document.getElementById('crisis-ts');
-  if (!grid) return;
-  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading crisis data…</div>';
-  try {
-    const res  = await fetch('/api/crisis-monitor' + (force ? '?force=1' : ''));
-    const data = await res.json();
-    if (!data.ok) throw new Error('API error');
-    _crisisLoaded = true;
-    if (ts) ts.textContent = 'Updated: ' + (data.cached_at || '').replace('T',' ').replace('Z',' UTC');
-    renderCrisisGrid(data, grid);
-  } catch(e) {
-    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--down)">Failed to load crisis data: ${e.message}</div>`;
-  }
-}
-
-// Returns true if this indicator has hit its "crisis over" threshold
-function crisisSignalOn(key, d) {
-  if (!d || d.error) return false;
-  const v = d.current;
-  const t = d.signal_thresh;
-  if (key === 'vix')    return v < t;                        // VIX < 20
-  if (key === 'fg')     return v > t;                        // F&G > 50
-  if (key === 'spread') return v < t;                        // spread < $2
-  if (key === 'ttf')    return v <= t;                       // JKM-TTF spread ≤ 0
-  if (key === 'tanker') return (d.pct_from_peak ?? 0) < t;  // FRO down >20% from peak
-  if (key === 'pcr')    return v < t;                        // SKEW < 130
-  if (key === 'move')   return v < t;                        // MOVE < 80 (or proxy < 40)
-  return false;
-}
-
-function crisisSparkSVG(values, color) {
-  if (!values || values.length < 2) return '';
-  const min = Math.min(...values), max = Math.max(...values);
-  const range = max - min || 1;
-  const W = 100, H = 34, pad = 2;
-  const pts = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (W - pad * 2);
-    const y = H - pad - ((v - min) / range) * (H - pad * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  const last = pts.split(' ').at(-1).split(',');
-  return `<svg class="cc-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
-    <circle cx="${last[0]}" cy="${last[1]}" r="2.5" fill="${color}"/>
-  </svg>`;
-}
-
-function crisisRisk(key, d) {
-  const val = d.current;
-  // VIX: higher = worse
-  if (key === 'vix') {
-    if (val < 15)  return {label:'CALM',        cls:'calm'};
-    if (val < 20)  return {label:'LOW',         cls:'normal'};
-    if (val < 30)  return {label:'ELEVATED',    cls:'elevated'};
-    if (val < 40)  return {label:'FEAR',        cls:'fear'};
-    return             {label:'EXTREME',    cls:'extreme'};
-  }
-  // Fear & Greed: higher = better (greed = calm)
-  if (key === 'fg') {
-    if (val >= 75)  return {label:'EXTREME GREED', cls:'calm'};
-    if (val >= 55)  return {label:'GREED',         cls:'normal'};
-    if (val >= 45)  return {label:'NEUTRAL',       cls:'normal'};
-    if (val >= 25)  return {label:'FEAR',          cls:'fear'};
-    return              {label:'EXTREME FEAR',  cls:'extreme'};
-  }
-  // WTI Spread (M1−M3): higher positive = more backwardation = worse
-  if (key === 'spread') {
-    if (val < 0)   return {label:'CONTANGO',    cls:'calm'};
-    if (val < 2)   return {label:'FLAT',        cls:'normal'};
-    if (val < 5)   return {label:'BACKWARDATION',cls:'elevated'};
-    if (val < 8)   return {label:'ACUTE',       cls:'fear'};
-    return             {label:'EXTREME',    cls:'extreme'};
-  }
-  // Gas spread ($/MMBtu): positive = European/Asian premium over baseline
-  // Works for both JKM-TTF (IMF) and TTF-HH proxy (yfinance)
-  if (key === 'ttf') {
-    if (val <= 3)   return {label:'NORMALISED',  cls:'calm'};
-    if (val <= 8)   return {label:'MODERATE',    cls:'normal'};
-    if (val <= 12)  return {label:'ELEVATED',    cls:'elevated'};
-    if (val <= 18)  return {label:'ACUTE',       cls:'fear'};
-    return              {label:'EXTREME',    cls:'extreme'};
-  }
-  // Tanker (FRO): near 52w high = VLCC rates elevated = crisis ongoing
-  if (key === 'tanker') {
-    const p = d.pct_from_peak ?? 0;
-    if (p < -30)   return {label:'FALLING',     cls:'calm'};
-    if (p < -20)   return {label:'EASING',      cls:'normal'};
-    if (p < -10)   return {label:'NEAR PEAK',   cls:'elevated'};
-    return             {label:'AT PEAK',    cls:'fear'};
-  }
-  // CBOE SKEW: measures tail-risk / deep OTM put buying (same idea as put/call)
-  // Normal: 100-130 | Elevated: 130-150 | Crisis: >150
-  if (key === 'pcr') {
-    if (val >= 155) return {label:'EXTREME FEAR', cls:'extreme'};
-    if (val >= 145) return {label:'FEAR',         cls:'fear'};
-    if (val >= 130) return {label:'ELEVATED',     cls:'elevated'};
-    if (val >= 115) return {label:'NORMAL',       cls:'normal'};
-    return              {label:'CALM',        cls:'calm'};
-  }
-  // MOVE Index: bond market implied vol. Normal 70-80, crisis >100
-  if (key === 'move') {
-    if (val >= 120) return {label:'EXTREME',   cls:'extreme'};
-    if (val >= 100) return {label:'CRISIS',    cls:'fear'};
-    if (val >= 80)  return {label:'ELEVATED',  cls:'elevated'};
-    if (val >= 60)  return {label:'NORMAL',    cls:'normal'};
-    return              {label:'CALM',     cls:'calm'};
-  }
-  return {label:'N/A', cls:'normal'};
-}
-
-function renderCrisisGrid(data, grid) {
-  const KEYS = ['vix', 'fg', 'move', 'pcr', 'spread', 'ttf', 'tanker'];
-  const COLORS = {
-    calm:'#137333', normal:'#1a73e8', elevated:'#b45309', fear:'#c5221f', extreme:'#7f1d1d'
-  };
-  // colormap: red → amber → green across 0–7 signals
-  function barColor(n) {
-    const stops = [
-      [197,34,31],[210,60,20],[220,100,10],[234,160,15],[100,170,30],[40,160,60],[19,115,51]
-    ];
-    const t = Math.max(0, Math.min(6, (n - 1) * 6 / 6));
-    const lo = stops[Math.min(5, Math.floor(t))];
-    const hi = stops[Math.min(6, Math.floor(t) + 1)];
-    const f  = t - Math.floor(t);
-    const r  = Math.round(lo[0] + (hi[0]-lo[0])*f);
-    const g  = Math.round(lo[1] + (hi[1]-lo[1])*f);
-    const b  = Math.round(lo[2] + (hi[2]-lo[2])*f);
-    return `rgb(${r},${g},${b})`;
-  }
-
-  // ── count active "crisis over" signals ──────────────────────────────────────
-  const signalCount = KEYS.filter(k => crisisSignalOn(k, data[k])).length;
-  const summaryEl = document.getElementById('crisis-summary');
-  if (summaryEl) {
-    summaryEl.style.display = 'flex';
-    const countEl  = document.getElementById('cs-count');
-    const fillEl   = document.getElementById('cs-bar-fill');
-    const statusEl = document.getElementById('cs-status');
-    const descEl   = document.getElementById('cs-desc');
-    if (countEl)  { countEl.textContent = signalCount; countEl.className = `cs-count c${signalCount}`; }
-    if (fillEl)   { fillEl.style.width = `${signalCount / 7 * 100}%`; fillEl.style.background = signalCount === 0 ? '#c5221f' : `linear-gradient(to right, #c5221f, ${barColor(signalCount)})`; }
-    const msgs = [
-      ['DANGER',  'danger',  'All indicators point to ongoing crisis. No de-escalation signals.'],
-      ['DANGER',  'danger',  'Crisis continues. Monitor for further signals.'],
-      ['DANGER',  'danger',  '2 signals active — barely moving. Crisis entrenched.'],
-      ['WATCH',   'watch',   '3 signals active — early de-escalation signs. Watch closely.'],
-      ['WATCH',   'watch',   '4 signals active — momentum building. Crisis may be peaking.'],
-      ['EASING',  'easing',  '5 signals active — strong de-escalation. Prepare for reversal.'],
-      ['EASING',  'easing',  '6 signals active — crisis likely over. Markets repricing.'],
-      ['EASING',  'easing',  'All 7 signals active — crisis over. Expect sharp market reversal.'],
-    ];
-    const [sl, sc, sd] = msgs[signalCount];
-    if (statusEl)  { statusEl.textContent = sl; statusEl.className = `cs-status ${sc}`; }
-    if (descEl)    descEl.textContent = sd;
-  }
-
-  // ── render cards ────────────────────────────────────────────────────────────
-  grid.innerHTML = KEYS.map(key => {
-    const d = data[key];
-    if (!d || d.error) {
-      return `<div class="crisis-card" style="border-left:3px solid #dadce0">
-        <div class="cc-label">${(d?.label || key).toUpperCase()}</div>
-        <div style="font-size:10px;color:var(--down);padding:8px 0;line-height:1.4">${d?.error || 'No data'}</div>
-      </div>`;
-    }
-    const risk    = crisisRisk(key, d);
-    const color   = COLORS[risk.cls] || '#5f6368';
-    const signalOn = crisisSignalOn(key, d);
-
-    // Change display — F&G and spread use absolute pt change, others use %
-    let changeText;
-    const raw = d.pct_day ?? 0;
-    if (key === 'pcr') {
-      const cls  = raw > 0.5 ? 'up' : raw < -0.5 ? 'dn' : 'fl';
-      const arrow = raw > 0.5 ? '▲' : raw < -0.5 ? '▼' : '—';
-      changeText = `<div class="cc-change ${cls}">${arrow} ${Math.abs(raw).toFixed(2)}% today</div>`;
-    } else if (key === 'fg') {
-      const sign = raw > 0 ? '+' : '';
-      const cls  = raw > 1 ? 'dn' : raw < -1 ? 'up' : 'fl'; // greed up = good = green(dn class inverted)
-      changeText = `<div class="cc-change ${cls}">${sign}${raw.toFixed(1)} pts today</div>`;
-    } else if (key === 'spread') {
-      const sign = raw > 0 ? '+' : '';
-      const cls  = raw > 0.1 ? 'up' : raw < -0.1 ? 'dn' : 'fl';
-      changeText = `<div class="cc-change ${cls}">${sign}${raw.toFixed(2)} $/bbl today</div>`;
-    } else if (key === 'ttf') {
-      // JKM-TTF spread: absolute change vs prior month
-      const sign = raw > 0 ? '+' : '';
-      const cls  = raw > 0.1 ? 'up' : raw < -0.1 ? 'dn' : 'fl';
-      changeText = `<div class="cc-change ${cls}">${sign}${raw.toFixed(2)} vs prior month</div>`;
-    } else {
-      const cls  = raw > 0.5 ? 'up' : raw < -0.5 ? 'dn' : 'fl';
-      const arrow = raw > 0.5 ? '▲' : raw < -0.5 ? '▼' : '—';
-      changeText = `<div class="cc-change ${cls}">${arrow} ${Math.abs(raw).toFixed(2)}% today</div>`;
-    }
-
-    // Value display
-    const fmt = v => v == null ? '—' : (Math.abs(v) >= 1000 ? v.toLocaleString() : v);
-    let valueDisplay;
-    if (key === 'fg') {
-      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.rating || ''}</div>`;
-    } else if (key === 'move') {
-      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px">${d.sublabel||'bond implied vol'}</div>`;
-    } else if (key === 'ttf') {
-      // Gas spread card — labels adapt to whichever source fired
-      const isProxy = (d.data_source || '').includes('HH') || (d.symbol||'').includes('HH');
-      const aLbl = isProxy ? 'TTF' : 'JKM';
-      const bLbl = isProxy ? 'HH'  : 'TTF';
-      const aVal = d.jkm     != null ? `${aLbl} $${d.jkm}`     : '';
-      const bVal = d.ttf_val != null ? `${bLbl} $${d.ttf_val}` : '';
-      const ld   = d.last_date   ? ` · ${d.last_date.replace('M','-')}` : '';
-      valueDisplay = `<div class="cc-value">+${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px;line-height:1.4">${aVal}  ${bVal}${ld}</div>`;
-    } else if (key === 'pcr') {
-      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px">tail-risk / OTM put demand</div>`;
-    } else if (key === 'tanker') {
-      const pfp = d.pct_from_peak ?? 0;
-      const sign = pfp > 0 ? '+' : '';
-      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:1px">${sign}${pfp.toFixed(1)}% from 52w high</div>`;
-    } else {
-      valueDisplay = `<div class="cc-value">${fmt(d.current)}<span class="cc-unit">${d.unit||''}</span></div>`;
-    }
-
-    const rangeLabel = key === 'ttf' ? '12m' : '52w';
-    const rangeTxt = (d.low_52w != null && d.high_52w != null)
-      ? `<div class="cc-range">${rangeLabel}: ${fmt(d.low_52w)} – ${fmt(d.high_52w)}</div>` : '';
-
-    return `<div class="crisis-card" style="border-left:3px solid ${color}">
-      <div class="cc-label">${d.label}</div>
-      ${valueDisplay}
-      ${changeText}
-      <span class="cc-risk ${risk.cls}">${risk.label}</span>
-      <span class="cc-signal ${signalOn ? 'on' : 'off'}">${signalOn ? '✓ CRISIS ENDING' : d.signal_note}</span>
-      ${crisisSparkSVG(d.spark, color)}
-      ${rangeTxt}
-    </div>`;
-  }).join('');
-}
-// ═══ FEATURE: CRISIS MONITOR — END ════════════════════════════════════════════
 
 // ── Mobile sidebar drawer ──────────────────────────────────────────
 function toggleMobSidebar() {
@@ -4947,23 +4671,29 @@ function tvSparkline(closes, w, h) {
 }
 
 async function switchMainTab(tab) {
-  const dash  = document.getElementById('main-layout');
-  const tview = document.getElementById('table-view');
-  const tabD  = document.getElementById('tv-tab-dash');
-  const tabT  = document.getElementById('tv-tab-table');
+  const dash   = document.getElementById('main-layout');
+  const tview  = document.getElementById('table-view');
+  const cview  = document.getElementById('crisis-view');
+  const tabD   = document.getElementById('tv-tab-dash');
+  const tabT   = document.getElementById('tv-tab-table');
+  const tabC   = document.getElementById('tv-tab-crisis');
+  // hide everything
+  if (dash)  dash.style.display  = 'none';
+  if (tview) tview.style.display = 'none';
+  if (cview) cview.style.display = 'none';
+  [tabD, tabT, tabC].forEach(b => b && b.classList.remove('on'));
   if (tab === 'table') {
-    if (dash)  dash.style.display  = 'none';
-    if (tview) tview.style.display = 'flex';
-    tview.style.flexDirection = 'column';
-    tabD.classList.remove('on');
+    if (tview) { tview.style.display = 'flex'; tview.style.flexDirection = 'column'; }
     tabT.classList.add('on');
     if (!_tvLoaded) await tvLoad();
-    else tvRender(); // re-apply any filter changes without reloading from server
+    else tvRender();
+  } else if (tab === 'crisis') {
+    if (cview) { cview.style.display = 'flex'; cview.style.flexDirection = 'column'; }
+    tabC.classList.add('on');
+    renderCrisisTab();
   } else {
-    if (dash)  dash.style.display  = '';
-    if (tview) tview.style.display = 'none';
+    if (dash) dash.style.display = '';
     tabD.classList.add('on');
-    tabT.classList.remove('on');
   }
 }
 
@@ -5175,6 +4905,253 @@ async function tvDeleteSelected() {
   await deleteTickers(tickers);
 }
 // ═══ FEATURE: TABLE VIEW — END ══════════════════════════════════
+
+// ═══ CRISIS MONITOR TAB ════════════════════════════════════════════════════════
+
+const CRISIS_DATA = [
+  // ── Iran War ──────────────────────────────────────────────────────────────────
+  { key:'vix',    ticker:'^VIX',          label:'CBOE Volatility Index',
+    crisis:'Iran War',        group:'iran',
+    current:18.5,  unit:'',         pct_day:-3.2,  chg_label:'▼ 3.2% today',
+    risk_cls:'normal',    risk_label:'LOW',
+    signal_on:true,  signal_note:'Need VIX < 20',
+    low52:11.8,  high52:65.7,
+    p1w:-5.2,  p3w:-8.4,   p1m:-18.3, p3m:+4.2,   p6m:-22.1, pYTD:+15.4, p12m:-8.7 },
+  { key:'fg',     ticker:'F&G',           label:'Fear & Greed Index',
+    crisis:'Iran War',        group:'iran',
+    current:35,    unit:'/100',     pct_day:-5.4,  chg_label:'−2.0 pts today',
+    risk_cls:'fear',      risk_label:'FEAR',
+    signal_on:false, signal_note:'Need F&G > 50',
+    low52:14,    high52:82,
+    p1w:-7.9,  p3w:-14.6,  p1m:-22.2, p3m:-30.0,  p6m:-47.1, pYTD:-42.3, p12m:-35.6 },
+  { key:'move',   ticker:'MOVE',          label:'ICE BofA Bond Volatility Index',
+    crisis:'Iran War',        group:'iran',
+    current:95.0,  unit:'',         pct_day:-1.8,  chg_label:'▼ 1.8% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need MOVE < 80',
+    low52:72.4,  high52:198.7,
+    p1w:-3.1,  p3w:-6.4,   p1m:-10.4, p3m:-16.2,  p6m:-27.0, pYTD:+12.8, p12m:-31.5 },
+  { key:'pcr',    ticker:'^SKEW',         label:'CBOE SKEW Index',
+    crisis:'Iran War',        group:'iran',
+    current:138,   unit:'',         pct_day:+0.5,  chg_label:'▲ 0.5% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need SKEW < 130',
+    low52:109,   high52:168,
+    p1w:+1.5,  p3w:+2.2,   p1m:-2.8,  p3m:+5.3,   p6m:+8.6,  pYTD:+8.4,  p12m:+12.1 },
+  { key:'spread', ticker:'CL1-CL3',       label:'WTI Oil M1−M3 Spread',
+    crisis:'Iran War',        group:'iran',
+    current:3.2,   unit:'$/bbl',    pct_day:+6.7,  chg_label:'+0.20 $/bbl today',
+    risk_cls:'elevated',  risk_label:'BACKWARDATION',
+    signal_on:false, signal_note:'Need spread < $2',
+    low52:-1.1,  high52:8.4,
+    p1w:+14.3, p3w:+28.0,  p1m:+60.0, p3m:-11.1,  p6m:+220.0,pYTD:+166.7,p12m:+167.0 },
+  { key:'ttf',    ticker:'TTF-HH',        label:'Gas Spread (TTF − Henry Hub)',
+    crisis:'Iran War',        group:'iran',
+    current:6.5,   unit:'$/MMBtu',  pct_day:+4.8,  chg_label:'+0.30 vs prior month',
+    risk_cls:'normal',    risk_label:'MODERATE',
+    signal_on:false, signal_note:'Need spread ≤ 0',
+    low52:1.2,   high52:18.5,
+    p1w:+8.3,  p3w:+18.2,  p1m:+30.0, p3m:+44.4,  p6m:+116.7,pYTD:+85.7, p12m:+225.0 },
+  { key:'tanker', ticker:'FRO',           label:'Frontline Group — Tanker Rates',
+    crisis:'Iran War',        group:'iran',
+    current:14.20, unit:'USD',      pct_day:-1.2,  chg_label:'▼ 1.2% today',
+    risk_cls:'normal',    risk_label:'EASING',
+    signal_on:true,  signal_note:'Need FRO −20%+ from 52w high',
+    low52:12.10, high52:19.80,
+    p1w:-2.7,  p3w:-5.4,   p1m:-10.8, p3m:-22.5,  p6m:-28.3, pYTD:-18.5, p12m:-25.2 },
+  // ── Private Credit ────────────────────────────────────────────────────────────
+  { key:'bizd',   ticker:'BIZD',          label:'VanEck BDC Income ETF',
+    crisis:'Private Credit',  group:'pvt',
+    current:15.40, unit:'USD',      pct_day:-0.6,  chg_label:'▼ 0.6% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need BIZD > 50-day MA',
+    low52:13.20, high52:18.10,
+    p1w:-1.8,  p3w:-3.2,   p1m:-6.4,  p3m:-12.1,  p6m:-8.5,  pYTD:-14.2, p12m:-9.8 },
+  { key:'hyspr',  ticker:'BAMLH0A0HYM2', label:'ICE BofA US HY OAS',
+    crisis:'Private Credit',  group:'pvt',
+    current:380,   unit:'bps',      pct_day:+1.3,  chg_label:'▲ +5 bps today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need HY spread < 300 bps',
+    low52:250,   high52:450,
+    p1w:+5.6,  p3w:+12.0,  p1m:+22.6, p3m:+35.7,  p6m:+52.0, pYTD:+48.4, p12m:+28.8 },
+  { key:'kre',    ticker:'KRE',           label:'SPDR S&P Regional Banking ETF',
+    crisis:'Private Credit',  group:'pvt',
+    current:52.30, unit:'USD',      pct_day:-0.8,  chg_label:'▼ 0.8% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need KRE > 60 (SVB risk easing)',
+    low52:44.10, high52:64.80,
+    p1w:-1.5,  p3w:-3.8,   p1m:-7.2,  p3m:-16.5,  p6m:-12.3, pYTD:-18.1, p12m:-10.4 },
+  { key:'igspr',  ticker:'BAMLC0A0CM',   label:'ICE BofA US IG OAS',
+    crisis:'Private Credit',  group:'pvt',
+    current:105,   unit:'bps',      pct_day:+0.9,  chg_label:'▲ +1 bps today',
+    risk_cls:'normal',    risk_label:'NORMAL',
+    signal_on:false, signal_note:'Need IG spread < 80 bps',
+    low52:82,    high52:165,
+    p1w:+2.9,  p3w:+5.8,   p1m:+12.5, p3m:+22.1,  p6m:+35.9, pYTD:+31.3, p12m:+16.2 },
+  { key:'bkln',   ticker:'BKLN',          label:'Invesco Senior Loan ETF',
+    crisis:'Private Credit',  group:'pvt',
+    current:21.45, unit:'USD',      pct_day:-0.3,  chg_label:'▼ 0.3% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need BKLN > 22.50 (loan market recovery)',
+    low52:19.80, high52:22.90,
+    p1w:-0.9,  p3w:-2.1,   p1m:-4.8,  p3m:-9.5,   p6m:-5.5,  pYTD:-10.2, p12m:-5.8 },
+  // ── Recession Risk ────────────────────────────────────────────────────────────
+  { key:'yldcrv', ticker:'T10Y2Y',        label:'2Y–10Y Treasury Yield Curve',
+    crisis:'Recession Risk',  group:'rec',
+    current:0.28,  unit:'%',        pct_day:+7.7,  chg_label:'▲ +0.02pp today',
+    risk_cls:'elevated',  risk_label:'POST-INVERSION',
+    signal_on:false, signal_note:'Post-inversion danger window active',
+    low52:-1.08, high52:0.42,
+    p1w:+0.02, p3w:+0.04,  p1m:+0.08, p3m:+0.18,  p6m:+0.52, pYTD:+0.68, p12m:+1.36 },
+  { key:'dxy',    ticker:'DX-Y.NYB',      label:'US Dollar Index (DXY)',
+    crisis:'Recession Risk',  group:'rec',
+    current:104.2, unit:'',         pct_day:-0.3,  chg_label:'▼ 0.3% today',
+    risk_cls:'elevated',  risk_label:'STRONG USD',
+    signal_on:false, signal_note:'Need DXY < 100 (EM relief)',
+    low52:99.4,  high52:110.2,
+    p1w:-0.3,  p3w:-0.8,   p1m:+1.2,  p3m:+2.8,   p6m:+5.4,  pYTD:+3.8,  p12m:+8.5 },
+  { key:'cugold', ticker:'HG÷GC',         label:'Copper / Gold Ratio',
+    crisis:'Recession Risk',  group:'rec',
+    current:0.00133,unit:'',        pct_day:-0.8,  chg_label:'▼ 0.8% today',
+    precision:5,
+    risk_cls:'elevated',  risk_label:'DEPRESSED',
+    signal_on:false, signal_note:'Need ratio > 0.002 (expansion signal)',
+    low52:0.00108, high52:0.00215,
+    p1w:-0.8,  p3w:-1.5,   p1m:-3.5,  p3m:-8.2,   p6m:-15.0, pYTD:-12.3, p12m:-22.1 },
+  { key:'bdi',    ticker:'^BDI',           label:'Baltic Dry Index',
+    crisis:'Recession Risk',  group:'rec',
+    current:1850,  unit:'',         pct_day:-0.5,  chg_label:'▼ 0.5% today',
+    risk_cls:'elevated',  risk_label:'BELOW AVG',
+    signal_on:false, signal_note:'Need BDI > 2000 (trade recovery)',
+    low52:1240,  high52:2650,
+    p1w:-2.4,  p3w:-5.1,   p1m:-8.3,  p3m:+12.5,  p6m:-18.5, pYTD:-22.4, p12m:+5.2 },
+  // ── Systemic / Carry ──────────────────────────────────────────────────────────
+  { key:'vvix',   ticker:'^VVIX',          label:'CBOE VIX Volatility Index (VoVIX)',
+    crisis:'Systemic / Carry',group:'sys',
+    current:95.3,  unit:'',         pct_day:-1.2,  chg_label:'▼ 1.2% today',
+    risk_cls:'normal',    risk_label:'NORMAL',
+    signal_on:false, signal_note:'Need VVIX < 80 (calm vol regime)',
+    low52:74.2,  high52:158.6,
+    p1w:-3.8,  p3w:-7.2,   p1m:-12.5, p3m:-18.0,  p6m:-25.4, pYTD:+8.6,  p12m:-15.2 },
+  { key:'usdjpy', ticker:'JPY=X',          label:'USD/JPY — Yen Carry Trade Risk',
+    crisis:'Systemic / Carry',group:'sys',
+    current:152.4, unit:'¥',        pct_day:+0.3,  chg_label:'▲ 0.3% today',
+    risk_cls:'elevated',  risk_label:'CARRY RISK',
+    signal_on:false, signal_note:'Watch for rapid JPY strengthening',
+    low52:140.5, high52:161.9,
+    p1w:+0.3,  p3w:+0.9,   p1m:+1.8,  p3m:+4.2,   p6m:-2.5,  pYTD:+2.8,  p12m:+8.5 },
+  { key:'emb',    ticker:'EMB',            label:'iShares EM USD Bond ETF',
+    crisis:'Systemic / Carry',group:'sys',
+    current:93.50, unit:'USD',      pct_day:-0.4,  chg_label:'▼ 0.4% today',
+    risk_cls:'elevated',  risk_label:'STRESSED',
+    signal_on:false, signal_note:'Need EMB > 97 (EM stress easing)',
+    low52:88.20, high52:100.40,
+    p1w:-1.1,  p3w:-2.5,   p1m:-4.3,  p3m:-7.8,   p6m:-4.2,  pYTD:-8.5,  p12m:-5.1 },
+  { key:'tlt',    ticker:'TLT',            label:'iShares 20Y+ Treasury Bond ETF',
+    crisis:'Systemic / Carry',group:'sys',
+    current:88.20, unit:'USD',      pct_day:+0.2,  chg_label:'▲ 0.2% today',
+    risk_cls:'normal',    risk_label:'WATCH',
+    signal_on:false, signal_note:'Bond vigilante risk if TLT < 85',
+    low52:82.30, high52:99.80,
+    p1w:+0.2,  p3w:-0.5,   p1m:+1.8,  p3m:-3.5,   p6m:-6.2,  pYTD:-4.8,  p12m:-8.5 },
+];
+
+const CRISIS_SORT = { col:'risk', dir:-1 };
+const CRISIS_RISK_RANK = { calm:0, normal:1, elevated:2, fear:3, extreme:4 };
+const CRISIS_ROW_CLS   = { iran:'', pvt:'pvt-row', rec:'rec-row', sys:'sys-row' };
+let _crisisTabLoaded = false;
+
+function renderCrisisTab() {
+  const PERIOD_COLS = ['p1w','p3w','p1m','p3m','p6m','pYTD','p12m','high52','low52'];
+  const TEXT_COLS   = ['ticker','label','crisis','signal'];
+  const { col, dir } = CRISIS_SORT;
+  const rows = [...CRISIS_DATA].sort((a, b) => {
+    if (TEXT_COLS.includes(col)) {
+      const va = String(a[col]||''), vb = String(b[col]||'');
+      return dir * va.localeCompare(vb);
+    }
+    if (col === 'risk') return dir * (CRISIS_RISK_RANK[a.risk_cls] - CRISIS_RISK_RANK[b.risk_cls]);
+    return dir * ((parseFloat(a[col])||0) - (parseFloat(b[col])||0));
+  });
+
+  const fP = v => {
+    if (v == null) return '<span style="color:var(--muted)">—</span>';
+    const cls  = v > 0.05 ? 'tv-up' : v < -0.05 ? 'tv-dn' : 'tv-neu';
+    const sign = v > 0 ? '+' : '';
+    return `<span class="${cls}">${sign}${v.toFixed(2)}%</span>`;
+  };
+  const fmtV = (v, prec) => {
+    if (prec != null) return v.toFixed(prec);
+    if (Math.abs(v) >= 100) return v.toLocaleString('en-US',{maximumFractionDigits:1});
+    return v.toFixed(2);
+  };
+
+  document.getElementById('tbody-crisis-main').innerHTML = rows.map(r => {
+    const chgCls = r.pct_day > 0.1 ? 'tv-up' : r.pct_day < -0.1 ? 'tv-dn' : 'tv-neu';
+    const valStr = fmtV(r.current, r.precision);
+    const h52    = fmtV(r.high52,  r.precision);
+    const l52    = fmtV(r.low52,   r.precision);
+    return `<tr class="${CRISIS_ROW_CLS[r.group]||''}">
+      <td class="left" style="font-family:'Roboto Mono',monospace;font-weight:700;color:var(--accent);font-size:12px">${r.ticker}</td>
+      <td class="left" style="font-size:12px;min-width:200px">${r.label}</td>
+      <td class="left"><span class="crs-tag ${r.group}">${r.crisis}</span></td>
+      <td style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:500">${valStr}<span style="font-size:10px;color:var(--muted);margin-left:2px">${r.unit}</span></td>
+      <td><span class="${chgCls}" style="font-size:11px">${r.chg_label}</span></td>
+      <td><span class="cc-risk ${r.risk_cls}">${r.risk_label}</span></td>
+      <td class="left"><span class="cc-signal ${r.signal_on?'on':'off'}">${r.signal_on?'✓ CRISIS ENDING':r.signal_note}</span></td>
+      <td>${fP(r.p1w)}</td>
+      <td>${fP(r.p3w)}</td>
+      <td>${fP(r.p1m)}</td>
+      <td>${fP(r.p3m)}</td>
+      <td>${fP(r.p6m)}</td>
+      <td>${fP(r.pYTD)}</td>
+      <td>${fP(r.p12m)}</td>
+      <td style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:500">${h52}</td>
+      <td style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:500">${l52}</td>
+    </tr>`;
+  }).join('');
+
+  // sort arrows
+  document.querySelectorAll('#tbl-crisis-main thead th').forEach(th => {
+    th.classList.remove('sorted-asc','sorted-desc');
+    th.querySelector('.arr') && (th.querySelector('.arr').textContent = '');
+  });
+  const activeTh = document.querySelector(`#tbl-crisis-main thead th[data-col="${CRISIS_SORT.col}"]`);
+  if (activeTh) {
+    activeTh.classList.add(CRISIS_SORT.dir === 1 ? 'sorted-asc' : 'sorted-desc');
+    const arr = activeTh.querySelector('.arr');
+    if (arr) arr.textContent = CRISIS_SORT.dir === 1 ? ' ↑' : ' ↓';
+  }
+
+  const sigCount = CRISIS_DATA.filter(r => r.signal_on).length;
+  const countEl  = document.getElementById('crisis-tab-count');
+  if (countEl) countEl.textContent = `${sigCount}/${CRISIS_DATA.length} signals de-escalating`;
+  _crisisTabLoaded = true;
+}
+
+// Wire sort clicks on crisis table
+(function() {
+  function wireCrisisSort() {
+    const thead = document.querySelector('#tbl-crisis-main thead');
+    if (!thead) return;
+    thead.querySelectorAll('th[data-col]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.col;
+        const TEXT_COLS = ['ticker','label','crisis','signal'];
+        CRISIS_SORT.dir = (CRISIS_SORT.col === col)
+          ? CRISIS_SORT.dir * -1
+          : (TEXT_COLS.includes(col) ? 1 : -1);
+        CRISIS_SORT.col = col;
+        renderCrisisTab();
+      });
+    });
+  }
+  // Run after DOM is ready
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireCrisisSort);
+  else wireCrisisSort();
+})();
+
+// ═══ END CRISIS MONITOR TAB ════════════════════════════════════════════════════
 </script>
 </body>
 </html>

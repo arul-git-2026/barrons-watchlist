@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Markets Tab — Mockup v5</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap');
+:root{
+  --accent:#1a73e8; --accent-light:#e8f0fe;
+  --bg:#f8f9fa;     --card:#fff;
+  --border:#dadce0; --text:#202124; --muted:#5f6368;
+  --up:#1a7f37;     --up-bg:#e6f4ea;
+  --down:#c5221f;   --down-bg:#fce8e6;
+  --font:'Google Sans',system-ui,sans-serif;
+  --radius:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;
+  display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ══ MAIN TAB BAR (Dashboard / Table View / Markets) ═════════════════ */
+#tv-tab-bar{display:flex;gap:0;border-bottom:2px solid var(--border);
+  padding:0 20px;background:var(--card);flex-shrink:0}
+.tv-tab{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);
+  cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;
+  margin-bottom:-2px;transition:color .15s,border-color .15s;font-family:var(--font)}
+.tv-tab:hover{color:var(--text)}
+.tv-tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+/* ══ MARKETS WRAPPER ══════════════════════════════════════════════════ */
+#markets-view{display:flex;flex-direction:column;flex:1;overflow:hidden;background:var(--bg)}
+
+/* ── Sub-tab bar (World Indices / Commodities / …) ───────────────────
+   Sits inside Markets, second level, slightly smaller than main tabs   */
+#mkt-sub-bar{
+  display:flex;gap:0;border-bottom:1px solid var(--border);
+  padding:0 16px;background:var(--card);flex-shrink:0
+}
+.mkt-sub-tab{
+  padding:7px 14px;font-size:12px;font-weight:500;color:var(--muted);
+  cursor:pointer;border:none;background:none;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  transition:color .15s,border-color .15s;font-family:var(--font)
+}
+.mkt-sub-tab:hover{color:var(--text)}
+.mkt-sub-tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+/* ── Toolbar strip ───────────────────────────────────────────────────── */
+.mkt-toolbar{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 16px;background:var(--bg);
+  border-bottom:1px solid var(--border);flex-shrink:0
+}
+.mkt-toolbar-title{font-size:12px;font-weight:600;color:var(--text)}
+.mkt-updated{font-size:11px;color:var(--muted)}
+.mkt-count{font-size:11px;color:var(--muted);margin-left:auto}
+.mkt-refresh{font-size:11px;padding:3px 12px;border-radius:20px;
+  background:var(--accent-light);color:var(--accent);border:none;cursor:pointer;font-weight:600}
+
+/* ── Pane visibility ─────────────────────────────────────────────────── */
+.mkt-pane{display:none;flex:1;overflow-y:auto;overflow-x:auto}
+.mkt-pane.on{display:block}
+
+/* ══ TABLE — exact .tv-table rules from widget ════════════════════════ */
+.tv-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+
+.tv-table thead th{
+  position:sticky;top:0;z-index:5;
+  background:var(--card);border-bottom:2px solid var(--border);
+  padding:6px 10px;text-align:right;font-size:11px;font-weight:600;
+  color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap
+}
+.tv-table thead th:hover{color:var(--text)}
+.tv-table thead th.left{text-align:left}
+.tv-table thead th.sorted-asc ::after{ content:' ↑';color:var(--accent)}
+.tv-table thead th.sorted-desc::after{ content:' ↓';color:var(--accent)}
+.tv-table thead th.sorted-asc,
+.tv-table thead th.sorted-desc{color:var(--accent)}
+/* show arrow inline for simplicity */
+.tv-table thead th.sorted-asc span.arr::after {content:' ↑'}
+.tv-table thead th.sorted-desc span.arr::after{content:' ↓'}
+.tv-table thead th span.arr{color:var(--accent);font-size:10px}
+
+/* body — 3px padding ≈ 21 px row (Google Sheets default) */
+.tv-table tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+.tv-table tbody tr:hover{background:var(--accent-light)}
+.tv-table td{padding:3px 10px;text-align:right;color:var(--text);vertical-align:middle}
+.tv-table td.left{text-align:left}
+
+/* cell types */
+.ticker-cell{font-family:'Roboto Mono',monospace;font-weight:700;color:var(--accent);font-size:12px}
+.name-cell  {color:var(--text);font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.sec-cell   {font-size:10px;color:var(--muted);font-weight:500}
+.price-cell {font-family:'Roboto Mono',monospace;font-size:12px;font-weight:500}
+.time-cell  {font-size:10px;color:var(--muted)}
+.vol-cell   {font-family:'Roboto Mono',monospace;font-size:11px;color:var(--muted)}
+
+/* change colours — plain text, no pill */
+.tv-up {color:var(--up)}
+.tv-dn {color:var(--down)}
+.tv-neu{color:var(--muted)}
+
+/* sparkline */
+.tv-spark{vertical-align:middle;display:inline-block}
+.spark-cell{padding:2px 8px;text-align:center}
+
+/* note */
+.mkt-note{font-size:11px;color:var(--muted);padding:5px 16px 8px;flex-shrink:0}
+
+/* ── Crisis Monitor Table ─────────────────────────────────────────────────── */
+.cc-risk{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;display:inline-block;white-space:nowrap}
+.cc-risk.calm    {background:#e6f4ea;color:#137333}
+.cc-risk.normal  {background:#e8f0fe;color:#1a73e8}
+.cc-risk.elevated{background:#fef3c7;color:#92400e}
+.cc-risk.fear    {background:#fce8e6;color:#c5221f}
+.cc-risk.extreme {background:#7f1d1d;color:#fff}
+.cc-signal{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;
+  display:inline-block;letter-spacing:.3px;white-space:nowrap}
+.cc-signal.on {background:#e6f4ea;color:#137333;border:1px solid #34a853}
+.cc-signal.off{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+
+/* Crisis group badges — one colour per crisis */
+.crs-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;
+  display:inline-block;white-space:nowrap}
+.crs-tag.iran{background:#fff3e0;color:#e65100}           /* amber  — Iran War       */
+.crs-tag.pvt {background:#f3e5f5;color:#7b1fa2}           /* purple — Priv Credit    */
+.crs-tag.rec {background:#fce8e6;color:#b71c1c}           /* red    — Recession Risk */
+.crs-tag.sys {background:#e0f7fa;color:#00695c}           /* teal   — Systemic/Carry */
+
+tr.pvt-row            {background:#fdf8ff}
+tr.pvt-row:hover      {background:#f3e5f5}
+tr.rec-row            {background:#fff9f9}
+tr.rec-row:hover      {background:#fce8e6}
+tr.sys-row            {background:#f0fafa}
+tr.sys-row:hover      {background:#e0f7fa}
+
+/* Make crisis pane a flex column so table scrolls within the pane */
+#pane-crisis.on{display:flex;flex-direction:column;overflow:hidden}
+.crisis-tbl-wrap{flex:1;overflow:auto}
+
+/* ── SECTORS TAB — parked until a real data source is confirmed ──────
+.wt-bar-wrap{ display:flex;align-items:center;gap:6px;justify-content:flex-end }
+.wt-bar-track{ width:80px;height:6px;background:#e8eaed;border-radius:3px;overflow:hidden;flex-shrink:0 }
+.wt-bar-fill{ height:100%;border-radius:3px;background:var(--accent);transition:width .3s }
+.wt-pct{ font-family:'Roboto Mono',monospace;font-size:11px;color:var(--text);min-width:42px;text-align:right }
+── END SECTORS CSS ───────────────────────────────────────────────── */
+</style>
+</head>
+<body>
+
+<!-- ══ MAIN TAB BAR ════════════════════════════════════════════════════ -->
+<div id="tv-tab-bar">
+  <button class="tv-tab">📋 Dashboard</button>
+  <button class="tv-tab">📊 Table View</button>
+  <button class="tv-tab on">🌐 Markets</button>
+</div>
+
+<!-- ══ MARKETS VIEW ════════════════════════════════════════════════════ -->
+<div id="markets-view">
+
+  <!-- Sub-tab bar -->
+  <div id="mkt-sub-bar">
+    <button class="mkt-sub-tab on" onclick="switchSubTab('indices',this)">World Indices</button>
+    <button class="mkt-sub-tab"   onclick="switchSubTab('commodities',this)">Commodities</button>
+    <button class="mkt-sub-tab"   onclick="switchSubTab('crisis',this)">🌍 Crisis Monitor</button>
+    <!-- SECTORS SUB-TAB — parked until a real data source is confirmed
+    <button class="mkt-sub-tab"   onclick="switchSubTab('sectors',this)">Sectors</button>
+    -->
+  </div>
+
+  <!-- Toolbar -->
+  <div class="mkt-toolbar">
+    <span class="mkt-toolbar-title" id="mkt-title">World Indices</span>
+    <span class="mkt-updated">Updated 4:59 PM EDT</span>
+    <span class="mkt-count" id="mkt-count"></span>
+    <button class="mkt-refresh">↻ Refresh</button>
+  </div>
+
+  <!-- ── PANE: World Indices ────────────────────────────────────────── -->
+  <div class="mkt-pane on" id="pane-indices">
+    <table class="tv-table" id="tbl-indices">
+      <thead>
+        <tr>
+          <th class="left"          data-col="name"   >Index             <span class="arr"></span></th>
+          <th class="left"          data-col="region" >Region            <span class="arr"></span></th>
+          <th                                         >1M Chart</th>
+          <th                       data-col="price"  >Price             <span class="arr"></span></th>
+          <th class="sorted-desc"   data-col="chg1d"  >1D %              <span class="arr"></span></th>
+          <th                       data-col="chg1w"  >1W %              <span class="arr"></span></th>
+          <th                       data-col="chg1m"  >1M %              <span class="arr"></span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-indices"></tbody>
+    </table>
+  </div>
+
+  <!-- ── PANE: Commodities ─────────────────────────────────────────── -->
+  <div class="mkt-pane" id="pane-commodities">
+    <table class="tv-table" id="tbl-commodities">
+      <thead>
+        <tr>
+          <th class="left"        data-col="sym"    >Symbol            <span class="arr"></span></th>
+          <th class="left"        data-col="name"   >Name              <span class="arr"></span></th>
+          <th class="left"        data-col="cat"    >Category          <span class="arr"></span></th>
+          <th                                       >1M Chart</th>
+          <th                     data-col="price"  >Price             <span class="arr"></span></th>
+          <th                     data-col="mkttime">Market Time       <span class="arr"></span></th>
+          <th                     data-col="chg"    >Change            <span class="arr"></span></th>
+          <th class="sorted-desc" data-col="chgpct" >Change %          <span class="arr"></span></th>
+          <th                     data-col="vol"    >Volume            <span class="arr"></span></th>
+          <th                     data-col="oi"     >Open Interest     <span class="arr"></span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-commodities"></tbody>
+    </table>
+  </div>
+
+  <!-- ── PANE: Sectors — parked until a real data source is confirmed ─
+  <div class="mkt-pane" id="pane-sectors">
+    <table class="tv-table" id="tbl-sectors">
+      <thead>
+        <tr>
+          <th class="left"        data-col="name"  >Sector              <span class="arr"></span></th>
+          <th class="left"        data-col="etf"   >ETF Proxy           <span class="arr"></span></th>
+          <th                     data-col="wt"    >Mkt Weight          <span class="arr"></span></th>
+          <th                                      >1M Chart</th>
+          <th class="sorted-desc" data-col="d1"   >1D %                <span class="arr"></span></th>
+          <th                     data-col="w1"   >1W %                <span class="arr"></span></th>
+          <th                     data-col="m1"   >1M %                <span class="arr"></span></th>
+          <th                     data-col="ytd"  >YTD %               <span class="arr"></span></th>
+          <th                     data-col="y1"   >1Y %                <span class="arr"></span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-sectors"></tbody>
+    </table>
+  </div>
+  ── END SECTORS PANE ─────────────────────────────────────────────── -->
+
+  <!-- ── PANE: Crisis Monitor ──────────────────────────────────────── -->
+  <div class="mkt-pane" id="pane-crisis">
+    <!-- Table -->
+    <div class="crisis-tbl-wrap">
+      <table class="tv-table" id="tbl-crisis">
+        <thead>
+          <tr>
+            <th class="left"        data-col="ticker" >Ticker              <span class="arr"></span></th>
+            <th class="left"        data-col="label"  >Indicator           <span class="arr"></span></th>
+            <th class="left"        data-col="crisis" >Crisis              <span class="arr"></span></th>
+            <th                     data-col="current" >Value               <span class="arr"></span></th>
+            <th                     data-col="pct_day" >1D %                <span class="arr"></span></th>
+            <th class="sorted-desc" data-col="risk"    >Risk Level          <span class="arr"></span></th>
+            <th class="left"        data-col="signal"  >Crisis-End Signal   <span class="arr"></span></th>
+            <th                     data-col="p1w"     >1 Week              <span class="arr"></span></th>
+            <th                     data-col="p3w"     >3 Weeks             <span class="arr"></span></th>
+            <th                     data-col="p1m"     >1 Month             <span class="arr"></span></th>
+            <th                     data-col="p3m"     >3 Months            <span class="arr"></span></th>
+            <th                     data-col="p6m"     >6 Months            <span class="arr"></span></th>
+            <th                     data-col="pYTD"    >YTD                 <span class="arr"></span></th>
+            <th                     data-col="p12m"    >12 Months           <span class="arr"></span></th>
+            <th                     data-col="high52"  >52W High            <span class="arr"></span></th>
+            <th                     data-col="low52"   >52W Low             <span class="arr"></span></th>
+          </tr>
+        </thead>
+        <tbody id="tbody-crisis"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mkt-note">Data via Yahoo Finance · Prices delayed 15 min · 1M Chart = 22-day bar sparkline</div>
+
+</div><!-- /markets-view -->
+
+<script>
+// ══ SHARED HELPERS ════════════════════════════════════════════════════════════
+
+// Bar-chart sparkline — exact match of tvSparkline() in widget
+function tvSparkline(closes, w, h) {
+  if (!closes || closes.length < 2) return '<span class="tv-neu" style="font-size:10px">—</span>';
+  const mn = Math.min(...closes), mx = Math.max(...closes), range = mx - mn || 1;
+  const bw = Math.max(1, Math.floor(w / closes.length));
+  const isUp = closes[closes.length-1] >= closes[0];
+  const col  = isUp ? '#1a7f37' : '#c5221f';
+  const bars = closes.map((c,i) => {
+    const bh = Math.max(1, Math.round(((c-mn)/range)*(h-2))+1);
+    return `<rect x="${i*bw}" y="${h-bh}" width="${Math.max(1,bw-1)}" height="${bh}" fill="${col}" opacity="0.75"/>`;
+  }).join('');
+  return `<svg class="tv-spark" width="${closes.length*bw}" height="${h}" viewBox="0 0 ${closes.length*bw} ${h}">${bars}</svg>`;
+}
+
+function fmtPct(v) {
+  if (v == null) return '<span class="tv-neu">—</span>';
+  const cls = v>0?'tv-up':v<0?'tv-dn':'tv-neu', sign=v>0?'+':'';
+  return `<span class="${cls}">${sign}${v.toFixed(2)}%</span>`;
+}
+function fmtChg(v) {
+  if (v == null) return '<span class="tv-neu">—</span>';
+  const cls = v>0?'tv-up':v<0?'tv-dn':'tv-neu', sign=v>0?'+':'';
+  return `<span class="${cls}">${sign}${v.toFixed(v>=-10&&v<=10?4:2)}</span>`;
+}
+function fmtVol(v) {
+  if (v == null) return '<span class="tv-neu">—</span>';
+  if (v >= 1e6) return (v/1e6).toFixed(3)+'M';
+  if (v >= 1e3) return v.toLocaleString();
+  return String(v);
+}
+
+// ══ WORLD INDICES DATA ════════════════════════════════════════════════════════
+// [name, sym, region, price_str, chg1d, chg1w, chg1m, closes[22]]
+const INDICES = [
+  ['S&P 500',        '^GSPC',     'Americas','5,659.91', +0.84,+1.20,+3.10,[52,54,51,55,57,56,60,58,63,65,62,66,68,67,71,70,73,75,74,78,77,80]],
+  ['Dow Jones',      '^DJI',      'Americas','41,317.43',+0.02,+0.55,+1.80,[50,52,49,54,56,55,58,57,61,62,60,64,65,64,67,66,68,69,68,71,70,72]],
+  ['Nasdaq',         '^IXIC',     'Americas','17,902.94',+1.71,+2.10,+4.50,[44,47,44,50,54,52,58,56,62,65,61,67,70,68,73,72,76,79,77,82,80,84]],
+  ['Russell 2000',   '^RUT',      'Americas','1,989.43', +0.76,+0.90,+2.20,[47,49,46,51,53,52,55,54,58,59,57,61,62,61,64,63,65,66,65,68,67,69]],
+  ['S&P/TSX',        '^GSPTSE',   'Americas','24,077.76',+0.65,+0.80,+1.90,[48,50,47,52,54,53,56,55,58,59,57,61,62,61,64,63,65,66,65,68,67,69]],
+  ['IBOVESPA',       '^BVSP',     'Americas','134,108',  +0.49,+1.10,+2.60,[45,48,46,50,53,52,55,54,57,59,56,60,62,61,64,63,66,67,66,69,68,70]],
+  ['VIX',            '^VIX',      'Americas','17.19',    +0.64,-5.20,-8.40,[82,77,84,72,67,74,62,70,57,64,60,52,57,50,54,47,52,44,49,42,47,40]],
+  ['FTSE 100',       '^FTSE',     'Europe',  '8,233.07', -0.43,-0.90,+1.10,[62,60,64,58,55,59,54,57,52,55,53,50,54,51,48,52,49,46,50,47,51,48]],
+  ['DAX',            '^GDAXI',    'Europe',  '22,338.63',-1.32,-2.10,+0.80,[67,64,70,62,58,63,57,61,55,59,56,52,57,53,49,54,50,46,51,47,52,48]],
+  ['CAC 40',         '^FCHI',     'Europe',  '7,412.57', -1.09,-1.80,+0.50,[64,61,66,59,55,60,54,58,52,56,54,50,55,51,47,52,48,45,49,46,50,47]],
+  ['Euro Stoxx 50',  '^STOXX50E', 'Europe',  '4,911.53', -1.02,-1.60,+0.70,[65,62,67,60,56,61,55,59,53,57,55,51,56,52,48,53,49,45,50,46,51,47]],
+  ['FTSE MIB',       'FTSEMIB.MI','Europe',  '37,216.67',-0.46,-0.80,+1.50,[60,58,62,56,53,57,52,55,50,54,52,48,53,49,46,50,47,44,48,45,49,46]],
+  ['IBEX 35',        '^IBEX',     'Europe',  '13,192.10',-0.72,-1.20,+2.10,[61,59,63,57,54,58,53,56,51,55,53,49,54,50,47,51,48,45,49,46,50,47]],
+  ['AEX',            '^AEX',      'Europe',  '916.67',   -0.46,-0.70,+1.30,[59,57,61,55,52,56,51,54,49,53,51,47,52,48,45,49,46,43,47,44,48,45]],
+  ['Nikkei 225',     '^N225',     'Asia',    '37,703.33',-0.19,-1.40,-2.80,[68,65,70,62,59,64,57,62,55,59,57,53,58,54,50,55,51,48,52,49,53,50]],
+  ['Hang Seng',      '^HSI',      'Asia',    '22,393.71',-0.87,-2.20,-4.10,[74,70,76,66,62,67,60,65,57,62,59,55,60,56,52,57,53,49,54,50,55,51]],
+  ['SSE Composite',  '000001.SS', 'Asia',    '3,279.95', +0.00,+0.30,+1.20,[50,51,49,53,54,52,55,53,56,55,53,56,54,57,55,58,56,58,57,59,58,60]],
+  ['KOSPI',          '^KS11',     'Asia',    '2,498.00', +0.11,-0.50,-1.60,[57,55,59,53,51,54,50,53,49,52,50,47,51,48,46,49,47,45,48,46,50,47]],
+  ['S&P/ASX 200',    '^AXJO',     'Asia',    '7,844.40', -1.51,-2.30,-1.20,[65,61,67,58,55,59,53,57,51,55,53,50,54,51,47,52,48,44,49,45,50,46]],
+  ['S&P BSE Sensex', '^BSESN',    'Asia',    '80,328.19',-0.66,-1.10,+0.40,[60,57,62,55,52,56,51,54,49,53,51,48,52,49,46,50,47,44,48,45,49,46]],
+  ['Taiwan Weighted','^TWII',     'Asia',    '20,164.33',+0.14,-0.30,+0.90,[54,53,56,51,50,53,49,52,48,51,49,46,50,47,45,48,46,44,47,45,49,46]],
+];
+
+// ══ COMMODITIES DATA ══════════════════════════════════════════════════════════
+// [sym, name, category, price_num, mkt_time, chg, chgpct, volume, open_interest, closes[22]]
+const COMMODITIES = [
+  ['GC=F', 'Gold Jun 26',                'Metals',       4730.70,'4:59PM EDT', +19.80,+0.42, 114845,  243426,[60,62,61,64,66,65,68,67,70,72,69,73,74,73,76,75,77,78,77,80,79,82]],
+  ['SI=F', 'Silver Jul 26',              'Metals',         80.86,'4:59PM EDT',  +0.68,+0.85,  36952,   74582,[55,57,55,59,61,60,63,62,65,66,64,67,68,67,70,69,71,72,71,74,73,76]],
+  ['PL=F', 'Platinum Jul 26',            'Metals',       2059.30,'4:59PM EDT',  -3.00,-0.15,   8955,   48765,[58,56,60,54,52,55,51,53,50,52,51,48,52,49,47,50,48,46,49,47,51,48]],
+  ['HG=F', 'Copper Jul 26',              'Metals',          6.30,'4:59PM EDT',  +0.12,+1.95,  49129,  141506,[45,48,46,50,53,52,55,54,57,59,56,60,62,61,64,63,66,67,66,69,68,72]],
+  ['PA=F', 'Palladium Jun 26',           'Metals',        960.20,'4:59PM EDT',  -4.50,-0.47,   2341,    9823,[62,59,64,57,54,58,53,56,51,55,53,50,54,51,48,52,49,47,50,48,52,49]],
+  ['MGC=F','Micro Gold Futures Jun 26',  'Metals',       4730.70,'4:59PM EDT', +19.80,+0.42, 281175,   58367,[60,62,61,64,66,65,68,67,70,72,69,73,74,73,76,75,77,78,77,80,79,82]],
+  ['SIL=F','Micro Silver Futures Jul 26','Metals',         80.86,'4:59PM EDT',  +0.68,+0.85,  72074,   11176,[55,57,55,59,61,60,63,62,65,66,64,67,68,67,70,69,71,72,71,74,73,76]],
+  ['CL=F', 'Crude Oil Jun 26',           'Energy',         95.42,'4:59PM EDT',  +0.61,+0.64, 211633,  220250,[50,53,51,55,57,56,59,58,61,63,60,64,65,64,67,66,68,69,68,71,70,73]],
+  ['NG=F', 'Natural Gas Jun 26',         'Energy',          2.757,'4:59PM EDT',-0.012,-0.43, 117782,  204824,[65,62,67,60,57,61,56,59,54,57,55,52,56,53,50,54,51,49,52,50,53,50]],
+  ['BZ=F', 'Brent Crude Jul 26',         'Energy',         98.15,'4:59PM EDT',  +0.55,+0.56, 143210,  198340,[51,54,52,56,58,57,60,59,62,64,61,65,66,65,68,67,69,70,69,72,71,74]],
+  ['HO=F', 'Heating Oil Jun 26',         'Energy',          2.89,'4:59PM EDT',  +0.02,+0.69,  38420,   71230,[48,51,49,53,55,54,57,56,59,61,58,62,63,62,65,64,66,67,66,69,68,71]],
+  ['RB=F', 'RBOB Gasoline Jun 26',       'Energy',          2.74,'4:59PM EDT',  +0.01,+0.36,  52310,   89450,[46,49,47,51,53,52,55,54,57,59,56,60,61,60,63,62,64,65,64,67,66,69]],
+  ['ES=F', 'E-Mini S&P 500 Jun 26',      'Financials',   7419.00,'4:59PM EDT', +56.00,+0.76,1210000,2004000,[52,54,51,55,57,56,60,58,63,65,62,66,68,67,71,70,73,75,74,78,77,80]],
+  ['YM=F', 'Mini Dow Jones Jun 26',      'Financials',  49691.00,'4:59PM EDT',  -9.00,-0.02,  80595,   77412,[50,52,49,53,55,54,57,56,59,60,58,62,63,62,65,64,66,67,66,69,68,71]],
+  ['NQ=F', 'Nasdaq 100 Jun 26',          'Financials',  29332.50,'4:59PM EDT',+650.25,+2.27, 528012,  288079,[44,47,44,50,54,52,58,56,62,65,61,67,70,68,73,72,76,79,77,82,80,85]],
+  ['RTY=F','E-mini Russell 2000 Jun 26', 'Financials',   2867.60,'4:59PM EDT', +18.70,+0.66, 138669,  425352,[47,49,46,51,53,52,55,54,58,59,57,61,62,61,64,63,65,66,65,68,67,70]],
+  ['ZB=F', 'U.S. Treasury Bond Jun 26',  'Fixed Income', 113.56,'4:59PM EDT',  +0.41,+0.36, 371979, 1828000,[55,57,55,59,61,60,63,62,65,67,64,68,69,68,71,70,72,73,72,75,74,77]],
+  ['ZN=F', '10-Year T-Note Jun 26',      'Fixed Income', 110.75,'4:59PM EDT',  +0.23,+0.21,1422000,5326000,[53,55,53,57,59,58,61,60,63,65,62,66,67,66,69,68,70,71,70,73,72,75]],
+  ['ZF=F', '5-Year T-Note Jun 26',       'Fixed Income', 107.87,'4:59PM EDT',  +0.13,+0.12,1028000,6635000,[51,53,51,55,57,56,59,58,61,63,60,64,65,64,67,66,68,69,68,71,70,73]],
+  ['ZT=F', '2-Year T-Note Jun 26',       'Fixed Income', 103.55,'4:59PM EDT',  +0.04,+0.04, 632313,4612000,[50,51,50,53,54,53,56,55,58,59,57,60,61,60,62,61,63,64,63,65,64,66]],
+  ['ZC=F', 'Corn Jul 26',                'Agriculture',  473.50,'4:59PM EDT',  -2.25,-0.47, 178420,  892340,[60,58,62,56,53,57,52,55,51,54,52,49,53,50,48,51,49,47,50,48,52,49]],
+  ['ZW=F', 'Wheat Jul 26',               'Agriculture',  531.75,'4:59PM EDT',  +4.50,+0.85,  95430,  412870,[48,51,49,53,55,54,57,56,59,61,58,62,63,62,65,64,66,67,66,69,68,71]],
+  ['ZS=F', 'Soybeans Jul 26',            'Agriculture', 1048.25,'4:59PM EDT',  -5.75,-0.55, 134560,  678920,[62,59,64,57,54,58,53,56,52,55,53,50,54,51,49,52,50,48,51,49,53,50]],
+];
+
+// ══ SECTORS DATA — parked until a real data source is confirmed ═══════════════
+// Yahoo Finance sector aggregate data (market weights, sector-level returns) is
+// NOT available via yfinance or any stable public API. Restore this block once
+// a reliable source is identified.
+/*
+const SECTORS = [
+  ['Technology',            'XLK',  31.78, +2.48, +1.10, +3.20, +14.41, +22.10, [55,57,54,59,62,60,65,63,68,71,67,73,75,73,78,77,81,84,82,87,85,89]],
+  ['Financial Services',    'XLF',  13.39, -0.18, -0.60, +1.10,  -3.39,  +8.40, [60,58,62,56,54,57,53,55,52,54,53,50,54,51,49,52,50,48,51,49,53,50]],
+  ['Communication Services','XLC',  10.42, -0.27, +0.40, +2.10,  +8.95, +18.30, [50,52,50,54,57,55,59,57,62,64,61,65,67,65,69,68,71,73,71,75,73,77]],
+  ['Consumer Cyclical',     'XLY',  10.16, +0.59, +1.20, +2.80,  +3.45, +12.60, [48,51,49,53,56,54,58,56,60,63,59,64,66,64,68,67,70,72,70,74,72,76]],
+  ['Industrials',           'XLI',   9.08, +0.04, +0.80, +2.50, +17.91, +19.40, [44,47,45,50,53,52,56,55,59,62,58,63,66,64,69,68,72,75,73,78,76,80]],
+  ['Healthcare',            'XLV',   8.46, -0.67, -1.10, -0.80,  -1.88,  +5.20, [62,60,64,58,56,59,55,57,54,56,55,52,56,53,51,54,52,50,53,51,55,52]],
+  ['Energy',                'XLE',   4.82, -0.62, +1.50, +3.40, +27.72, +14.80, [40,43,41,46,50,49,53,52,57,60,56,62,65,63,68,67,72,75,73,78,76,81]],
+  ['Consumer Defensive',    'XLP',   4.69, +0.15, +0.30, +1.20,  +9.67, +11.30, [52,54,52,56,58,57,60,59,62,63,61,64,65,64,66,65,67,68,67,69,68,70]],
+  ['Basic Materials',       'XLB',   2.91, +1.67, +2.10, +4.20, +18.16, +16.50, [43,46,44,49,53,51,56,55,59,62,58,64,67,65,70,69,73,76,74,79,77,82]],
+  ['Real Estate',           'XLRE',  2.17, +0.77, +0.50, +1.90, +10.54,  +7.80, [50,52,50,54,56,55,58,57,60,62,59,63,64,63,66,65,67,68,67,70,69,71]],
+  ['Utilities',             'XLU',   2.13, -0.49, -0.20, +1.60, +10.95, +13.20, [51,53,51,55,57,56,59,58,61,62,60,63,64,63,65,64,66,67,66,68,67,69]],
+];
+*/
+
+// ══ CRISIS MONITOR DATA ═══════════════════════════════════════════════════════
+// ticker, label, current, unit, precision (optional), pct_day, chg_label,
+// risk_cls, risk_label, signal_on, signal_note, low52, high52,
+// p1w, p3w, p1m, p3m, p6m, pYTD, p12m  (all as % change unless noted)
+const CRISIS_DATA = [
+
+  // ── Iran War ────────────────────────────────────────────────────────────────
+  { key:'vix',    ticker:'^VIX',          label:'CBOE Volatility Index',
+    crisis:'Iran War',        group:'iran',
+    current:18.5,  unit:'',         pct_day:-3.2,  chg_label:'▼ 3.2% today',
+    risk_cls:'normal',    risk_label:'LOW',
+    signal_on:true,  signal_note:'Need VIX < 20',
+    low52:11.8,  high52:65.7,
+    p1w:-5.2,  p3w:-8.4,   p1m:-18.3, p3m:+4.2,   p6m:-22.1, pYTD:+15.4, p12m:-8.7 },
+
+  { key:'fg',     ticker:'F&G',           label:'Fear & Greed Index',
+    crisis:'Iran War',        group:'iran',
+    current:35,    unit:'/100',     pct_day:-5.4,  chg_label:'−2.0 pts today',
+    risk_cls:'fear',      risk_label:'FEAR',
+    signal_on:false, signal_note:'Need F&G > 50',
+    low52:14,    high52:82,
+    p1w:-7.9,  p3w:-14.6,  p1m:-22.2, p3m:-30.0,  p6m:-47.1, pYTD:-42.3, p12m:-35.6 },
+
+  { key:'move',   ticker:'MOVE',          label:'ICE BofA Bond Volatility Index',
+    crisis:'Iran War',        group:'iran',
+    current:95.0,  unit:'',         pct_day:-1.8,  chg_label:'▼ 1.8% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need MOVE < 80',
+    low52:72.4,  high52:198.7,
+    p1w:-3.1,  p3w:-6.4,   p1m:-10.4, p3m:-16.2,  p6m:-27.0, pYTD:+12.8, p12m:-31.5 },
+
+  { key:'pcr',    ticker:'^SKEW',         label:'CBOE SKEW Index',
+    crisis:'Iran War',        group:'iran',
+    current:138,   unit:'',         pct_day:+0.5,  chg_label:'▲ 0.5% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need SKEW < 130',
+    low52:109,   high52:168,
+    p1w:+1.5,  p3w:+2.2,   p1m:-2.8,  p3m:+5.3,   p6m:+8.6,  pYTD:+8.4,  p12m:+12.1 },
+
+  { key:'spread', ticker:'CL1-CL3',       label:'WTI Oil M1−M3 Spread',
+    crisis:'Iran War',        group:'iran',
+    current:3.2,   unit:'$/bbl',    pct_day:+6.7,  chg_label:'+0.20 $/bbl today',
+    risk_cls:'elevated',  risk_label:'BACKWARDATION',
+    signal_on:false, signal_note:'Need spread < $2',
+    low52:-1.1,  high52:8.4,
+    p1w:+14.3, p3w:+28.0,  p1m:+60.0, p3m:-11.1,  p6m:+220.0,pYTD:+166.7,p12m:+167.0 },
+
+  { key:'ttf',    ticker:'TTF-HH',        label:'Gas Spread (TTF − Henry Hub)',
+    crisis:'Iran War',        group:'iran',
+    current:6.5,   unit:'$/MMBtu',  pct_day:+4.8,  chg_label:'+0.30 vs prior month',
+    risk_cls:'normal',    risk_label:'MODERATE',
+    signal_on:false, signal_note:'Need spread ≤ 0',
+    low52:1.2,   high52:18.5,
+    p1w:+8.3,  p3w:+18.2,  p1m:+30.0, p3m:+44.4,  p6m:+116.7,pYTD:+85.7, p12m:+225.0 },
+
+  { key:'tanker', ticker:'FRO',           label:'Frontline Group — Tanker Rates',
+    crisis:'Iran War',        group:'iran',
+    current:14.20, unit:'USD',      pct_day:-1.2,  chg_label:'▼ 1.2% today',
+    risk_cls:'normal',    risk_label:'EASING',
+    signal_on:true,  signal_note:'Need FRO −20%+ from 52w high',
+    low52:12.10, high52:19.80,
+    p1w:-2.7,  p3w:-5.4,   p1m:-10.8, p3m:-22.5,  p6m:-28.3, pYTD:-18.5, p12m:-25.2 },
+
+  // ── Private Credit ──────────────────────────────────────────────────────────
+  { key:'bizd',   ticker:'BIZD',          label:'VanEck BDC Income ETF',
+    crisis:'Private Credit',  group:'pvt',
+    current:15.40, unit:'USD',      pct_day:-0.6,  chg_label:'▼ 0.6% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need BIZD > 50-day MA',
+    low52:13.20, high52:18.10,
+    p1w:-1.8,  p3w:-3.2,   p1m:-6.4,  p3m:-12.1,  p6m:-8.5,  pYTD:-14.2, p12m:-9.8 },
+
+  { key:'hyspr',  ticker:'BAMLH0A0HYM2', label:'ICE BofA US HY OAS',
+    crisis:'Private Credit',  group:'pvt',
+    current:380,   unit:'bps',      pct_day:+1.3,  chg_label:'▲ +5 bps today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need HY spread < 300 bps',
+    low52:250,   high52:450,
+    p1w:+5.6,  p3w:+12.0,  p1m:+22.6, p3m:+35.7,  p6m:+52.0, pYTD:+48.4, p12m:+28.8 },
+
+  { key:'kre',    ticker:'KRE',           label:'SPDR S&P Regional Banking ETF',
+    crisis:'Private Credit',  group:'pvt',
+    current:52.30, unit:'USD',      pct_day:-0.8,  chg_label:'▼ 0.8% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need KRE > 60 (SVB risk easing)',
+    low52:44.10, high52:64.80,
+    p1w:-1.5,  p3w:-3.8,   p1m:-7.2,  p3m:-16.5,  p6m:-12.3, pYTD:-18.1, p12m:-10.4 },
+
+  { key:'igspr',  ticker:'BAMLC0A0CM',   label:'ICE BofA US IG OAS',
+    crisis:'Private Credit',  group:'pvt',
+    current:105,   unit:'bps',      pct_day:+0.9,  chg_label:'▲ +1 bps today',
+    risk_cls:'normal',    risk_label:'NORMAL',
+    signal_on:false, signal_note:'Need IG spread < 80 bps',
+    low52:82,    high52:165,
+    p1w:+2.9,  p3w:+5.8,   p1m:+12.5, p3m:+22.1,  p6m:+35.9, pYTD:+31.3, p12m:+16.2 },
+
+  { key:'bkln',   ticker:'BKLN',          label:'Invesco Senior Loan ETF',
+    crisis:'Private Credit',  group:'pvt',
+    current:21.45, unit:'USD',      pct_day:-0.3,  chg_label:'▼ 0.3% today',
+    risk_cls:'elevated',  risk_label:'ELEVATED',
+    signal_on:false, signal_note:'Need BKLN > 22.50 (loan market recovery)',
+    low52:19.80, high52:22.90,
+    p1w:-0.9,  p3w:-2.1,   p1m:-4.8,  p3m:-9.5,   p6m:-5.5,  pYTD:-10.2, p12m:-5.8 },
+
+  // ── Recession Risk ──────────────────────────────────────────────────────────
+  { key:'yldcrv', ticker:'T10Y2Y',        label:'2Y–10Y Treasury Yield Curve',
+    crisis:'Recession Risk',  group:'rec',
+    current:0.28,  unit:'%',        pct_day:+7.7,  chg_label:'▲ +0.02pp today',
+    risk_cls:'elevated',  risk_label:'POST-INVERSION',
+    signal_on:false, signal_note:'Post-inversion danger window active',
+    low52:-1.08, high52:0.42,
+    p1w:+0.02, p3w:+0.04,  p1m:+0.08, p3m:+0.18,  p6m:+0.52, pYTD:+0.68, p12m:+1.36 },
+
+  { key:'dxy',    ticker:'DX-Y.NYB',      label:'US Dollar Index (DXY)',
+    crisis:'Recession Risk',  group:'rec',
+    current:104.2, unit:'',         pct_day:-0.3,  chg_label:'▼ 0.3% today',
+    risk_cls:'elevated',  risk_label:'STRONG USD',
+    signal_on:false, signal_note:'Need DXY < 100 (EM relief)',
+    low52:99.4,  high52:110.2,
+    p1w:-0.3,  p3w:-0.8,   p1m:+1.2,  p3m:+2.8,   p6m:+5.4,  pYTD:+3.8,  p12m:+8.5 },
+
+  { key:'cugold', ticker:'HG÷GC',         label:'Copper / Gold Ratio',
+    crisis:'Recession Risk',  group:'rec',
+    current:0.00133,unit:'',        pct_day:-0.8,  chg_label:'▼ 0.8% today',
+    precision:5,
+    risk_cls:'elevated',  risk_label:'DEPRESSED',
+    signal_on:false, signal_note:'Need ratio > 0.002 (expansion signal)',
+    low52:0.00108,   high52:0.00215, precision52:5,
+    p1w:-0.8,  p3w:-1.5,   p1m:-3.5,  p3m:-8.2,   p6m:-15.0, pYTD:-12.3, p12m:-22.1 },
+
+  { key:'bdi',    ticker:'^BDI',           label:'Baltic Dry Index',
+    crisis:'Recession Risk',  group:'rec',
+    current:1850,  unit:'',         pct_day:-0.5,  chg_label:'▼ 0.5% today',
+    risk_cls:'elevated',  risk_label:'BELOW AVG',
+    signal_on:false, signal_note:'Need BDI > 2000 (trade recovery)',
+    low52:1240,  high52:2650,
+    p1w:-2.4,  p3w:-5.1,   p1m:-8.3,  p3m:+12.5,  p6m:-18.5, pYTD:-22.4, p12m:+5.2 },
+
+  // ── Systemic / Carry ────────────────────────────────────────────────────────
+  { key:'vvix',   ticker:'^VVIX',          label:'CBOE VIX Volatility Index (VoVIX)',
+    crisis:'Systemic / Carry',group:'sys',
+    current:95.3,  unit:'',         pct_day:-1.2,  chg_label:'▼ 1.2% today',
+    risk_cls:'normal',    risk_label:'NORMAL',
+    signal_on:false, signal_note:'Need VVIX < 80 (calm vol regime)',
+    low52:74.2,  high52:158.6,
+    p1w:-3.8,  p3w:-7.2,   p1m:-12.5, p3m:-18.0,  p6m:-25.4, pYTD:+8.6,  p12m:-15.2 },
+
+  { key:'usdjpy', ticker:'JPY=X',          label:'USD/JPY — Yen Carry Trade Risk',
+    crisis:'Systemic / Carry',group:'sys',
+    current:152.4, unit:'¥',        pct_day:+0.3,  chg_label:'▲ 0.3% today',
+    risk_cls:'elevated',  risk_label:'CARRY RISK',
+    signal_on:false, signal_note:'Watch for rapid JPY strengthening',
+    low52:140.5, high52:161.9,
+    p1w:+0.3,  p3w:+0.9,   p1m:+1.8,  p3m:+4.2,   p6m:-2.5,  pYTD:+2.8,  p12m:+8.5 },
+
+  { key:'emb',    ticker:'EMB',            label:'iShares EM USD Bond ETF',
+    crisis:'Systemic / Carry',group:'sys',
+    current:93.50, unit:'USD',      pct_day:-0.4,  chg_label:'▼ 0.4% today',
+    risk_cls:'elevated',  risk_label:'STRESSED',
+    signal_on:false, signal_note:'Need EMB > 97 (EM stress easing)',
+    low52:88.20, high52:100.40,
+    p1w:-1.1,  p3w:-2.5,   p1m:-4.3,  p3m:-7.8,   p6m:-4.2,  pYTD:-8.5,  p12m:-5.1 },
+
+  { key:'tlt',    ticker:'TLT',            label:'iShares 20Y+ Treasury Bond ETF',
+    crisis:'Systemic / Carry',group:'sys',
+    current:88.20, unit:'USD',      pct_day:+0.2,  chg_label:'▲ 0.2% today',
+    risk_cls:'normal',    risk_label:'WATCH',
+    signal_on:false, signal_note:'Bond vigilante risk if TLT < 85',
+    low52:82.30, high52:99.80,
+    p1w:+0.2,  p3w:-0.5,   p1m:+1.8,  p3m:-3.5,   p6m:-6.2,  pYTD:-4.8,  p12m:-8.5 },
+];
+
+const RISK_RANK = { calm:0, normal:1, elevated:2, fear:3, extreme:4 };
+
+// ══ SORT STATE (one per table) ════════════════════════════════════════════════
+const SORT = {
+  indices:     { col:'chg1d',  dir:-1 },
+  commodities: { col:'chgpct', dir:-1 },
+  crisis:      { col:'risk',   dir:-1 },
+  // sectors: { col:'d1', dir:-1 },  // parked — no data source yet
+};
+
+// ══ INDICES RENDER ════════════════════════════════════════════════════════════
+const IDX_MAP = { name:0, region:2, price:3, chg1d:4, chg1w:5, chg1m:6 };
+
+function renderIndices() {
+  const { col, dir } = SORT.indices;
+  const rows = [...INDICES].sort((a,b) => {
+    const i = IDX_MAP[col];
+    if (i == null) return 0;
+    const va = a[i], vb = b[i];
+    if (typeof va === 'string') return dir * va.localeCompare(vb);
+    return dir * (parseFloat(String(va).replace(/,/g,'')) - parseFloat(String(vb).replace(/,/g,'')));
+  });
+  document.getElementById('tbody-indices').innerHTML = rows.map(r => {
+    const [name, sym, region, price, d1, w1, m1, closes] = r;
+    return `<tr>
+      <td class="left"><span class="ticker-cell">${name}</span> <span class="sec-cell">${sym}</span></td>
+      <td class="left sec-cell">${region}</td>
+      <td class="spark-cell">${tvSparkline(closes,60,20)}</td>
+      <td class="price-cell">${price}</td>
+      <td>${fmtPct(d1)}</td>
+      <td>${fmtPct(w1)}</td>
+      <td>${fmtPct(m1)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('mkt-count').textContent = `${rows.length} indices`;
+}
+
+// ══ COMMODITIES RENDER ════════════════════════════════════════════════════════
+const COM_MAP = { sym:0, name:1, cat:2, price:3, mkttime:4, chg:5, chgpct:6, vol:7, oi:8 };
+
+function renderCommodities() {
+  const { col, dir } = SORT.commodities;
+  const rows = [...COMMODITIES].sort((a,b) => {
+    const i = COM_MAP[col];
+    if (i == null) return 0;
+    const va = a[i], vb = b[i];
+    if (typeof va === 'string') return dir * va.localeCompare(vb);
+    return dir * (va - vb);
+  });
+  document.getElementById('tbody-commodities').innerHTML = rows.map(r => {
+    const [sym, name, cat, price, mkttime, chg, chgpct, vol, oi, closes] = r;
+    const priceStr = price >= 1000
+      ? price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
+      : price.toFixed(price < 10 ? 4 : 2);
+    return `<tr>
+      <td class="left ticker-cell">${sym}</td>
+      <td class="left name-cell">${name}</td>
+      <td class="left sec-cell">${cat}</td>
+      <td class="spark-cell">${tvSparkline(closes,60,20)}</td>
+      <td class="price-cell">${priceStr}</td>
+      <td class="time-cell">${mkttime}</td>
+      <td>${fmtChg(chg)}</td>
+      <td>${fmtPct(chgpct)}</td>
+      <td class="vol-cell">${fmtVol(vol)}</td>
+      <td class="vol-cell">${fmtVol(oi)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('mkt-count').textContent = `${rows.length} contracts`;
+}
+
+// ══ CRISIS MONITOR RENDER ════════════════════════════════════════════════════
+function renderCrisis() {
+  const { col, dir } = SORT.crisis;
+  const PERIOD_COLS = ['p1w','p3w','p1m','p3m','p6m','pYTD','p12m','high52','low52'];
+  const rows = [...CRISIS_DATA].sort((a, b) => {
+    if (col === 'ticker')  return dir * a.ticker.localeCompare(b.ticker);
+    if (col === 'label')   return dir * a.label.localeCompare(b.label);
+    if (col === 'crisis')  return dir * a.crisis.localeCompare(b.crisis);
+    if (col === 'current') return dir * (a.current - b.current);
+    if (col === 'pct_day') return dir * (a.pct_day - b.pct_day);
+    if (col === 'risk')    return dir * (RISK_RANK[a.risk_cls] - RISK_RANK[b.risk_cls]);
+    if (col === 'signal')  return dir * ((a.signal_on?1:0) - (b.signal_on?1:0));
+    if (PERIOD_COLS.includes(col)) return dir * ((a[col] ?? 0) - (b[col] ?? 0));
+    return 0;
+  });
+
+  // ── Render table rows ─────────────────────────────────────────────────────
+  const fP = v => {                       // format a period % change cell
+    if (v == null) return '<span class="tv-neu">—</span>';
+    const cls  = v > 0.05 ? 'tv-up' : v < -0.05 ? 'tv-dn' : 'tv-neu';
+    const sign = v > 0 ? '+' : '';
+    return `<span class="${cls}">${sign}${v.toFixed(2)}%</span>`;
+  };
+  const fmtV = (v, prec) => {            // format a value with optional precision
+    if (prec != null) return v.toFixed(prec);
+    if (Math.abs(v) >= 100) return v.toLocaleString('en-US',{maximumFractionDigits:1});
+    return v.toFixed(2);
+  };
+  const ROW_CLS = { iran:'', pvt:'pvt-row', rec:'rec-row', sys:'sys-row' };
+  document.getElementById('tbody-crisis').innerHTML = rows.map(r => {
+    const chgCls = r.pct_day > 0.1 ? 'tv-up' : r.pct_day < -0.1 ? 'tv-dn' : 'tv-neu';
+    const valStr = fmtV(r.current, r.precision);
+    const h52    = fmtV(r.high52,  r.precision);
+    const l52    = fmtV(r.low52,   r.precision);
+    return `<tr class="${ROW_CLS[r.group]||''}">
+      <td class="left ticker-cell">${r.ticker}</td>
+      <td class="left" style="font-size:12px;min-width:180px">${r.label}</td>
+      <td class="left"><span class="crs-tag ${r.group}">${r.crisis}</span></td>
+      <td class="price-cell">${valStr}<span style="font-size:10px;color:var(--muted);margin-left:2px">${r.unit}</span></td>
+      <td><span class="${chgCls}" style="font-size:11px">${r.chg_label}</span></td>
+      <td><span class="cc-risk ${r.risk_cls}">${r.risk_label}</span></td>
+      <td class="left"><span class="cc-signal ${r.signal_on?'on':'off'}">${r.signal_on?'✓ CRISIS ENDING':r.signal_note}</span></td>
+      <td>${fP(r.p1w)}</td>
+      <td>${fP(r.p3w)}</td>
+      <td>${fP(r.p1m)}</td>
+      <td>${fP(r.p3m)}</td>
+      <td>${fP(r.p6m)}</td>
+      <td>${fP(r.pYTD)}</td>
+      <td>${fP(r.p12m)}</td>
+      <td class="price-cell">${h52}</td>
+      <td class="price-cell">${l52}</td>
+    </tr>`;
+  }).join('');
+  const sigCount = CRISIS_DATA.filter(r => r.signal_on).length;
+  document.getElementById('mkt-count').textContent = `${sigCount}/${CRISIS_DATA.length} signals de-escalating`;
+}
+
+// ══ SECTORS RENDER — parked until a real data source is confirmed ══════════════
+/*
+const SEC_MAP = { name:0, etf:1, wt:2, d1:3, w1:4, m1:5, ytd:6, y1:7 };
+
+function renderSectors() {
+  const { col, dir } = SORT.sectors;
+  const rows = [...SECTORS].sort((a, b) => {
+    const i = SEC_MAP[col];
+    if (i == null) return 0;
+    const va = a[i], vb = b[i];
+    if (typeof va === 'string') return dir * va.localeCompare(vb);
+    return dir * (va - vb);
+  });
+  const maxWt = Math.max(...SECTORS.map(r => r[2]));
+  document.getElementById('tbody-sectors').innerHTML = rows.map(r => {
+    const [name, etf, wt, d1, w1, m1, ytd, y1, closes] = r;
+    const barW = Math.round((wt / maxWt) * 100);
+    const wtCell = `<div class="wt-bar-wrap">
+      <div class="wt-bar-track"><div class="wt-bar-fill" style="width:${barW}%"></div></div>
+      <span class="wt-pct">${wt.toFixed(2)}%</span>
+    </div>`;
+    return `<tr>
+      <td class="left" style="font-weight:600;font-size:12px">${name}</td>
+      <td class="left ticker-cell">${etf}</td>
+      <td>${wtCell}</td>
+      <td class="spark-cell">${tvSparkline(closes, 60, 20)}</td>
+      <td>${fmtPct(d1)}</td>
+      <td>${fmtPct(w1)}</td>
+      <td>${fmtPct(m1)}</td>
+      <td>${fmtPct(ytd)}</td>
+      <td>${fmtPct(y1)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('mkt-count').textContent = `${rows.length} sectors`;
+}
+*/
+
+// ══ SORT CLICK ════════════════════════════════════════════════════════════════
+function attachSort(tableId, tbodyFn, sortKey) {
+  document.querySelectorAll(`#${tableId} thead th[data-col]`).forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      const s = SORT[sortKey];
+      const textCols = ['name','sym','cat','region','mkttime','ticker','label','signal','crisis'];
+      s.dir = (s.col === col) ? s.dir * -1 : (textCols.includes(col) ? 1 : -1);
+      s.col = col;
+      // update arrows
+      document.querySelectorAll(`#${tableId} thead th`).forEach(h => {
+        h.classList.remove('sorted-asc','sorted-desc');
+        const a = h.querySelector('.arr'); if (a) a.textContent = '';
+      });
+      th.classList.add(s.dir===1 ? 'sorted-asc' : 'sorted-desc');
+      const arr = th.querySelector('.arr');
+      if (arr) arr.textContent = s.dir===1 ? ' ↑' : ' ↓';
+      tbodyFn();
+    });
+  });
+}
+
+// ══ SUB-TAB SWITCH ════════════════════════════════════════════════════════════
+const TITLES = { indices:'World Indices', commodities:'Commodities', crisis:'🌍 Crisis Monitor' /*, sectors:'Sectors'*/ };
+
+function switchSubTab(key, btn) {
+  document.querySelectorAll('.mkt-sub-tab').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.mkt-pane').forEach(p => p.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('pane-'+key).classList.add('on');
+  document.getElementById('mkt-title').textContent = TITLES[key];
+  if (key==='indices')     renderIndices();
+  if (key==='commodities') renderCommodities();
+  if (key==='crisis')      renderCrisis();
+  // if (key==='sectors')  renderSectors();  // parked — no data source yet
+}
+
+// ══ INIT ══════════════════════════════════════════════════════════════════════
+attachSort('tbl-indices',     renderIndices,     'indices');
+attachSort('tbl-commodities', renderCommodities, 'commodities');
+attachSort('tbl-crisis',      renderCrisis,      'crisis');
+// attachSort('tbl-sectors', renderSectors, 'sectors');  // parked — no data source yet
+
+renderIndices();
+
+// Initial sort arrows
+const initTh = document.querySelector('#tbl-indices th[data-col="chg1d"]');
+if (initTh) { initTh.classList.add('sorted-desc'); const a=initTh.querySelector('.arr'); if(a) a.textContent=' ↓'; }
+const initCrisTh = document.querySelector('#tbl-crisis th[data-col="risk"]');
+if (initCrisTh) { initCrisTh.classList.add('sorted-desc'); const a=initCrisTh.querySelector('.arr'); if(a) a.textContent=' ↓'; }
+// const initSecTh = document.querySelector('#tbl-sectors th[data-col="d1"]');
+// if (initSecTh) { initSecTh.classList.add('sorted-desc'); const a=initSecTh.querySelector('.arr'); if(a) a.textContent=' ↓'; }
+</script>
+</body>
+</html>
