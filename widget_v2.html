@@ -948,7 +948,7 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 
 <!-- ═══ CRISIS MONITOR TAB — START ══════════════════════════════ -->
 /* ── Crisis Monitor Tab ──────────────────────────────────────── */
-#crisis-view{display:none;flex-direction:column;overflow:hidden;background:var(--bg)}
+#crisis-view{display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;background:var(--bg)}
 .crs-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;
   display:inline-block;white-space:nowrap}
 .crs-tag.iran{background:#fff3e0;color:#e65100}
@@ -1268,49 +1268,6 @@ tr.sys-row{background:#f0fafa}  tr.sys-row:hover{background:#e0f7fa}
     </div>
   </div>
 
-<!-- ═══ CRISIS MONITOR TAB — HTML START ═══════════════════════ -->
-<div id="crisis-view">
-  <!-- Toolbar -->
-  <div style="padding:6px 16px;display:flex;align-items:center;gap:10px;
-              border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0">
-    <span style="font-size:13px;font-weight:600;color:var(--text)">🌍 Crisis Monitor</span>
-    <span id="crisis-tab-count" style="font-size:11px;color:var(--muted);margin-left:8px"></span>
-    <span style="font-size:11px;color:var(--muted);margin-left:auto">Reference data · Iran War rows update via live API</span>
-    <button onclick="renderCrisisTab()"
-            style="padding:3px 12px;font-size:11px;font-weight:600;border-radius:20px;
-                   background:var(--accent-light);color:var(--accent);border:none;cursor:pointer">
-      ↻ Refresh
-    </button>
-  </div>
-  <!-- Table -->
-  <div class="crisis-tbl-wrap">
-    <table class="tv-table" id="tbl-crisis-main">
-      <thead>
-        <tr>
-          <th class="left"        data-col="ticker" >Ticker              <span class="arr"></span></th>
-          <th class="left"        data-col="label"  >Indicator           <span class="arr"></span></th>
-          <th class="left"        data-col="crisis" >Crisis              <span class="arr"></span></th>
-          <th                     data-col="current">Value               <span class="arr"></span></th>
-          <th                     data-col="pct_day">1D %                <span class="arr"></span></th>
-          <th class="sorted-desc" data-col="risk"   >Risk Level          <span class="arr"></span></th>
-          <th class="left"        data-col="signal" >Crisis-End Signal   <span class="arr"></span></th>
-          <th                     data-col="p1w"    >1 Week              <span class="arr"></span></th>
-          <th                     data-col="p3w"    >3 Weeks             <span class="arr"></span></th>
-          <th                     data-col="p1m"    >1 Month             <span class="arr"></span></th>
-          <th                     data-col="p3m"    >3 Months            <span class="arr"></span></th>
-          <th                     data-col="p6m"    >6 Months            <span class="arr"></span></th>
-          <th                     data-col="pYTD"   >YTD                 <span class="arr"></span></th>
-          <th                     data-col="p12m"   >12 Months           <span class="arr"></span></th>
-          <th                     data-col="high52" >52W High            <span class="arr"></span></th>
-          <th                     data-col="low52"  >52W Low             <span class="arr"></span></th>
-        </tr>
-      </thead>
-      <tbody id="tbody-crisis-main"></tbody>
-    </table>
-  </div>
-</div>
-<!-- ═══ CRISIS MONITOR TAB — HTML END ══════════════════════════ -->
-
   <!-- ── Workspace ──────────────────────────────────────────────── -->
   <div class="workspace" id="workspace">
 
@@ -1407,7 +1364,50 @@ tr.sys-row{background:#f0fafa}  tr.sys-row:hover{background:#e0f7fa}
     </div>
 
   </div>
+</div><!-- /#main-layout -->
+
+<!-- ═══ CRISIS MONITOR TAB ══════════════════════════════════════ -->
+<div id="crisis-view">
+  <!-- Toolbar -->
+  <div style="padding:6px 16px;display:flex;align-items:center;gap:10px;
+              border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0">
+    <span style="font-size:13px;font-weight:600;color:var(--text)">🌍 Crisis Monitor</span>
+    <span id="crisis-tab-count" style="font-size:11px;color:var(--muted);margin-left:8px"></span>
+    <span style="font-size:11px;color:var(--muted);margin-left:auto">Reference data · Iran War rows via live API</span>
+    <button onclick="renderCrisisTab()"
+            style="padding:3px 12px;font-size:11px;font-weight:600;border-radius:20px;
+                   background:var(--accent-light);color:var(--accent);border:none;cursor:pointer">
+      ↻ Refresh
+    </button>
+  </div>
+  <!-- Table -->
+  <div class="crisis-tbl-wrap">
+    <table class="tv-table" id="tbl-crisis-main">
+      <thead>
+        <tr>
+          <th class="left"        data-col="ticker">Ticker           <span class="arr"></span></th>
+          <th class="left"        data-col="label" >Indicator        <span class="arr"></span></th>
+          <th class="left"        data-col="crisis">Crisis           <span class="arr"></span></th>
+          <th                     data-col="current">Value           <span class="arr"></span></th>
+          <th                     data-col="pct_day">1D %            <span class="arr"></span></th>
+          <th class="sorted-desc" data-col="risk"  >Risk Level       <span class="arr"></span></th>
+          <th class="left"        data-col="signal">Crisis-End Signal<span class="arr"></span></th>
+          <th                     data-col="p1w"   >1 Week           <span class="arr"></span></th>
+          <th                     data-col="p3w"   >3 Weeks          <span class="arr"></span></th>
+          <th                     data-col="p1m"   >1 Month          <span class="arr"></span></th>
+          <th                     data-col="p3m"   >3 Months         <span class="arr"></span></th>
+          <th                     data-col="p6m"   >6 Months         <span class="arr"></span></th>
+          <th                     data-col="pYTD"  >YTD              <span class="arr"></span></th>
+          <th                     data-col="p12m"  >12 Months        <span class="arr"></span></th>
+          <th                     data-col="high52">52W High         <span class="arr"></span></th>
+          <th                     data-col="low52" >52W Low          <span class="arr"></span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-crisis-main"></tbody>
+    </table>
+  </div>
 </div>
+<!-- ═══ END CRISIS MONITOR TAB ══════════════════════════════════ -->
 
 <script>
 /*
@@ -4674,6 +4674,7 @@ async function switchMainTab(tab) {
   const dash   = document.getElementById('main-layout');
   const tview  = document.getElementById('table-view');
   const cview  = document.getElementById('crisis-view');
+  const fbar   = document.getElementById('shared-filter-bar');
   const tabD   = document.getElementById('tv-tab-dash');
   const tabT   = document.getElementById('tv-tab-table');
   const tabC   = document.getElementById('tv-tab-crisis');
@@ -4683,16 +4684,19 @@ async function switchMainTab(tab) {
   if (cview) cview.style.display = 'none';
   [tabD, tabT, tabC].forEach(b => b && b.classList.remove('on'));
   if (tab === 'table') {
+    if (fbar)  fbar.style.display  = '';
     if (tview) { tview.style.display = 'flex'; tview.style.flexDirection = 'column'; }
     tabT.classList.add('on');
     if (!_tvLoaded) await tvLoad();
     else tvRender();
   } else if (tab === 'crisis') {
+    if (fbar)  fbar.style.display  = 'none';          // no filters needed
     if (cview) { cview.style.display = 'flex'; cview.style.flexDirection = 'column'; }
     tabC.classList.add('on');
     renderCrisisTab();
   } else {
-    if (dash) dash.style.display = '';
+    if (fbar)  fbar.style.display  = '';
+    if (dash)  dash.style.display  = '';
     tabD.classList.add('on');
   }
 }
