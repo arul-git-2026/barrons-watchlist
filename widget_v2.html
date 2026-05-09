@@ -716,17 +716,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 .label-bull{color:var(--up)}
 .case-text{font-size:12px;line-height:1.55;color:var(--text)}
 
-/* status badges — GF pill style */
-.st{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;border:1px solid transparent}
-.s-hot  {background:#e6f4ea;color:#137333;border-color:#ceead6}
-.s-rot  {background:#d1fae5;color:#065f46}
-.s-pull {background:#fef9c3;color:#854d0e}
-.s-press{background:#fee2e2;color:#991b1b}
-.s-dip  {background:#dbeafe;color:#1e40af}
-.s-rec  {background:#ede9fe;color:#5b21b6}
-.s-caut {background:#f1f5f9;color:#475569}
-.s-flat {background:#f1f5f9;color:#64748b}
-
 /* toast */
 #toast{
   position:fixed;bottom:20px;right:20px;
@@ -1042,17 +1031,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       <option value="ETF">ETF</option>
       <option value="Stock">Stock</option>
     </select>
-    <select id="tf-status"  onchange="syncFilter('f-status',this)">
-      <option value="">All Status</option>
-      <option value="hot">Momentum</option>
-      <option value="rot">Rotating</option>
-      <option value="dip">Dip Buy</option>
-      <option value="rec">Recovery</option>
-      <option value="pull">Pullback</option>
-      <option value="press">Pressure</option>
-      <option value="caut">Caution</option>
-      <option value="flat">Neutral</option>
-    </select>
     <select id="tf-rec"     onchange="syncFilter('f-rec',this)"><option value="">All Recs</option></select>
     <select id="tf-episode" onchange="syncFilter('f-episode',this);showEpBrief(document.getElementById('f-episode').value)"><option value="">All Episodes</option></select>
     <select id="tf-move"    onchange="syncFilter('f-move',this)">
@@ -1153,19 +1131,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         </div>
       </div>
       <div class="atm-row">
-        <div class="atm-field">
-          <label>Status</label>
-          <select id="atm-status">
-            <option value="flat">Neutral</option>
-            <option value="hot">Momentum</option>
-            <option value="rot">Rotating</option>
-            <option value="dip">Dip Buy</option>
-            <option value="pull">Pullback</option>
-            <option value="rec">Recovery</option>
-            <option value="press">Pressure</option>
-            <option value="caut">Caution</option>
-          </select>
-        </div>
         <div class="atm-field">
           <label>Ref price</label>
           <input id="atm-price" placeholder="e.g. ~$146">
@@ -1290,17 +1255,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <option value="">ETF + Stock</option>
         <option value="ETF">ETF</option>
         <option value="Stock">Stock</option>
-      </select>
-      <select id="f-status"  onchange="render()">
-        <option value="">All Status</option>
-        <option value="hot">Momentum</option>
-        <option value="rot">Rotating</option>
-        <option value="dip">Dip Buy</option>
-        <option value="rec">Recovery</option>
-        <option value="pull">Pullback</option>
-        <option value="press">Pressure</option>
-        <option value="caut">Caution</option>
-        <option value="flat">Neutral</option>
       </select>
       <select id="f-rec"     onchange="render()"><option value="">All Recs</option></select>
       <select id="f-episode" onchange="render();showEpBrief(this.value)"><option value="">All Episodes</option></select>
@@ -1543,11 +1497,6 @@ const PALETTE = [
     });
   });
 })();
-
-const STATUS_MAP = {
-  hot:'Momentum', rot:'Rotating',  pull:'Pullback', press:'Pressure',
-  dip:'Dip Buy',  rec:'Recovery',  caut:'Caution',  flat:'Neutral'
-};
 
 // Max tickers on the chart — set to 0 for no limit
 // Chart.js handles many lines fine; readability is the only constraint
@@ -2062,7 +2011,6 @@ function render() {
   const fSector   = document.getElementById('f-sector').value;
   const fIndustry = document.getElementById('f-industry')?.value || '';
   const fType     = document.getElementById('f-type').value;
-  const fStatus   = document.getElementById('f-status').value;
   const fRec      = document.getElementById('f-rec').value;
   const fEp       = document.getElementById('f-episode').value;
   const fMove     = document.getElementById('f-move').value;
@@ -2076,7 +2024,6 @@ function render() {
     }
     if (fIndustry && (d.industry || '') !== fIndustry)            return false;
     if (fType   && d.y      !== fType)                            return false;
-    if (fStatus && d.s      !== fStatus)                          return false;
     if (fRec    && d.rec !== fRec && d.rec_analyst !== fRec)     return false;
     // Watchlist filter
     if (_activeWl && !(_watchlists[_activeWl] || []).includes(d.t)) return false;
@@ -2351,8 +2298,6 @@ function selectRow(ticker) {
    +`<div class="qg-cell"><span class="qg-label">${l2}</span><span class="qg-val ${cls2}">${v2}</span></div>`;
 
   const recVal  = (d.rec && d.rec !== 'N/A' && d.rec !== 'None') ? d.rec : (d.rec_analyst || '');
-  const stCls2  = `st s-${d.s || 'flat'}`;
-  const stLbl2  = STATUS_MAP[d.s] || 'Neutral';
   const divDisp = d.forward_div && d.forward_yield
     ? `${fmtP(d.forward_div)} (${(+d.forward_yield).toFixed(2)}%)`
     : d.forward_div ? fmtP(d.forward_div) : '—';
@@ -2364,7 +2309,6 @@ function selectRow(ticker) {
   const quoteGrid = `
     <div class="quote-grid">
       <div class="qg-status-row">
-        <span class="${stCls2}">${stLbl2}</span>
         <span class="pill">${d.y || 'Stock'}</span>
         <span class="pill">${d.sector || 'N/A'}</span>
         ${(recVal && recVal !== 'None' && recVal !== 'N/A') ? `<span class="pill">Analyst: ${recVal}</span>` : ''}
@@ -2425,13 +2369,6 @@ function selectRow(ticker) {
               <option value="Stock"${(d.y||'Stock')==='Stock'?' selected':''}>Stock</option>
               <option value="ETF"${d.y==='ETF'?' selected':''}>ETF</option>
               <option value="Fund"${d.y==='Fund'?' selected':''}>Fund</option>
-            </select>
-          </div>
-          <div class="field-group"><label>Status</label>
-            <select id="fe-status">
-              ${['hot','rot','pull','press','dip','rec','caut','flat'].map(s =>
-                '<option value="' + s + '"' + (d.s === s ? ' selected' : '') + '>' + (STATUS_MAP[s] || s) + '</option>'
-              ).join('')}
             </select>
           </div>
           <div class="field-group"><label>Analyst Rec</label><input id="fe-rec" value="${d.rec_analyst || ''}" placeholder="e.g. Buy, Hold"></div>
@@ -2992,8 +2929,6 @@ function clearAddForm() {
   if (src) src.value = 'My Research';
   const type = document.getElementById('atm-type');
   if (type) type.value = 'Stock';
-  const status = document.getElementById('atm-status');
-  if (status) status.value = 'flat';
 }
 
 async function saveAddTicker() {
@@ -3013,7 +2948,6 @@ async function saveAddTicker() {
         name:       document.getElementById('atm-name').value.trim(),
         type:       document.getElementById('atm-type').value,
         sector:     document.getElementById('atm-sector').value.trim(),
-        status:     document.getElementById('atm-status').value,
         price:      document.getElementById('atm-price').value.trim(),
         source:     document.getElementById('atm-source').value.trim() || 'My Research',
         tags:       document.getElementById('atm-tags').value.trim(),
@@ -4148,14 +4082,12 @@ async function saveFields(ticker) {
   const sector = document.getElementById('fe-sector')?.value.trim();
   const name   = document.getElementById('fe-name')?.value.trim();
   const type   = document.getElementById('fe-type')?.value;
-  const status = document.getElementById('fe-status')?.value;
   const rec    = document.getElementById('fe-rec')?.value.trim();
 
   const fields = {};
   if (sector !== undefined) fields.sector     = sector || 'N/A';
   if (name)                 fields.n          = name;
   if (type)                 fields.y          = type;
-  if (status)               fields.s          = status;
   if (rec !== undefined)    fields.rec_analyst = rec || '';
 
   try {
@@ -4279,7 +4211,6 @@ function exportCSV() {
     { key: 'n',          header: 'Name'         },
     { key: 'y',          header: 'Type'         },
     { key: 'sector',     header: 'Sector'       },
-    { key: 's',          header: 'Status'       },
     { key: 'price_fmt',  header: 'Price'        },
     { key: 'pct_fmt',    header: 'Day %'        },
     { key: 'rec',        header: 'Analyst Rec'  },
@@ -4291,10 +4222,6 @@ function exportCSV() {
     { key: 'e',          header: 'Episodes'     },
     { key: 'src',        header: 'Sources'      },
   ];
-
-  // Status map for readable labels
-  const ST = { hot:'Momentum', rot:'Rotating', pull:'Pullback', press:'Pressure',
-               dip:'Dip Buy',  rec:'Recovery', caut:'Caution',  flat:'Neutral' };
 
   // CSV escape: wrap in quotes if value contains comma, quote or newline
   function esc(v) {
@@ -4315,7 +4242,6 @@ function exportCSV() {
     const row = COLS.map(c => {
       const k = c.key;
       let v = d[k];
-      if (k === 's')   v = ST[v] || v || '';
       if (k === 'e')   v = (v || []).join(' | ');
       if (k === 'src') v = (v || []).join(' | ');
       return esc(v);
@@ -5153,7 +5079,6 @@ function tvFilteredRows() {
   const fSec   = document.getElementById('tf-sector')?.value    || '';
   const fInd   = document.getElementById('tf-industry')?.value  || '';
   const fType  = document.getElementById('tf-type')?.value      || '';
-  const fStat  = document.getElementById('tf-status')?.value    || '';
   const fRec   = document.getElementById('tf-rec')?.value       || '';
   const fMove  = document.getElementById('tf-move')?.value      || '';
   const fWl    = document.getElementById('tf-watchlist')?.value  || '';
@@ -5165,7 +5090,6 @@ function tvFilteredRows() {
     if (fSec  && (r.sec    || '') !== fSec)         return false;
     if (fInd  && (r.ind    || '') !== fInd)         return false;
     if (fType && (r.type   || 'Stock') !== fType)   return false;
-    if (fStat && (r.status || '') !== fStat)         return false;
     if (fRec  && (r.rec    || '') !== fRec)          return false;
     if (fMove === 'up'   && (r.pct || 0) <= 0)      return false;
     if (fMove === 'down' && (r.pct || 0) >= 0)      return false;
