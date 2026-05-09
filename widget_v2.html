@@ -1031,7 +1031,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
       <option value="ETF">ETF</option>
       <option value="Stock">Stock</option>
     </select>
-    <select id="tf-rec"     onchange="syncFilter('f-rec',this)"><option value="">All Recs</option></select>
     <select id="tf-episode" onchange="syncFilter('f-episode',this);showEpBrief(document.getElementById('f-episode').value)"><option value="">All Episodes</option></select>
     <select id="tf-move"    onchange="syncFilter('f-move',this)">
       <option value="">All Movers</option>
@@ -1256,7 +1255,6 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
         <option value="ETF">ETF</option>
         <option value="Stock">Stock</option>
       </select>
-      <select id="f-rec"     onchange="render()"><option value="">All Recs</option></select>
       <select id="f-episode" onchange="render();showEpBrief(this.value)"><option value="">All Episodes</option></select>
       <select id="f-move"    onchange="render()">
         <option value="">All Movers</option>
@@ -1955,11 +1953,8 @@ function populateFilters() {
     ...(hasETF ? ['ETF'] : []),
     ...(hasNA  ? [naValue] : []),
   ];
-  // rec: from live quote (d.rec) or stored by updater (d.rec_analyst)
-  const recs     = [...new Set(allData.map(d => d.rec && d.rec !== 'N/A' ? d.rec : d.rec_analyst).filter(r => r && r !== 'N/A'))].sort();
   const episodes = [...new Set(allData.flatMap(d => d.e || []))].sort();
   fillSelectSector('f-sector', knownSectors, hasETF, hasNA);
-  fillSelect('f-rec',     recs,     'All Recs');
   fillSelect('f-episode', episodes, 'All Episodes');
   populateIndustriesForSector(document.getElementById('f-sector').value);
   // Mirror dynamic options to top filter bar
@@ -2011,7 +2006,6 @@ function render() {
   const fSector   = document.getElementById('f-sector').value;
   const fIndustry = document.getElementById('f-industry')?.value || '';
   const fType     = document.getElementById('f-type').value;
-  const fRec      = document.getElementById('f-rec').value;
   const fEp       = document.getElementById('f-episode').value;
   const fMove     = document.getElementById('f-move').value;
 
@@ -2024,7 +2018,6 @@ function render() {
     }
     if (fIndustry && (d.industry || '') !== fIndustry)            return false;
     if (fType   && d.y      !== fType)                            return false;
-    if (fRec    && d.rec !== fRec && d.rec_analyst !== fRec)     return false;
     // Watchlist filter
     if (_activeWl && !(_watchlists[_activeWl] || []).includes(d.t)) return false;
     if (fEp     && !(d.e || []).includes(fEp))                    return false;
@@ -2297,7 +2290,6 @@ function selectRow(ticker) {
     `<div class="qg-cell"><span class="qg-label">${l1}</span><span class="qg-val ${cls1}">${v1}</span></div>`
    +`<div class="qg-cell"><span class="qg-label">${l2}</span><span class="qg-val ${cls2}">${v2}</span></div>`;
 
-  const recVal  = (d.rec && d.rec !== 'N/A' && d.rec !== 'None') ? d.rec : (d.rec_analyst || '');
   const divDisp = d.forward_div && d.forward_yield
     ? `${fmtP(d.forward_div)} (${(+d.forward_yield).toFixed(2)}%)`
     : d.forward_div ? fmtP(d.forward_div) : '—';
@@ -2311,7 +2303,6 @@ function selectRow(ticker) {
       <div class="qg-status-row">
         <span class="pill">${d.y || 'Stock'}</span>
         <span class="pill">${d.sector || 'N/A'}</span>
-        ${(recVal && recVal !== 'None' && recVal !== 'N/A') ? `<span class="pill">Analyst: ${recVal}</span>` : ''}
         <button class="edit-ticker-btn" onclick="showFieldsEditor('${d.t}')" title="Edit" style="margin-left:auto">✏</button>
       </div>
       ${qgRow('Prev Close', fmtP(d.prev_close), "Day's Range", rngDisp)}
@@ -2371,7 +2362,6 @@ function selectRow(ticker) {
               <option value="Fund"${d.y==='Fund'?' selected':''}>Fund</option>
             </select>
           </div>
-          <div class="field-group"><label>Analyst Rec</label><input id="fe-rec" value="${d.rec_analyst || ''}" placeholder="e.g. Buy, Hold"></div>
           <div class="fields-edit-actions">
             <button class="ticker-save-btn" onclick="saveFields('${d.t}')">Save</button>
             <button class="ticker-cancel-btn" onclick="hideFieldsEditor()">Cancel</button>
@@ -2866,7 +2856,6 @@ function mirrorDynamicFilters() {
   const pairs = [
     ['f-sector',   'tf-sector'],
     ['f-industry', 'tf-industry'],
-    ['f-rec',      'tf-rec'],
     ['f-episode',  'tf-episode'],
     ['f-source',   'tf-source'],
   ];
@@ -4082,13 +4071,10 @@ async function saveFields(ticker) {
   const sector = document.getElementById('fe-sector')?.value.trim();
   const name   = document.getElementById('fe-name')?.value.trim();
   const type   = document.getElementById('fe-type')?.value;
-  const rec    = document.getElementById('fe-rec')?.value.trim();
-
   const fields = {};
-  if (sector !== undefined) fields.sector     = sector || 'N/A';
-  if (name)                 fields.n          = name;
-  if (type)                 fields.y          = type;
-  if (rec !== undefined)    fields.rec_analyst = rec || '';
+  if (sector !== undefined) fields.sector = sector || 'N/A';
+  if (name)                 fields.n      = name;
+  if (type)                 fields.y      = type;
 
   try {
     const res = await fetch('/api/edit-fields', {
@@ -4213,8 +4199,6 @@ function exportCSV() {
     { key: 'sector',     header: 'Sector'       },
     { key: 'price_fmt',  header: 'Price'        },
     { key: 'pct_fmt',    header: 'Day %'        },
-    { key: 'rec',        header: 'Analyst Rec'  },
-    { key: 'rec_analyst',header: 'Rec (static)' },
     { key: 'p',          header: 'Ref Price'    },
     { key: 'base',       header: 'Base Case'    },
     { key: 'bear',       header: 'Bear Case'    },
@@ -5079,7 +5063,6 @@ function tvFilteredRows() {
   const fSec   = document.getElementById('tf-sector')?.value    || '';
   const fInd   = document.getElementById('tf-industry')?.value  || '';
   const fType  = document.getElementById('tf-type')?.value      || '';
-  const fRec   = document.getElementById('tf-rec')?.value       || '';
   const fMove  = document.getElementById('tf-move')?.value      || '';
   const fWl    = document.getElementById('tf-watchlist')?.value  || '';
   const fEp    = document.getElementById('tf-episode')?.value    || '';
@@ -5090,7 +5073,6 @@ function tvFilteredRows() {
     if (fSec  && (r.sec    || '') !== fSec)         return false;
     if (fInd  && (r.ind    || '') !== fInd)         return false;
     if (fType && (r.type   || 'Stock') !== fType)   return false;
-    if (fRec  && (r.rec    || '') !== fRec)          return false;
     if (fMove === 'up'   && (r.pct || 0) <= 0)      return false;
     if (fMove === 'down' && (r.pct || 0) >= 0)      return false;
     if (fWl   && !(r.wl    || []).includes(fWl))    return false;
