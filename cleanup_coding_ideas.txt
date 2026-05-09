@@ -1,0 +1,53 @@
+The root problem: everything is in one 4000+ line HTML file. Features are tangled together (HTML + CSS + JS scattered across the file).
+
+**Practical approaches for your setup:**
+
+---
+
+**Option 1 — Feature flags (easiest, no refactor)**
+
+Add one block at the top of the script:
+```javascript
+const FEATURES = {
+  crisis_monitor: true,
+  dcf:            false,   // ← toggle here, nothing else changes
+};
+```
+Each feature checks its flag on init. Removing = set to `false`. No structural changes needed.
+
+---
+
+**Option 2 — Separate files per feature (best long-term)**
+
+Flask already serves static files. Split the monolith:
+```
+widget_v2.html          ← shell only (nav, sidebar, layout)
+static/features/
+  crisis.html           ← panel HTML snippet
+  crisis.css
+  crisis.js
+  dcf.html
+  dcf.css
+  dcf.js
+```
+Flask renders the HTML with Jinja2 `{% include %}`. To remove a feature: delete one `{% include %}` line.
+
+---
+
+**Option 3 — Self-contained feature blocks (minimal refactor)**
+
+Keep one file but wrap every feature in clear fenced blocks:
+```html
+<!-- ═══ FEATURE: DCF ══════════════════════════════════════════════ -->
+<!-- CSS -->  <style>  ...all dcf css...  </style>
+<!-- HTML --> <div id="dcf-panel"> ... </div>
+<!-- JS -->   <script> ...all dcf js... </script>
+<!-- ═══ END FEATURE: DCF ══════════════════════════════════════════ -->
+```
+Add/remove = delete one clearly bounded block. No hunting across 4000 lines.
+
+---
+
+**My recommendation:** Start with **Option 3** now (low effort, immediate benefit) and move toward **Option 2** when you add the next major feature. That way you never have a repeat of today's 3-hour debugging session.
+
+Want me to restructure the file with Option 3 fenced blocks for the Crisis Monitor as a proof of concept?

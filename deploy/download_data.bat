@@ -6,9 +6,9 @@ REM
 REM  EDIT THE THREE LINES BELOW before first use:
 REM ─────────────────────────────────────────────────────────────────────────────
 
-SET SSH_KEY=C:\Users\vasanthaganesh.arulm\Downloads\ssh-key-streetwise.key
-SET SERVER_IP=REPLACE_WITH_YOUR_ORACLE_IP
-SET SERVER_USER=ubuntu
+SET SSH_KEY=C:\Users\vasanthaganesh.arulm\Downloads\claude\streetwise\ssh-key-2026-03-27.key
+SET SERVER_IP=132.145.243.138
+SET SERVER_USER=opc
 
 REM ─────────────────────────────────────────────────────────────────────────────
 SET LOCAL_DIR=%~dp0..

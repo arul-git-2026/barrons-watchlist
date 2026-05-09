@@ -542,12 +542,37 @@ def fetch_quote(ticker: str) -> dict:
             "sector":     _clean_sector(info),
             "industry":   info.get("industry", "") or "",
             "rec":        rec,
-            "mktcap":     info.get("marketCap"),
-            "pe":         info.get("trailingPE") or info.get("forwardPE"),
-            "div_yield":  info.get("dividendYield"),   # Yahoo returns e.g. 0.92 meaning 0.92%
-            "52w_high":   info.get("fiftyTwoWeekHigh"),
-            "52w_low":    info.get("fiftyTwoWeekLow"),
-            "fetched_at": datetime.utcnow().isoformat() + "Z",
+            "mktcap":       info.get("marketCap"),
+            "pe":           info.get("trailingPE") or info.get("forwardPE"),
+            "div_yield":    info.get("dividendYield"),   # Yahoo returns e.g. 0.92 meaning 0.92%
+            "52w_high":     info.get("fiftyTwoWeekHigh"),
+            "52w_low":      info.get("fiftyTwoWeekLow"),
+            # ── Yahoo summary table fields ─────────────────────────────────────
+            "prev_close":   info.get("regularMarketPreviousClose") or info.get("previousClose"),
+            "open_price":   info.get("regularMarketOpen"),
+            "bid":          info.get("bid"),
+            "bid_size":     info.get("bidSize"),
+            "ask":          info.get("ask"),
+            "ask_size":     info.get("askSize"),
+            "day_low":      info.get("regularMarketDayLow"),
+            "day_high":     info.get("regularMarketDayHigh"),
+            "volume":       info.get("regularMarketVolume"),
+            "avg_volume":   info.get("averageVolume"),
+            "beta":         info.get("beta"),
+            "eps_ttm":      info.get("trailingEps"),
+            "earnings_date": (
+                datetime.utcfromtimestamp(info["earningsTimestamp"]).strftime("%b %d, %Y")
+                if info.get("earningsTimestamp") else None
+            ),
+            "forward_div":  info.get("dividendRate"),           # annual $ amount
+            "forward_yield": info.get("dividendYield"),          # decimal e.g. 0.031
+            "ex_div_date": (
+                datetime.utcfromtimestamp(info["exDividendDate"]).strftime("%b %d, %Y")
+                if info.get("exDividendDate") else None
+            ),
+            "target_price": info.get("targetMeanPrice"),
+            # ──────────────────────────────────────────────────────────────────
+            "fetched_at":   datetime.utcnow().isoformat() + "Z",
         }
     except Exception as e:
         log.warning(f"Quote failed for {y_sym}: {e}")

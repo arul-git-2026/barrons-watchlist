@@ -112,14 +112,14 @@ Click **Create**. Wait ~2 minutes for status to show **Running**.
 
 **Step 1 — Fix key file permissions:**
 ```powershell
-icacls "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-25.key" /inheritance:r
-icacls "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-25.key" /grant:r "vasanthaganesh.arulm:(R)"
+icacls "C:\Users\vasanthaganesh.arulm\Downloads\claude\streetwise\ssh-key-2026-03-25.key" /inheritance:r
+icacls "C:\Users\vasanthaganesh.arulm\Downloads\claude\streetwise\ssh-key-2026-03-25.key" /grant:r "vasanthaganesh.arulm:(R)"
 ```
 > If `%username%` fails (German Windows), use your literal username as above.
 
 **Step 2 — Connect:**
 ```powershell
-ssh -i "C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-27.key" opc@132.145.243.138
+ssh -i "C:\Users\vasanthaganesh.arulm\Downloads\claude\streetwise\ssh-key-2026-03-27.key" opc@132.145.243.138
 ```
 
 You should see: `[opc@barron-watchlist ~]$`

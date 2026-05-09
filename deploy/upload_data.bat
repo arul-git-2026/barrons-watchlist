@@ -6,7 +6,7 @@ REM
 REM  EDIT THE THREE LINES BELOW before first use:
 REM ─────────────────────────────────────────────────────────────────────────────
 
-SET SSH_KEY=C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-27.key
+SET SSH_KEY=C:\Users\vasanthaganesh.arulm\Downloads\claude\streetwise\ssh-key-2026-03-27.key
 SET SERVER_IP=132.145.243.138
 SET SERVER_USER=opc
 

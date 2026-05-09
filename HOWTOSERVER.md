@@ -10,7 +10,7 @@ Log in with the passphrase (same value as the token in your `.env` — `AUTH_TOK
 
 ## SSH into the server
 ```bash
-ssh -i C:\Users\vasanthaganesh.arulm\Downloads\streetwise\ssh-key-2026-03-27.key opc@132.145.243.138
+ssh -i C:\Users\vasanthaganesh.arulm\Downloads\claude\streetwise\ssh-key-2026-03-27.key opc@132.145.243.138
 ```
 
 ---

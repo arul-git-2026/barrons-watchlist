@@ -1,0 +1,65 @@
+Here's an honest prioritized list based on what I know about the codebase:
+
+---
+
+## 🔴 High Impact
+
+**1. Auto price refresh**
+Prices currently only update when you load the page. A background timer every 60s during market hours would keep the sidebar live without manual reload.
+
+**2. Error boundary on tabs**
+If Finnhub/Perplexity/RPO throws an error, the whole tab goes blank. Should show a friendly error card with a retry button instead.
+
+**3. Rate limit protection**
+No throttling on the API endpoints — if you click Refresh 10 times fast it fires 10 Perplexity calls ($$). Should debounce or disable the button during a request (Perplexity already does this, RPO doesn't fully).
+
+**4. API cost tracker**
+You're paying for Perplexity sonar-pro, Claude Sonnet, Gemini. No visibility into how much each research run costs. A simple cost log in the server would help.
+
+---
+
+## 🟡 Medium Impact
+
+**5. Dark mode**
+CSS variables are already set up — 80% of the work is done. Just need a toggle and `prefers-color-scheme` media query.
+
+**6. Ticker notes field**
+A free-text notes area per ticker (separate from the auto-saved research) for your own manual observations. Saved to `streetwise_data.json`.
+
+**7. Earnings calendar view**
+Instead of per-ticker, show a timeline/calendar of all upcoming earnings across your whole watchlist in one view.
+
+**8. Server log viewer**
+A `/logs` page in the dashboard to tail the Flask server log without SSH-ing in.
+
+**9. `streetwise_data.json` backup**
+Automated daily backup of the JSON file on the server (simple cron job). If the file corrupts you lose all your ticker data.
+
+---
+
+## 🟢 Maintenance / Housekeeping
+
+**10. Section comment banners in `widget_v2.html`**
+The file is 3500+ lines. Adding clear `// ██ SECTION NAME` banners makes it navigable.
+
+**11. `.env` file for API keys**
+Right now keys are in `/etc/streetwise.env`. A proper `.env` loader with validation on startup would catch missing keys early with clear messages.
+
+**12. Health check endpoint**
+`/health` that returns status of all API keys (set/not set) and DB file size — useful for monitoring.
+
+**13. `price_history.db` cleanup**
+The SQLite DB grows forever. Old price history beyond 2 years is probably not needed — a weekly cleanup job would keep it lean.
+
+---
+
+## Quick wins I can do right now
+
+| Task | Time |
+|---|---|
+| Daily JSON backup cron job | ~10 min |
+| Health check endpoint | ~10 min |
+| Auto price refresh (market hours) | ~20 min |
+| Section comment banners | ~10 min |
+
+Want me to start with any of these?
