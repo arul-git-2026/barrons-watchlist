@@ -29,8 +29,20 @@ function logTickers(added, updated, tickers) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+function fixUrl(raw) {
+  var url = (raw || 'http://localhost:5000').trim().replace(/\/$/,'');
+  // localhost always runs HTTP — silently correct a stale https:// entry
+  url = url.replace(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, function(_, host, port) {
+    return 'http://' + host + (port || '');
+  });
+  return url;
+}
 function getServerUrl() {
-  return (document.getElementById('server-url').value || 'http://localhost:5000').replace(/\/$/,'');
+  var el  = document.getElementById('server-url');
+  var url = fixUrl(el.value);
+  // Write back if we corrected it so the input always shows the real value
+  if (el.value !== url) { el.value = url; chrome.storage.local.set({serverUrl: url}); }
+  return url;
 }
 function getToken() {
   return (document.getElementById('server-token').value || '').trim();
@@ -412,7 +424,12 @@ async function deleteEpisode() {
 document.addEventListener('DOMContentLoaded', async function() {
   // Restore saved state
   var stored=await chrome.storage.local.get(['serverUrl','serverToken','selectedModel','sessionCost']);
-  if(stored.serverUrl)   document.getElementById('server-url').value=stored.serverUrl;
+  if(stored.serverUrl) {
+    var corrected = fixUrl(stored.serverUrl);
+    document.getElementById('server-url').value = corrected;
+    // Persist the corrected value so the bad https:// is gone from storage too
+    if (corrected !== stored.serverUrl) chrome.storage.local.set({serverUrl: corrected});
+  }
   if(stored.serverToken) document.getElementById('server-token').value=stored.serverToken;
   if(stored.selectedModel) setActiveModel(stored.selectedModel);
   if(stored.sessionCost)  { _sessionCost=parseFloat(stored.sessionCost)||0; updateCostDisplay(); }
