@@ -42,7 +42,7 @@ def _load_dotenv(*paths):
                     _v = _v.strip().strip('"').strip("'")
                     if _k and _k not in os.environ:
                         os.environ[_k] = _v
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError, OSError):
             pass
 
 _load_dotenv(
