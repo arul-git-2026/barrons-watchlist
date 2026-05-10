@@ -462,6 +462,9 @@ document.addEventListener('DOMContentLoaded', async function() {
   ['inp-date','inp-year'].forEach(function(id) {
     document.getElementById(id).addEventListener('input', updatePreview);
   });
+  document.getElementById('inp-source-sel').addEventListener('change', function() {
+    onSourceSelect(this);
+  });
   var srcEl = document.getElementById('inp-source');
   var pfxEl = document.getElementById('inp-prefix');
   if (srcEl) srcEl.addEventListener('input', updatePreview);
