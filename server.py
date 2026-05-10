@@ -165,6 +165,9 @@ def _check_token():
     """
     if not _AUTH_TOKEN:
         return
+    # CORS preflights carry no credentials — let Flask-CORS handle them
+    if request.method == "OPTIONS":
+        return
     if request.path in _AUTH_EXEMPT:
         return
     if session.get("auth"):

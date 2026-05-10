@@ -316,6 +316,14 @@ async function sendPage() {
   if(!year||!/^\d{4}$/.test(year)) { setStatus('error','⚠ Enter a 4-digit year'); return; }
   if(!prefix){ setStatus('error','⚠ Enter a prefix'); return; }
 
+  // Guard: verify server is reachable before opening the progress window
+  if (document.getElementById('server-dot').classList.contains('err')) {
+    setStatus('error',
+      '✗ Server is offline at <b>' + getServerUrl() + '</b><br>' +
+      '<small>Start server.py, or update the URL below.</small>');
+    return;
+  }
+
   btn.disabled = true; btn.textContent = '⏳ Reading page…';
 
   try {

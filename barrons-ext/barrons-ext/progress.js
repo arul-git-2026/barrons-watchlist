@@ -142,7 +142,16 @@ async function runExtraction(job) {
       log('Stopped by user', 'warn');
       setDot('stopped');
     } else {
-      log('Error: '+e.message, 'err');
+      // Translate the cryptic "Failed to fetch" into something actionable
+      var msg = e.message || String(e);
+      if (msg.toLowerCase().includes('failed to fetch') ||
+          msg.toLowerCase().includes('networkerror') ||
+          msg.toLowerCase().includes('load failed')) {
+        log('Cannot reach server at ' + (job.serverUrl || 'unknown URL'), 'err');
+        log('Check: is server.py running?  Is the URL correct?', 'warn');
+      } else {
+        log('Error: ' + msg, 'err');
+      }
       setDot('error');
     }
     document.getElementById('btn-retry').disabled = false;
