@@ -4786,6 +4786,45 @@ async function switchMainTab(tab) {
   }
 }
 
+// ── Tab init: always land on Dashboard on every page load/bfcache restore ──
+// Without this, bfcache (browser back-forward cache) can restore the DOM
+// with the JS-set inline styles still applied (e.g. crisis-view display:flex),
+// making it appear on the wrong tab after refresh or back-navigation.
+(function _initTab() {
+  function _resetToDash() {
+    // Direct DOM reset — can't call switchMainTab yet (it may not be defined
+    // during DOMContentLoaded at script-parse time, but this IIFE runs after
+    // switchMainTab is defined since it appears just after it).
+    const dash  = document.getElementById('main-layout');
+    const tview = document.getElementById('table-view');
+    const cview = document.getElementById('crisis-view');
+    const fbar  = document.getElementById('shared-filter-bar');
+    const tabD  = document.getElementById('tv-tab-dash');
+    const tabT  = document.getElementById('tv-tab-table');
+    const tabC  = document.getElementById('tv-tab-crisis');
+
+    if (dash)  dash.style.display  = '';     // falls back to CSS display:grid
+    if (tview) tview.style.display = 'none';
+    if (cview) cview.style.display = 'none';
+    if (fbar)  fbar.style.display  = '';
+
+    [tabD, tabT, tabC].forEach(b => b && b.classList.remove('on'));
+    if (tabD) tabD.classList.add('on');
+  }
+
+  // 1) DOMContentLoaded — normal page load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _resetToDash);
+  } else {
+    _resetToDash();
+  }
+
+  // 2) pageshow — fires on bfcache restores (e.persisted === true)
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) _resetToDash();
+  });
+})();
+
 async function tvLoad() {
   document.getElementById('tv-loading').style.display = 'flex';
   document.getElementById('tv-loading').textContent   = 'Loading…';
