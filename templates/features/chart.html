@@ -1,0 +1,157 @@
+<style>
+/* ═══ FEATURE: CHART — START ════════════════════════════════════
+ * HTML  →  search "FEATURE: CHART" in <body>       (~line 1318)
+ * JS    →  search "FEATURE: CHART" in <script>     (~line 2466)
+ * ═══════════════════════════════════════════════════════════════ */
+/* ── Chart — Google Finance style ────────────────────────────────── */
+.chart-header{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:0;padding-bottom:10px;
+  border-bottom:1px solid var(--border)
+}
+.chart-header h3{
+  font-size:13px;font-weight:600;color:var(--text);
+  flex:1;white-space:nowrap
+}
+/* range + zoom in one row across the top */
+.chart-controls{display:flex;align-items:center;gap:4px}
+.range-btns{display:flex;gap:1px}
+.rb{
+  padding:4px 10px;border:none;border-radius:20px;
+  cursor:pointer;font-size:12px;background:none;color:var(--muted);
+  font-weight:500;transition:all .12s;font-family:var(--font)
+}
+.rb:hover{background:var(--bg);color:var(--text)}
+.rb.on{background:var(--accent-light);color:var(--accent);font-weight:600}
+/* zoom btns inline with range */
+.zoom-btns{display:flex;gap:1px;margin-left:8px;padding-left:8px;border-left:1px solid var(--border)}
+.zb{
+  padding:4px 9px;border-radius:20px;font-size:12px;font-weight:500;
+  border:none;background:none;
+  color:var(--muted);cursor:pointer;transition:all .12s;line-height:1.4
+}
+.zb:hover{background:var(--bg);color:var(--text)}
+/* legend BELOW chart, GF style */
+.chart-legend{
+  display:flex;flex-wrap:wrap;gap:6px;
+  margin-top:10px;padding-top:10px;
+  border-top:1px solid var(--border)
+}
+.leg-item{
+  display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
+  padding:3px 10px;border-radius:20px;border:1px solid var(--border);
+  background:var(--card);cursor:pointer;transition:all .12s
+}
+.leg-item:hover{border-color:#c5d9fc;background:var(--accent-light);color:var(--accent)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* data source badge */
+.src-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500
+}
+.src-db{background:#dcfce7;color:#15803d}
+.src-yahoo{background:#e0f2fe;color:#0369a1}
+.src-mixed{background:#fef9c3;color:#92400e}
+
+.chart-legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.leg-item{
+  display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
+  padding:3px 8px;border-radius:20px;border:1px solid var(--border);
+  background:var(--card);cursor:pointer;transition:all .12s
+}
+.leg-item:hover{border-color:#c5d9fc;background:var(--accent-light);color:var(--accent)}
+.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* floating hover legend — appears left of cursor */
+#chart-hover-legend{
+  position:absolute;pointer-events:none;
+  background:rgba(15,23,42,.88);border:1px solid rgba(255,255,255,.1);
+  border-radius:7px;padding:8px 11px;font-size:11px;
+  color:#f1f5f9;line-height:1.7;white-space:nowrap;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+  display:none;z-index:100;min-width:120px
+}
+#chart-hover-legend .hl-date{
+  font-size:10px;color:#94a3b8;margin-bottom:4px;
+  border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:4px
+}
+#chart-hover-legend .hl-row{
+  display:flex;align-items:center;gap:6px
+}
+#chart-hover-legend .hl-dot{
+  width:8px;height:8px;border-radius:2px;flex-shrink:0
+}
+#chart-hover-legend .hl-val{margin-left:auto;font-weight:600}
+#chart-hover-legend .hl-price{color:#94a3b8;font-size:10px;margin-left:4px}
+#chart-hover-legend .hl-sep{
+  border:none;border-top:1px solid rgba(255,255,255,.1);margin:5px 0
+}
+#chart-hover-legend .hl-dim{opacity:.22}
+
+/* chart right-click filter menu */
+#chart-ctx-menu{
+  position:fixed;z-index:9000;display:none;
+  background:#1e293b;border:1px solid #334155;border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);min-width:150px;padding:4px 0;
+  font-size:12px;color:#e2e8f0;user-select:none
+}
+#chart-ctx-menu.visible{display:block}
+.cc-header{
+  padding:5px 14px 4px;font-size:10px;font-weight:600;
+  color:#475569;text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid #334155;margin-bottom:2px
+}
+.cc-item{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 14px;cursor:pointer;transition:background .1s
+}
+.cc-item:hover{background:#334155}
+.cc-item.active{color:#60a5fa}
+.cc-item .cc-dot{
+  width:8px;height:8px;border-radius:50%;background:#475569;flex-shrink:0
+}
+.cc-item.active .cc-dot{background:#3b82f6}
+.cc-sep{height:1px;background:#334155;margin:3px 0}
+/* ═══ FEATURE: CHART — END ══════════════════════════════════════ */
+</style>
+
+    <!-- ═══ FEATURE: CHART — START ══════════════════════════════════ -->
+    <!-- Chart card — TradingView widget -->
+    <div class="card" style="padding:12px 16px">
+      <!-- Header: title only -->
+      <div class="chart-header" style="border-bottom:none;padding-bottom:6px">
+        <h3>Performance</h3>
+        <span id="tv-symbol-label" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
+      </div>
+
+      <!-- TradingView container — tall enough for the chart to breathe -->
+      <div id="chart-wrap" style="height:380px;border-radius:6px;overflow:hidden;background:var(--card)">
+        <div id="tv-chart" style="width:100%;height:100%;display:flex;align-items:center;
+             justify-content:center;color:var(--muted);font-size:12px">
+          Check tickers in the sidebar to view chart
+        </div>
+      </div>
+
+      <!-- Range buttons below chart — always visible, full width -->
+      <div style="display:flex;flex-wrap:wrap;gap:1px;
+                  margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <button class="rb"    onclick="setRange('1D',this)">1D</button>
+        <button class="rb"    onclick="setRange('5D',this)">5D</button>
+        <button class="rb"    onclick="setRange('1W',this)">1W</button>
+        <button class="rb on" onclick="setRange('1M',this)">1M</button>
+        <button class="rb"    onclick="setRange('3M',this)">3M</button>
+        <button class="rb"    onclick="setRange('6M',this)">6M</button>
+        <button class="rb"    onclick="setRange('YTD',this)">YTD</button>
+        <button class="rb"    onclick="setRange('1Y',this)">1Y</button>
+        <button class="rb"    onclick="setRange('2Y',this)">2Y</button>
+        <button class="rb"    onclick="setRange('3Y',this)">3Y</button>
+      </div>
+
+      <!-- Ticker legend pills -->
+      <div class="chart-legend" id="chart-legend" style="margin-top:8px">
+        <span style="font-size:11px;color:var(--muted)">
+          Check tickers in the sidebar to compare
+        </span>
+      </div>
+    </div>

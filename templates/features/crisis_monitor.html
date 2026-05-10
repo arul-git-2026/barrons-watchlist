@@ -1,0 +1,69 @@
+<style>
+<!-- ═══ CRISIS MONITOR TAB — START ══════════════════════════════ -->
+/* ── Crisis Monitor Tab ──────────────────────────────────────── */
+#crisis-view{display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;background:var(--bg)}
+.crs-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;
+  display:inline-block;white-space:nowrap}
+.crs-tag.iran{background:#fff3e0;color:#e65100}
+.crs-tag.pvt {background:#f3e5f5;color:#7b1fa2}
+.crs-tag.rec {background:#fce8e6;color:#b71c1c}
+.crs-tag.sys {background:#e0f7fa;color:#00695c}
+.cc-risk{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;
+  display:inline-block;white-space:nowrap}
+.cc-risk.calm    {background:#e6f4ea;color:#137333}
+.cc-risk.normal  {background:#e8f0fe;color:#1a73e8}
+.cc-risk.elevated{background:#fef3c7;color:#92400e}
+.cc-risk.fear    {background:#fce8e6;color:#c5221f}
+.cc-risk.extreme {background:#7f1d1d;color:#fff}
+.cc-signal{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;
+  display:inline-block;letter-spacing:.3px;white-space:nowrap}
+.cc-signal.on {background:#e6f4ea;color:#137333;border:1px solid #34a853}
+.cc-signal.off{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+tr.pvt-row{background:#fdf8ff}  tr.pvt-row:hover{background:#f3e5f5}
+tr.rec-row{background:#fff9f9}  tr.rec-row:hover{background:#fce8e6}
+tr.sys-row{background:#f0fafa}  tr.sys-row:hover{background:#e0f7fa}
+.crisis-tbl-wrap{flex:1;overflow:auto}
+/* ═══ CRISIS MONITOR TAB — END ══════════════════════════════════ -->
+</style>
+
+<!-- ═══ CRISIS MONITOR TAB ══════════════════════════════════════ -->
+<div id="crisis-view">
+  <!-- Toolbar -->
+  <div style="padding:6px 16px;display:flex;align-items:center;gap:10px;
+              border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0">
+    <span style="font-size:13px;font-weight:600;color:var(--text)">🌍 Crisis Monitor</span>
+    <span id="crisis-tab-count" style="font-size:11px;color:var(--muted);margin-left:8px"></span>
+    <span style="font-size:11px;color:var(--muted);margin-left:auto">Reference data · Iran War rows via live API</span>
+    <button onclick="renderCrisisTab()"
+            style="padding:3px 12px;font-size:11px;font-weight:600;border-radius:20px;
+                   background:var(--accent-light);color:var(--accent);border:none;cursor:pointer">
+      ↻ Refresh
+    </button>
+  </div>
+  <!-- Table -->
+  <div class="crisis-tbl-wrap">
+    <table class="tv-table" id="tbl-crisis-main">
+      <thead>
+        <tr>
+          <th class="left"        data-col="ticker">Ticker           <span class="arr"></span></th>
+          <th class="left"        data-col="label" >Indicator        <span class="arr"></span></th>
+          <th class="left"        data-col="crisis">Crisis           <span class="arr"></span></th>
+          <th                     data-col="current">Value           <span class="arr"></span></th>
+          <th                     data-col="pct_day">1D %            <span class="arr"></span></th>
+          <th class="sorted-desc" data-col="risk"  >Risk Level       <span class="arr"></span></th>
+          <th class="left"        data-col="signal">Crisis-End Signal<span class="arr"></span></th>
+          <th                     data-col="p1w"   >1 Week           <span class="arr"></span></th>
+          <th                     data-col="p3w"   >3 Weeks          <span class="arr"></span></th>
+          <th                     data-col="p1m"   >1 Month          <span class="arr"></span></th>
+          <th                     data-col="p3m"   >3 Months         <span class="arr"></span></th>
+          <th                     data-col="p6m"   >6 Months         <span class="arr"></span></th>
+          <th                     data-col="pYTD"  >YTD              <span class="arr"></span></th>
+          <th                     data-col="p12m"  >12 Months        <span class="arr"></span></th>
+          <th                     data-col="high52">52W High         <span class="arr"></span></th>
+          <th                     data-col="low52" >52W Low          <span class="arr"></span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-crisis-main"></tbody>
+    </table>
+  </div>
+</div>

@@ -1,0 +1,49 @@
+<style>
+/* ═══ FEATURE: EPISODE BRIEF — START ═══════════════════════════
+ * HTML  →  search "FEATURE: EPISODE BRIEF" in <body>   (~line 1281)
+ * JS    →  search "FEATURE: EPISODE BRIEF" in <script> (~line 1670)
+ * ═══════════════════════════════════════════════════════════════ */
+#ep-brief-card{display:none}
+.ep-brief-body{max-height:480px;overflow-y:auto;padding-top:6px}
+.ep-brief-raw{
+  font-family:'Roboto Mono',monospace;font-size:11.5px;line-height:1.75;
+  color:var(--text);white-space:pre-wrap;word-break:break-word;margin:0
+}
+/* ═══ FEATURE: EPISODE BRIEF — END ════════════════════════════ */
+</style>
+
+    <!-- ═══ FEATURE: EPISODE BRIEF — START ══════════════════════════ -->
+    <div class="card" id="ep-brief-card">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <h3 id="ep-brief-title" style="flex:1;font-size:13px;font-weight:600">Episode Brief</h3>
+        <button onclick="regenEpBrief()" id="ep-brief-regen-btn"
+                title="Re-generate summary from saved article text"
+                style="background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;
+                       color:var(--muted);font-size:11px;padding:2px 8px;line-height:1.6">↺ Regen</button>
+        <button onclick="toggleEpBriefEdit()" id="ep-brief-edit-btn"
+                title="Paste summary manually"
+                style="background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;
+                       color:var(--muted);font-size:11px;padding:2px 8px;line-height:1.6">✏ Edit</button>
+        <button onclick="document.getElementById('ep-brief-card').style.display='none'"
+                style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:0">×</button>
+      </div>
+      <!-- Paste editor (hidden by default) -->
+      <div id="ep-brief-editor" style="display:none;margin-bottom:10px">
+        <textarea id="ep-brief-paste"
+                  placeholder="Paste your Gemini / Claude output here…"
+                  style="width:100%;height:260px;background:var(--bg);border:1px solid var(--border);
+                         border-radius:6px;padding:10px;font-family:'Roboto Mono',monospace;
+                         font-size:11.5px;color:var(--text);resize:vertical;outline:none;
+                         line-height:1.65"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button onclick="saveEpBrief()" id="ep-brief-save-btn"
+                  style="background:var(--accent);color:#fff;border:none;border-radius:6px;
+                         padding:6px 18px;font-size:12px;font-weight:600;cursor:pointer">Save</button>
+          <button onclick="toggleEpBriefEdit()"
+                  style="background:none;border:1px solid var(--border);border-radius:6px;
+                         padding:6px 14px;font-size:12px;color:var(--muted);cursor:pointer">Cancel</button>
+          <span id="ep-brief-save-status" style="font-size:11px;color:var(--muted);align-self:center"></span>
+        </div>
+      </div>
+      <div class="ep-brief-body" id="ep-brief-body"></div>
+    </div>

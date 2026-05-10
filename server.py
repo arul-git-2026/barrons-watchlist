@@ -15,7 +15,7 @@ Install
 
 from __future__ import annotations
 
-from flask import Flask, jsonify, send_file, request, session, make_response
+from flask import Flask, jsonify, send_file, render_template, request, session, make_response
 import yfinance as yf
 import pandas as pd
 import sqlite3
@@ -687,8 +687,8 @@ def home():
 
 @app.route("/v2")
 def home_v2():
-    """widget_v2.html — development/testing version. Production stays at /"""
-    resp = send_file("widget_v2.html")
+    """Jinja2 template — feature files live in templates/features/."""
+    resp = make_response(render_template("widget_v2.html"))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"]        = "no-cache"
     resp.headers["Expires"]       = "0"

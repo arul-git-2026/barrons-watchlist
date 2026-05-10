@@ -1,0 +1,133 @@
+<style>
+/* ── Add Ticker panel ───────────────────────────────────────────── */
+#add-ticker-panel{
+  display:none;position:fixed;inset:0;z-index:9998;
+  background:rgba(32,33,36,.5);
+  align-items:center;justify-content:center
+}
+#add-ticker-panel.visible{display:flex}
+.add-ticker-modal{
+  background:var(--card);border-radius:12px;
+  border:1px solid var(--border);
+  box-shadow:0 8px 32px rgba(60,64,67,.25);
+  width:520px;max-width:96vw;max-height:90vh;
+  display:flex;flex-direction:column;overflow:hidden
+}
+.atm-header{
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px
+}
+.atm-header h3{font-size:15px;font-weight:600;color:var(--text);flex:1}
+.atm-close{
+  width:28px;height:28px;border-radius:50%;border:none;
+  background:none;cursor:pointer;font-size:18px;color:var(--muted);
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s
+}
+.atm-close:hover{background:var(--bg)}
+.atm-body{padding:18px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.atm-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.atm-field{display:flex;flex-direction:column;gap:4px}
+.atm-field.full{grid-column:1/-1}
+.atm-field label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.atm-field input,.atm-field select,.atm-field textarea{
+  padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  font-size:12px;color:var(--text);background:var(--bg);
+  outline:none;font-family:var(--font);transition:border-color .15s
+}
+.atm-field input:focus,.atm-field select:focus,.atm-field textarea:focus{
+  border-color:var(--accent);background:var(--card)
+}
+.atm-field textarea{resize:vertical;min-height:90px;line-height:1.6}
+.atm-footer{
+  padding:12px 20px;border-top:1px solid var(--border);
+  display:flex;justify-content:flex-end;gap:8px;background:var(--bg)
+}
+.atm-cancel{
+  padding:8px 18px;border:1px solid var(--border);border-radius:20px;
+  background:var(--card);color:var(--muted);font-size:12px;
+  font-weight:500;cursor:pointer;font-family:var(--font)
+}
+.atm-cancel:hover{background:var(--bg)}
+.atm-save{
+  padding:8px 20px;background:var(--accent);color:#fff;border:none;
+  border-radius:20px;font-size:12px;font-weight:500;
+  cursor:pointer;font-family:var(--font);transition:background .15s
+}
+.atm-save:hover{background:#1557b0}
+.atm-save:disabled{opacity:.5;cursor:not-allowed}
+</style>
+
+<!-- Add Ticker modal -->
+<div id="add-ticker-panel">
+  <div class="add-ticker-modal">
+    <div class="atm-header">
+      <h3>Add ticker</h3>
+      <button class="atm-close" id="atm-close-btn">✕</button>
+    </div>
+    <div class="atm-body">
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Ticker symbol *</label>
+          <input id="atm-ticker" placeholder="e.g. AAPL" style="font-family:monospace;font-weight:700;text-transform:uppercase">
+        </div>
+        <div class="atm-field">
+          <label>Company name</label>
+          <input id="atm-name" placeholder="e.g. Apple Inc.">
+        </div>
+      </div>
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Sector</label>
+          <input id="atm-sector" placeholder="e.g. Technology">
+        </div>
+        <div class="atm-field">
+          <label>Type</label>
+          <select id="atm-type">
+            <option value="Stock">Stock</option>
+            <option value="ETF">ETF</option>
+            <option value="Fund">Fund</option>
+          </select>
+        </div>
+      </div>
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Ref price</label>
+          <input id="atm-price" placeholder="e.g. ~$146">
+        </div>
+      </div>
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Source name</label>
+          <input id="atm-source" placeholder="e.g. My Research" value="My Research">
+        </div>
+        <div class="atm-field">
+          <label>Tags / label</label>
+          <input id="atm-tags" placeholder="e.g. Earnings play">
+        </div>
+      </div>
+      <div class="atm-field full">
+        <label>Summary / thesis</label>
+        <textarea id="atm-summary" placeholder="Write your thesis here. You can use bullet points:&#10;• **Why I like it:** ...&#10;• **Risk:** ...&#10;• **Catalyst:** ..."></textarea>
+      </div>
+      <div class="atm-row">
+        <div class="atm-field">
+          <label>Base case</label>
+          <input id="atm-base" placeholder="Most likely 12-month outcome">
+        </div>
+        <div class="atm-field">
+          <label>Bear case</label>
+          <input id="atm-bear" placeholder="Key downside risk">
+        </div>
+      </div>
+      <div class="atm-field full">
+        <label>Bull case</label>
+        <input id="atm-bull" placeholder="Key upside catalyst">
+      </div>
+    </div>
+    <div class="atm-footer">
+      <button class="atm-cancel" id="atm-cancel-btn">Cancel</button>
+      <button class="atm-save"   id="atm-save-btn">Save ticker</button>
+    </div>
+  </div>
+</div>
