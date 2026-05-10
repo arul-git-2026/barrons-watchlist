@@ -4537,4 +4537,6 @@ if __name__ == "__main__":
     print(f"  LAN/Tailscale:  http://{lan_ip}:5000")
     print(f"[36m{sep}[0m\n")
 
-    app.run(debug=False, host="0.0.0.0", port=5000, use_reloader=False)
+    # "::" binds dual-stack on Windows/Linux — covers both 127.0.0.1 (IPv4)
+    # and ::1 (IPv6) so "localhost" works regardless of OS DNS resolution order.
+    app.run(debug=False, host="::", port=5000, use_reloader=False)

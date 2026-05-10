@@ -30,11 +30,14 @@ function logTickers(added, updated, tickers) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fixUrl(raw) {
-  var url = (raw || 'http://localhost:5000').trim().replace(/\/$/,'');
-  // localhost always runs HTTP — silently correct a stale https:// entry
-  url = url.replace(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, function(_, host, port) {
-    return 'http://' + host + (port || '');
-  });
+  var url = (raw || 'http://127.0.0.1:5000').trim().replace(/\/$/,'');
+  // Correct stale https:// — local Flask always runs plain HTTP
+  url = url.replace(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/,
+    function(_, host, port) { return 'http://' + host + (port || ':5000'); });
+  // On Windows, Chrome resolves "localhost" to ::1 (IPv6) but Flask binds
+  // to 0.0.0.0 (IPv4), causing connection refused.  Use 127.0.0.1 explicitly.
+  url = url.replace(/^(https?:\/\/)localhost(:\d+)?/,
+    function(_, scheme, port) { return scheme + '127.0.0.1' + (port || ':5000'); });
   return url;
 }
 function getServerUrl() {
