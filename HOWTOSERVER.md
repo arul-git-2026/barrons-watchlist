@@ -4,7 +4,7 @@
 ```
 https://app.barrons-watchlist-research.com/v2
 ```
-Log in with the passphrase (same value as the token in your `.env` — `AUTH_TOKEN`).
+Log in with the passphrase — same value as `STREETWISE_TOKEN` in `/etc/streetwise.env`.
 
 ---
 
@@ -40,6 +40,35 @@ sudo journalctl -u streetwise -n 100  # last 100 log lines
 
 ---
 
+## Rotate the auth token
+The token secures both the dashboard login and the Chrome extension API calls.
+When rotating, you must update it in **three places**:
+
+```bash
+# 1. Generate a new token
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# 2. Update server (SSH in first)
+sudo nano /etc/streetwise.env          # set STREETWISE_TOKEN=<new>
+sudo nano /opt/streetwise/.env         # set STREETWISE_TOKEN=<new>
+sudo systemctl restart streetwise
+
+# 3. Update the Chrome extension (on your PC)
+#    Edit barrons-ext/barrons-ext/popup.js → var EXT_TOKEN = '<new>'
+#    Then: git add + git commit + git push
+#    Then: chrome://extensions → Reload the extension
+```
+
+---
+
+## Chrome extension — how it connects
+- **Widget** (`app.*`) is protected by Cloudflare Access (browser login wall)
+- **Extension** calls `api.barrons-watchlist-research.com` — same Flask app but no CF Access wall
+- Every extension request sends `X-Streetwise-Token` header; Flask validates it against `STREETWISE_TOKEN`
+- `EXT_TOKEN` is hardcoded in `barrons-ext/barrons-ext/popup.js` — must match server token
+
+---
+
 ## Clear a stuck cache (on server)
 ```bash
 cd /opt/streetwise
@@ -71,17 +100,13 @@ sudo systemctl restart cloudflared
 
 ## Key file locations (on server)
 ```
-/opt/streetwise/server.py          # Flask app
-/opt/streetwise/widget_v2.html     # Dashboard UI
-/opt/streetwise/price_history.db   # SQLite — price history + DCF cache
-/opt/streetwise/.env               # API keys (GEMINI_API_KEY, AUTH_TOKEN, etc.)
+/opt/streetwise/server.py              # Flask app
+/opt/streetwise/templates/widget_v2.html  # Dashboard UI
+/opt/streetwise/streetwise_data.json   # Ticker + episode database (gitignored)
+/opt/streetwise/price_history.db       # SQLite — price history + DCF cache
+/opt/streetwise/.env                   # API keys (local fallback)
+/etc/streetwise.env                    # API keys + STREETWISE_TOKEN (production, takes priority)
 ```
-
----
-
-## Chrome extension auth
-The extension sends `X-Streetwise-Token: <token>` as a request header.
-Set the token in the extension popup — same value as `AUTH_TOKEN` in `.env`.
 
 ---
 
