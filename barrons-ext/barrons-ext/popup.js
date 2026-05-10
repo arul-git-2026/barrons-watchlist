@@ -1,4 +1,4 @@
-// popup.js — Barrons → Streetwise  (sources-registry + model selector + cost tracker)
+// popup.js — Barrons → Streetwise
 
 // ── Progress log ───────────────────────────────────────────────────────────
 function logClear() {
@@ -12,67 +12,12 @@ function log(msg, cls) {
   var line = document.createElement('div');
   var ts   = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   var icons = {ok:'✓',inf:'·',dim:' ',err:'✗',warn:'⚠',srv:'▸',cost:'$'};
-  var icon  = icons[cls] || '·';
-  line.innerHTML = '<span class="dim">'+ts+'</span>  <span class="'+cls+'">'+icon+' '+msg+'</span>';
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-}
-function logTickers(added, updated, tickers) {
-  var el = document.getElementById('progress-log');
-  el.style.display = 'block';
-  var line = document.createElement('div');
-  line.style.marginTop = '4px';
-  line.innerHTML = '<span class="ok">✓ '+added+' new · '+updated+' updated:  </span>'
-    + tickers.map(function(t){ return '<span class="tck">'+t+'</span>'; }).join(' ');
+  line.innerHTML = '<span class="dim">'+ts+'</span>  <span class="'+cls+'">'+(icons[cls]||'·')+' '+msg+'</span>';
   el.appendChild(line);
   el.scrollTop = el.scrollHeight;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function fixUrl(raw) {
-  var url = (raw || 'http://127.0.0.1:5000').trim().replace(/\/$/,'');
-  // Correct stale https:// — local Flask always runs plain HTTP
-  url = url.replace(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/,
-    function(_, host, port) { return 'http://' + host + (port || ':5000'); });
-  // On Windows, Chrome resolves "localhost" to ::1 (IPv6) but Flask binds
-  // to 0.0.0.0 (IPv4), causing connection refused.  Use 127.0.0.1 explicitly.
-  url = url.replace(/^(https?:\/\/)localhost(:\d+)?/,
-    function(_, scheme, port) { return scheme + '127.0.0.1' + (port || ':5000'); });
-  return url;
-}
-function getServerUrl() {
-  var el  = document.getElementById('server-url');
-  var url = fixUrl(el.value);
-  // Write back if we corrected it so the input always shows the real value
-  if (el.value !== url) { el.value = url; chrome.storage.local.set({serverUrl: url}); }
-  return url;
-}
-function getToken() {
-  return (document.getElementById('server-token').value || '').trim();
-}
-function authUrl(path) {
-  return getServerUrl() + path;
-}
-// POST bodies — Content-Type triggers CORS preflight, which is fine for writes
-function authHeaders(extra) {
-  var h = Object.assign({'Content-Type': 'application/json'}, extra || {});
-  var t = getToken();
-  if (t) h['X-Streetwise-Token'] = t;
-  return h;
-}
-// GET requests — no Content-Type so the request stays "simple" (no preflight)
-function authGetHeaders() {
-  var h = {};
-  var t = getToken();
-  if (t) h['X-Streetwise-Token'] = t;
-  return h;
-}
-function updatePreview() {
-  var date   = document.getElementById('inp-date').value.trim()   || 'M/D';
-  var year   = document.getElementById('inp-year').value.trim()   || '????';
-  var prefix = document.getElementById('inp-prefix').value.trim().toLowerCase() || '???';
-  document.getElementById('ep-key-preview').textContent = prefix+':'+year+'/'+date;
-}
+// ── Status box ─────────────────────────────────────────────────────────────
 function setStatus(type, html) {
   var box = document.getElementById('status-box');
   box.className = 'status '+type; box.innerHTML = html; box.style.display = 'block';
@@ -82,27 +27,68 @@ function clearStatus() {
   logClear();
 }
 
-// ── Model selector ─────────────────────────────────────────────────────────
+// ── URL helpers ───────────────────────────────────────────────────────────
+function fixUrl(raw) {
+  var url = (raw || 'http://127.0.0.1:5000').trim().replace(/\/$/,'');
+  // Fix stale https://localhost entries — local Flask always runs plain HTTP
+  url = url.replace(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/,
+    function(_, host, port) { return 'http://' + host + (port || ':5000'); });
+  // Normalise "localhost" → "127.0.0.1" (avoids IPv6 resolution on Windows)
+  url = url.replace(/^(https?:\/\/)localhost(:\d+)?/,
+    function(_, scheme, port) { return scheme + '127.0.0.1' + (port || ':5000'); });
+  return url;
+}
+function getServerUrl() {
+  var el  = document.getElementById('server-url');
+  var url = fixUrl(el.value);
+  if (el.value !== url) { el.value = url; chrome.storage.local.set({serverUrl: url}); }
+  return url;
+}
+function getToken() {
+  return (document.getElementById('server-token').value || '').trim();
+}
+function authUrl(path) { return getServerUrl() + path; }
+
+// POST bodies — include Content-Type (triggers CORS preflight, handled by server)
+function authHeaders(extra) {
+  var h = Object.assign({'Content-Type': 'application/json'}, extra || {});
+  var t = getToken();
+  if (t) h['X-Streetwise-Token'] = t;
+  return h;
+}
+// GET requests — no Content-Type so requests stay "simple" (no preflight)
+function authGetHeaders() {
+  var h = {};
+  var t = getToken();
+  if (t) h['X-Streetwise-Token'] = t;
+  return h;
+}
+
+// ── Episode key preview ───────────────────────────────────────────────────
+function updatePreview() {
+  var date   = document.getElementById('inp-date').value.trim()   || 'M/D';
+  var year   = document.getElementById('inp-year').value.trim()   || '????';
+  var prefix = _activePrefix || '???';
+  document.getElementById('ep-key-preview').textContent = prefix+':'+year+'/'+date;
+}
+
+// ── Model selector ────────────────────────────────────────────────────────
 var _selectedModel = 'claude-haiku';
 
 function initModelButtons() {
   document.querySelectorAll('.mb').forEach(function(btn) {
     btn.addEventListener('click', function() {
       _selectedModel = this.dataset.model;
-      // Clear all active classes
       document.querySelectorAll('.mb').forEach(function(b) {
         b.classList.remove('active-claude','active-gemini');
       });
-      // Apply correct active class based on provider
       var isGemini = _selectedModel.startsWith('gemini');
       this.classList.add(isGemini ? 'active-gemini' : 'active-claude');
-      // Persist
       chrome.storage.local.set({selectedModel: _selectedModel});
       log('Model: '+_selectedModel, 'dim');
     });
   });
 }
-
 function setActiveModel(model) {
   _selectedModel = model;
   document.querySelectorAll('.mb').forEach(function(b) {
@@ -113,19 +99,16 @@ function setActiveModel(model) {
   });
 }
 
-// ── Session cost tracker ───────────────────────────────────────────────────
+// ── Session cost ──────────────────────────────────────────────────────────
 var _sessionCost = 0;
-
 function updateCostDisplay() {
   document.getElementById('session-cost').textContent = '$'+_sessionCost.toFixed(4);
 }
-
 function addCost(amount) {
   _sessionCost += parseFloat(amount) || 0;
   chrome.storage.local.set({sessionCost: _sessionCost});
   updateCostDisplay();
 }
-
 function resetCost() {
   _sessionCost = 0;
   chrome.storage.local.set({sessionCost: 0});
@@ -133,85 +116,88 @@ function resetCost() {
   log('Session cost reset', 'dim');
 }
 
-// ── Sources registry cache ─────────────────────────────────────────────────
+// ── Sources registry ──────────────────────────────────────────────────────
 var _sourcesRegistry = {};
+var _activePrefix    = '';
 
-// ── Server ping ────────────────────────────────────────────────────────────
-async function pingServer() {
-  var dot = document.getElementById('server-dot');
-  var txt = document.getElementById('server-status-txt');
-  try {
-    var res = await fetch(authUrl('/api/status'), {headers:authGetHeaders(),signal:AbortSignal.timeout(2500)});
-    if (res.ok) {
-      var d = await res.json();
-      dot.className = 'dot ok';
-      txt.textContent = d.tickers_in_json+' tickers';
-    } else throw new Error('HTTP '+res.status);
-  } catch(e) {
-    dot.className = 'dot err';
-    txt.textContent = 'offline';
-  }
+// ── Source dropdown ───────────────────────────────────────────────────────
+var _FALLBACK_SOURCES = [
+  {prefix:'stw', label:"Barron's Streetwise",    color:'#3b82f6'},
+  {prefix:'ian', label:"Barron's Ian Salisbury",  color:'#8b5cf6'},
+  {prefix:'div', label:'Dividends',               color:'#10b981'},
+  {prefix:'bl',  label:'Barrons Live',            color:'#f59e0b'},
+];
+
+function _buildSourceOptions(sources) {
+  var sel = document.getElementById('inp-source-sel');
+  sel.innerHTML = '';
+  sources.forEach(function(s) {
+    var opt = document.createElement('option');
+    opt.value          = s.prefix;
+    opt.dataset.prefix = s.prefix;
+    opt.dataset.label  = s.label || s.prefix;
+    opt.textContent    = (s.label || s.prefix) + (s.count ? '  (' + s.count + ')' : '');
+    sel.appendChild(opt);
+  });
+  // "Custom…" option at the end
+  var custom = document.createElement('option');
+  custom.value = '__custom__';
+  custom.textContent = '— Custom…';
+  sel.appendChild(custom);
 }
 
-// ── Load sources ───────────────────────────────────────────────────────────
-async function loadSources() {
-  var container = document.getElementById('quick-btns');
-  try {
-    var res = await fetch(authUrl('/api/sources'), {headers:authGetHeaders(),signal:AbortSignal.timeout(3000)});
-    if (!res.ok) throw new Error('HTTP '+res.status);
-    var data = await res.json();
-    var sources = data.sources || [];
+function onSourceSelect(sel) {
+  var val    = sel.value;
+  var custom = document.getElementById('custom-source-row');
 
-    _sourcesRegistry = {};
-    sources.forEach(function(s) { _sourcesRegistry[s.prefix] = s; });
-
-    container.innerHTML = '';
-    sources.forEach(function(s) {
-      var btn = document.createElement('button');
-      btn.className = 'qb';
-      btn.dataset.prefix = s.prefix;
-      btn.dataset.label  = s.label;
-      btn.innerHTML =
-        '<span class="qb-dot" style="background:'+(s.color||'#64748b')+'"></span>'
-        + s.label
-        + (s.count ? ' <span class="qb-count">('+s.count+')</span>' : '');
-      btn.title = 'prefix: '+s.prefix;
-      btn.addEventListener('click', function() {
-        selectSource(this.dataset.prefix, this.dataset.label);
-        document.querySelectorAll('.qb').forEach(function(b){ b.classList.remove('active'); });
-        this.classList.add('active');
-      });
-      container.appendChild(btn);
-    });
-  } catch(e) {
-    // Built-in fallbacks
-    container.innerHTML = '';
-    [{prefix:'stw',label:"Barron's Streetwise",color:'#3b82f6'},
-     {prefix:'ian',label:"Barron's Ian Salisbury",color:'#8b5cf6'},
-     {prefix:'div',label:'Dividends',color:'#10b981'},
-     {prefix:'bl', label:'Barrons Live',color:'#f59e0b'}]
-    .forEach(function(s) {
-      var btn = document.createElement('button');
-      btn.className = 'qb';
-      btn.dataset.prefix = s.prefix; btn.dataset.label = s.label;
-      btn.innerHTML = '<span class="qb-dot" style="background:'+s.color+'"></span>'+s.label;
-      btn.addEventListener('click', function(){
-        selectSource(this.dataset.prefix, this.dataset.label);
-        document.querySelectorAll('.qb').forEach(function(b){ b.classList.remove('active'); });
-        this.classList.add('active');
-      });
-      container.appendChild(btn);
-    });
+  if (val === '__custom__') {
+    custom.classList.remove('hidden');
+    // Clear hidden-state fields so user types fresh
+    _activePrefix = '';
+    updatePreview();
+    document.getElementById('inp-source').focus();
+    document.getElementById('episode-row').style.display = 'none';
+    return;
   }
+
+  custom.classList.add('hidden');
+  var opt    = sel.options[sel.selectedIndex];
+  var prefix = opt.dataset.prefix || val;
+  var label  = opt.dataset.label  || val;
+  _setSource(prefix, label);
 }
 
-function selectSource(prefix, label) {
-  document.getElementById('inp-source').value = label;
-  document.getElementById('inp-prefix').value = prefix;
+function _setSource(prefix, label) {
+  _activePrefix = prefix;
+  // Keep the hidden inputs populated so sendPage() can read them
+  var srcEl = document.getElementById('inp-source');
+  var pfxEl = document.getElementById('inp-prefix');
+  if (srcEl) srcEl.value = label;
+  if (pfxEl) pfxEl.value = prefix;
   updatePreview();
+  _syncDropdown(prefix);
   populateEpisodeDropdown(prefix);
 }
 
+function selectSource(prefix, label) { _setSource(prefix, label); }
+
+function _syncDropdown(prefix) {
+  var sel = document.getElementById('inp-source-sel');
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].dataset.prefix === prefix) {
+      sel.selectedIndex = i;
+      document.getElementById('custom-source-row').classList.add('hidden');
+      return;
+    }
+  }
+  // Not in list — switch to Custom
+  for (var j = 0; j < sel.options.length; j++) {
+    if (sel.options[j].value === '__custom__') { sel.selectedIndex = j; break; }
+  }
+  document.getElementById('custom-source-row').classList.remove('hidden');
+}
+
+// ── Episode dropdown ──────────────────────────────────────────────────────
 function populateEpisodeDropdown(prefix) {
   var epRow = document.getElementById('episode-row');
   var epSel = document.getElementById('inp-episode');
@@ -219,7 +205,7 @@ function populateEpisodeDropdown(prefix) {
   if (!src || !src.episodes || Object.keys(src.episodes).length === 0) {
     epRow.style.display = 'none'; return;
   }
-  epRow.style.display = 'block';
+  epRow.style.display = '';
   epSel.innerHTML = '<option value="">— New episode —</option>';
   var eps = Object.entries(src.episodes).sort(function(a,b){
     return (b[1].date||'').localeCompare(a[1].date||'');
@@ -229,15 +215,17 @@ function populateEpisodeDropdown(prefix) {
     var opt = document.createElement('option');
     opt.value = key;
     var dp = info.date ? info.date.split('-') : [];
-    var dLabel = dp.length===3 ? (parseInt(dp[1])+'/'+parseInt(dp[2])+'/'+dp[0]) : (key.split(':')[1]||key);
+    var dLabel = dp.length===3
+      ? (parseInt(dp[1])+'/'+parseInt(dp[2])+'/'+dp[0])
+      : (key.split(':')[1] || key);
     opt.textContent = dLabel + (info.title ? ' — '+info.title.slice(0,38) : '');
     epSel.appendChild(opt);
   });
   epSel.onchange = function() {
-    var key = this.value; if (!key) return;
+    var key  = this.value; if (!key) return;
     var info = src.episodes[key]; if (!info) return;
     var parts = key.split(':')[1].split('/');
-    if (parts.length===3) {
+    if (parts.length === 3) {
       document.getElementById('inp-date').value = parts[1]+'/'+parts[2];
       document.getElementById('inp-year').value = parts[0];
     }
@@ -246,103 +234,152 @@ function populateEpisodeDropdown(prefix) {
   };
 }
 
-// ── Get article text ───────────────────────────────────────────────────────
+// ── Server ping ───────────────────────────────────────────────────────────
+async function pingServer() {
+  var dot = document.getElementById('server-dot');
+  var txt = document.getElementById('server-status-txt');
+  try {
+    var res = await fetch(authUrl('/api/status'), {headers:authGetHeaders(), signal:AbortSignal.timeout(2500)});
+    if (res.ok) {
+      var d = await res.json();
+      dot.className = 'dot ok';
+      txt.textContent = d.tickers_in_json + ' tickers';
+    } else throw new Error('HTTP '+res.status);
+  } catch(e) {
+    dot.className = 'dot err';
+    txt.textContent = 'offline';
+  }
+}
+
+// ── Load sources ──────────────────────────────────────────────────────────
+async function loadSources() {
+  try {
+    var res = await fetch(authUrl('/api/sources'), {headers:authGetHeaders(), signal:AbortSignal.timeout(3000)});
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    var data    = await res.json();
+    var sources = data.sources || [];
+    _sourcesRegistry = {};
+    sources.forEach(function(s) { _sourcesRegistry[s.prefix] = s; });
+    _buildSourceOptions(sources);
+  } catch(e) {
+    // Server offline or error — fall back to built-in list
+    _buildSourceOptions(_FALLBACK_SOURCES);
+  }
+
+  // Re-sync current selection (preserves choice across reloads)
+  if (_activePrefix) {
+    _syncDropdown(_activePrefix);
+    populateEpisodeDropdown(_activePrefix);
+  } else {
+    // Auto-select first item
+    var sel = document.getElementById('inp-source-sel');
+    if (sel.options.length && sel.options[0].value !== '__custom__') {
+      sel.selectedIndex = 0;
+      onSourceSelect(sel);
+    }
+  }
+}
+
+// ── Get article text from current tab ─────────────────────────────────────
 async function getPageText(tabId) {
   var results = await chrome.scripting.executeScript({
-    target: {tabId:tabId},
+    target: {tabId: tabId},
     func: function() {
-      var NOISE = 'script,style,nav,header,footer,button,aside,[class*="Ad"],[class*="newsletter"],[class*="Subscribe"],[class*="related"],[class*="READ NEXT"]';
-
+      var NOISE = 'script,style,nav,header,footer,button,aside,[class*="Ad"],[class*="newsletter"],[class*="Subscribe"],[class*="related"]';
       function extractFrom(el) {
         var c = el.cloneNode(true);
         c.querySelectorAll(NOISE).forEach(function(n){n.remove();});
         return c.innerText.replace(/\n{3,}/g,'\n\n').trim();
       }
-
-      // Try specific article selectors first
-      var sels = [
-        'article',
-        '[data-type="article"]',
-        '.article__body',
-        '[class*="ArticleBody"]',
-        '[class*="article-body"]',
-        '[class*="paywall"]',   // Barrons wraps content in paywall div even when subscribed
-        'main'
-      ];
+      var sels = ['article','[data-type="article"]','.article__body',
+                  '[class*="ArticleBody"]','[class*="article-body"]',
+                  '[class*="paywall"]','main'];
       for (var i = 0; i < sels.length; i++) {
         var el = document.querySelector(sels[i]);
-        if (el) {
-          var text = extractFrom(el);
-          if (text.length > 800) return text;  // enough content — use it
-        }
+        if (el) { var text = extractFrom(el); if (text.length > 800) return text; }
       }
-
-      // Fallback: collect all paragraph text from the page
-      var paras = Array.from(document.querySelectorAll('p'))
+      return Array.from(document.querySelectorAll('p'))
         .map(function(p){ return p.innerText.trim(); })
-        .filter(function(t){ return t.length > 40; });
-      return paras.join('\n\n').trim();
+        .filter(function(t){ return t.length > 40; })
+        .join('\n\n').trim();
     }
   });
-  return (results[0]&&results[0].result)||'';
+  return (results[0] && results[0].result) || '';
 }
 
-// ── Prefill from page ──────────────────────────────────────────────────────
+// ── Prefill from current tab ──────────────────────────────────────────────
 async function prefillFromPage(tab) {
   var results = await chrome.scripting.executeScript({
-    target:{tabId:tab.id},
-    func:function(){
-      var h1=document.querySelector('h1');
-      var title=(h1?h1.innerText:document.title).trim().substring(0,120);
-      var dateMeta=(document.querySelector('meta[property="article:published_time"]')||{}).content
-        ||(document.querySelector('meta[name="date"]')||{}).content||'';
-      var bylineEl=document.querySelector('[class*="author"],[class*="byline"]');
-      return{title:title,dateMeta:dateMeta,byline:bylineEl?bylineEl.innerText.trim():''};
+    target: {tabId: tab.id},
+    func: function() {
+      var h1 = document.querySelector('h1');
+      var title = (h1 ? h1.innerText : document.title).trim().substring(0, 120);
+      var dateMeta = (document.querySelector('meta[property="article:published_time"]') || {}).content
+        || (document.querySelector('meta[name="date"]') || {}).content || '';
+      return {title: title, dateMeta: dateMeta};
     }
   });
-  var info=(results[0]&&results[0].result)||{};
-  if(info.title) document.getElementById('inp-title').value=info.title;
-  if(info.dateMeta){
-    try{
-      var d=new Date(info.dateMeta);
-      document.getElementById('inp-date').value=(d.getMonth()+1)+'/'+d.getDate();
-      document.getElementById('inp-year').value=d.getFullYear();
-    }catch(e){}
+  var info = (results[0] && results[0].result) || {};
+  if (info.title) document.getElementById('inp-title').value = info.title;
+  if (info.dateMeta) {
+    try {
+      var d = new Date(info.dateMeta);
+      document.getElementById('inp-date').value = (d.getMonth()+1)+'/'+d.getDate();
+      document.getElementById('inp-year').value  = d.getFullYear();
+    } catch(e) {}
   }
-  var url=(tab.url||'').toLowerCase();
-  if(url.includes('barrons.com')){
-    var isStw=url.includes('streetwise')||(tab.title||'').toLowerCase().includes('streetwise');
-    var isBl=url.includes('livecoverage')||url.includes('/live');
-    if(isStw)      selectSource('stw',"Barron's Streetwise");
-    else if(isBl)  selectSource('bl','Barrons Live');
-    else           selectSource('ian',"Barron's Ian Salisbury");
-    var prefix=document.getElementById('inp-prefix').value;
-    document.querySelectorAll('.qb').forEach(function(b){
-      b.classList.toggle('active',b.dataset.prefix===prefix);
-    });
+  var url = (tab.url || '').toLowerCase();
+  if (url.includes('barrons.com')) {
+    var isStw = url.includes('streetwise') || (tab.title||'').toLowerCase().includes('streetwise');
+    var isBl  = url.includes('livecoverage') || url.includes('/live');
+    if      (isStw) selectSource('stw', "Barron's Streetwise");
+    else if (isBl)  selectSource('bl',  'Barrons Live');
+    else            selectSource('ian', "Barron's Ian Salisbury");
   }
   updatePreview();
 }
 
-// ── Send page — opens detached progress window ────────────────────────────
+// ── Collapsible delete section ────────────────────────────────────────────
+function toggleDelSection() {
+  var section = document.getElementById('del-section');
+  var icon    = document.getElementById('del-toggle-icon');
+  var open    = section.style.display !== 'none';
+  section.style.display = open ? 'none' : '';
+  icon.textContent      = open ? '▸' : '▾';
+}
+
+// ── Send page ─────────────────────────────────────────────────────────────
 async function sendPage() {
   clearStatus();
-  var btn    = document.getElementById('send-btn');
-  var date   = document.getElementById('inp-date').value.trim();
-  var year   = document.getElementById('inp-year').value.trim();
-  var source = document.getElementById('inp-source').value.trim() || 'Unknown';
-  var prefix = document.getElementById('inp-prefix').value.trim().toLowerCase() || 'src';
-  var title  = document.getElementById('inp-title').value.trim();
-  var model  = _selectedModel;
+  var btn  = document.getElementById('send-btn');
+  var date = document.getElementById('inp-date').value.trim();
+  var year = document.getElementById('inp-year').value.trim();
 
-  if(!date)  { setStatus('error','⚠ Enter the article date'); return; }
-  if(!year||!/^\d{4}$/.test(year)) { setStatus('error','⚠ Enter a 4-digit year'); return; }
-  if(!prefix){ setStatus('error','⚠ Enter a prefix'); return; }
+  // Read source from active selection
+  var source = '';
+  var prefix = '';
+  var sel = document.getElementById('inp-source-sel');
+  if (sel.value === '__custom__') {
+    source = (document.getElementById('inp-source').value || '').trim();
+    prefix = (document.getElementById('inp-prefix').value || '').trim().toLowerCase();
+  } else {
+    var opt = sel.options[sel.selectedIndex];
+    prefix  = (opt && opt.dataset.prefix) || sel.value;
+    source  = (opt && opt.dataset.label)  || prefix;
+  }
+  source = source || 'Unknown';
+  prefix = prefix || 'src';
 
-  // Guard: verify server is reachable before opening the progress window
+  var title = document.getElementById('inp-title').value.trim();
+  var model = _selectedModel;
+
+  if (!date)              { setStatus('error','⚠ Enter the article date'); return; }
+  if (!year||!/^\d{4}$/.test(year)) { setStatus('error','⚠ Enter a 4-digit year'); return; }
+
+  // Guard — server must be reachable
   if (document.getElementById('server-dot').classList.contains('err')) {
     setStatus('error',
-      '✗ Server is offline at <b>' + getServerUrl() + '</b><br>' +
+      '✗ Server is offline at <b>'+getServerUrl()+'</b><br>'+
       '<small>Start server.py, or update the URL below.</small>');
     return;
   }
@@ -359,7 +396,6 @@ async function sendPage() {
       return;
     }
 
-    // Store job params — progress window picks this up on load
     var job = {
       text:      text,
       textLen:   text.length,
@@ -376,16 +412,14 @@ async function sendPage() {
 
     await chrome.storage.local.set({pendingJob: job});
 
-    // Open detached progress window
     chrome.windows.create({
-      url:    chrome.runtime.getURL('progress.html'),
-      type:   'popup',
-      width:  520,
-      height: 580,
+      url:     chrome.runtime.getURL('progress.html'),
+      type:    'popup',
+      width:   520,
+      height:  580,
       focused: true,
     });
 
-    // Update status in popup then close it
     setStatus('info', '⏳ Extraction started in a new window.');
     setTimeout(function() { window.close(); }, 800);
 
@@ -395,91 +429,90 @@ async function sendPage() {
   }
 }
 
-// ── Delete episode ─────────────────────────────────────────────────────────
+// ── Delete episode ────────────────────────────────────────────────────────
 async function deleteEpisode() {
-  var epKey=document.getElementById('del-ep-key').value.trim();
-  var rmEmpty=document.getElementById('del-rm-empty').checked;
-  var statusEl=document.getElementById('del-status');
-  var btn=document.getElementById('del-btn');
-  statusEl.style.display='none';
-  if(!epKey){statusEl.className='err';statusEl.textContent='⚠ Enter an episode key';statusEl.style.display='block';return;}
-  if(!confirm('Delete episode "'+epKey+'"?\n\nThis cannot be undone.'))return;
-  btn.disabled=true;btn.textContent='⏳…';
-  try{
-    var res=await fetch(authUrl('/api/delete-episode'),{
-      method:'POST',headers:authHeaders(),
-      body:JSON.stringify({ep_key:epKey,remove_empty:rmEmpty})
+  var epKey    = document.getElementById('del-ep-key').value.trim();
+  var rmEmpty  = document.getElementById('del-rm-empty').checked;
+  var statusEl = document.getElementById('del-status');
+  var btn      = document.getElementById('del-btn');
+  statusEl.style.display = 'none';
+  if (!epKey) {
+    statusEl.className = 'err'; statusEl.textContent = '⚠ Enter an episode key';
+    statusEl.style.display = 'block'; return;
+  }
+  if (!confirm('Delete episode "'+epKey+'"?\n\nThis cannot be undone.')) return;
+  btn.disabled = true; btn.textContent = '⏳…';
+  try {
+    var res  = await fetch(authUrl('/api/delete-episode'), {
+      method: 'POST', headers: authHeaders(),
+      body:   JSON.stringify({ep_key: epKey, remove_empty: rmEmpty})
     });
-    var data=await res.json();
-    if(!res.ok||!data.ok)throw new Error(data.error||'server error');
-    var msg='✓ Deleted "'+epKey+'"  ·  '+data.tickers_touched+' tickers updated';
-    if(data.tickers_removed&&data.tickers_removed.length)
-      msg+='  ·  '+data.tickers_removed.length+' removed';
-    statusEl.className='ok';statusEl.textContent=msg;statusEl.style.display='block';
-    document.getElementById('del-ep-key').value='';
-    await loadSources();pingServer();
-  }catch(e){
-    statusEl.className='err';statusEl.textContent='✗ '+e.message;statusEl.style.display='block';
-  }finally{btn.disabled=false;btn.textContent='Delete';}
+    var data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'server error');
+    var msg = '✓ Deleted "'+epKey+'"  ·  '+data.tickers_touched+' tickers updated';
+    if (data.tickers_removed && data.tickers_removed.length)
+      msg += '  ·  '+data.tickers_removed.length+' removed';
+    statusEl.className = 'ok'; statusEl.textContent = msg; statusEl.style.display = 'block';
+    document.getElementById('del-ep-key').value = '';
+    await loadSources(); pingServer();
+  } catch(e) {
+    statusEl.className = 'err'; statusEl.textContent = '✗ '+e.message;
+    statusEl.style.display = 'block';
+  } finally { btn.disabled = false; btn.textContent = 'Delete'; }
 }
 
-// ── Init ───────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function() {
-  // Restore saved state
-  var stored=await chrome.storage.local.get(['serverUrl','serverToken','selectedModel','sessionCost']);
-  if(stored.serverUrl) {
+
+  // Restore saved settings
+  var stored = await chrome.storage.local.get(['serverUrl','serverToken','selectedModel','sessionCost']);
+  if (stored.serverUrl) {
     var corrected = fixUrl(stored.serverUrl);
     document.getElementById('server-url').value = corrected;
-    // Persist the corrected value so the bad https:// is gone from storage too
     if (corrected !== stored.serverUrl) chrome.storage.local.set({serverUrl: corrected});
   }
-  if(stored.serverToken) document.getElementById('server-token').value=stored.serverToken;
-  if(stored.selectedModel) setActiveModel(stored.selectedModel);
-  if(stored.sessionCost)  { _sessionCost=parseFloat(stored.sessionCost)||0; updateCostDisplay(); }
+  if (stored.serverToken)  document.getElementById('server-token').value = stored.serverToken;
+  if (stored.selectedModel) setActiveModel(stored.selectedModel);
+  if (stored.sessionCost)  { _sessionCost = parseFloat(stored.sessionCost)||0; updateCostDisplay(); }
 
-  document.getElementById('inp-year').value=new Date().getFullYear();
+  document.getElementById('inp-year').value = new Date().getFullYear();
 
-  // Input listeners
-  ['inp-date','inp-year','inp-prefix'].forEach(function(id){
-    document.getElementById(id).addEventListener('input',updatePreview);
+  // Input listeners (date + year → preview; custom source/prefix → preview)
+  ['inp-date','inp-year'].forEach(function(id) {
+    document.getElementById(id).addEventListener('input', updatePreview);
   });
-  document.getElementById('inp-source').addEventListener('input',function(){
-    document.getElementById('episode-row').style.display='none';
+  var srcEl = document.getElementById('inp-source');
+  var pfxEl = document.getElementById('inp-prefix');
+  if (srcEl) srcEl.addEventListener('input', updatePreview);
+  if (pfxEl) pfxEl.addEventListener('input', function() {
+    _activePrefix = this.value.trim().toLowerCase();
     updatePreview();
   });
-  document.getElementById('server-url').addEventListener('change',function(){
-    chrome.storage.local.set({serverUrl:getServerUrl()});
-    loadSources();pingServer();
+
+  document.getElementById('server-url').addEventListener('change', function() {
+    chrome.storage.local.set({serverUrl: getServerUrl()});
+    loadSources(); pingServer();
   });
-  document.getElementById('server-token').addEventListener('change',function(){
-    chrome.storage.local.set({serverToken:getToken()});
-    loadSources();pingServer();
+  document.getElementById('server-token').addEventListener('change', function() {
+    chrome.storage.local.set({serverToken: getToken()});
+    loadSources(); pingServer();
   });
 
   // Buttons
-  document.getElementById('send-btn').addEventListener('click',sendPage);
-  document.getElementById('del-btn').addEventListener('click',deleteEpisode);
-  document.getElementById('cost-reset-btn').addEventListener('click',resetCost);
+  document.getElementById('send-btn').addEventListener('click', sendPage);
+  document.getElementById('del-btn').addEventListener('click', deleteEpisode);
+  document.getElementById('cost-reset-btn').addEventListener('click', resetCost);
   initModelButtons();
 
-  // Auto-detect from current tab
-  var tabs=await chrome.tabs.query({active:true,currentWindow:true});
-  var tab=tabs[0];
-  if(tab){
-    document.getElementById('page-title').textContent=tab.title||tab.url||'—';
-    try{await prefillFromPage(tab);}catch(e){}
+  // Auto-detect source from current tab
+  var tabs = await chrome.tabs.query({active:true, currentWindow:true});
+  var tab  = tabs[0];
+  if (tab) {
+    document.getElementById('page-title').textContent = tab.title || tab.url || '—';
+    try { await prefillFromPage(tab); } catch(e) {}
   }
 
   updatePreview();
   await pingServer();
   await loadSources();
-
-  // Re-mark active source button
-  var curPrefix=document.getElementById('inp-prefix').value;
-  if(curPrefix){
-    document.querySelectorAll('.qb').forEach(function(b){
-      b.classList.toggle('active',b.dataset.prefix===curPrefix);
-    });
-    populateEpisodeDropdown(curPrefix);
-  }
 });

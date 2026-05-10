@@ -21,12 +21,13 @@
   .row { display:flex;gap:8px }
   .row .field { flex:1 }
 
-  .quick-btns { display:flex;gap:4px;margin-top:6px;flex-wrap:wrap }
-  .qb { display:flex;align-items:center;gap:4px;padding:3px 9px;background:#1e293b;border:1px solid #334155;border-radius:12px;color:#94a3b8;font-size:10px;cursor:pointer;transition:all .12s;white-space:nowrap }
-  .qb:hover { border-color:#3b82f6;color:#e2e8f0 }
-  .qb.active { border-color:#3b82f6;background:#1d3d5c;color:#7dd3fc }
-  .qb-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0 }
-  .qb-count { color:#475569;font-size:9px;margin-left:1px }
+  /* Source dropdown */
+  #inp-source-sel { cursor:pointer }
+  #inp-source-sel option { background:#1e293b;color:#e2e8f0 }
+
+  /* Custom source row — shown when "Custom…" is picked */
+  #custom-source-row { display:none;margin-top:6px;display:grid;grid-template-columns:2fr 1fr;gap:6px }
+  #custom-source-row.hidden { display:none !important }
 
   #episode-row { display:none;margin-top:6px }
   #inp-episode { font-size:11px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:5px 8px;width:100%;outline:none }
@@ -75,8 +76,17 @@
   #progress-log .cost { color:#34d399;font-weight:600 }
 
   .divider { border:none;border-top:1px solid #1e293b;margin:12px 0 }
-  .section-label { font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px }
-  .del-row { display:flex;gap:6px;align-items:flex-end }
+
+  /* Collapsible delete section */
+  .section-toggle {
+    display:flex;align-items:center;justify-content:space-between;
+    font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.06em;
+    cursor:pointer;padding:2px 0;user-select:none
+  }
+  .section-toggle:hover { color:#94a3b8 }
+  .toggle-icon { font-size:10px;transition:transform .15s }
+
+  .del-row { display:flex;gap:6px;align-items:flex-end;margin-top:8px }
   .del-row .field { flex:1;margin-bottom:0 }
   .chk-row { display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:#64748b;cursor:pointer }
   #del-status { display:none;margin-top:8px;padding:8px 10px;border-radius:5px;font-size:11px }
@@ -103,7 +113,7 @@
   <div class="row">
     <div class="field">
       <label>Article date</label>
-      <input type="text" id="inp-date" placeholder="e.g. 3/15">
+      <input type="text" id="inp-date" placeholder="e.g. 5/09">
     </div>
     <div class="field">
       <label>Year</label>
@@ -111,39 +121,42 @@
     </div>
   </div>
 
-  <!-- Source -->
+  <!-- Source — dropdown -->
   <div class="field">
     <label>Source</label>
-    <div class="row" style="gap:8px">
-      <input type="text" id="inp-source" placeholder="e.g. Barron's Streetwise" autocomplete="off" style="flex:2">
-      <input type="text" id="inp-prefix" placeholder="stw" maxlength="8" style="flex:1;font-family:monospace;text-transform:lowercase">
+    <select id="inp-source-sel"></select>
+    <!-- Custom source row: shown only when "Custom…" is selected -->
+    <div id="custom-source-row" class="hidden">
+      <input type="text" id="inp-source" placeholder="Source name" autocomplete="off">
+      <input type="text" id="inp-prefix" placeholder="prefix" maxlength="8"
+             style="font-family:monospace;text-transform:lowercase">
     </div>
-    <div class="quick-btns" id="quick-btns"></div>
+    <!-- Episode dropdown — shown when source has prior episodes -->
     <div id="episode-row">
       <select id="inp-episode"><option value="">— New episode —</option></select>
     </div>
   </div>
 
-  <!-- Title -->
+  <!-- Title / Headline -->
   <div class="field">
     <label>Title / headline</label>
     <input type="text" id="inp-title" placeholder="e.g. Dividend Stocks Oil Shock">
   </div>
 
-  <!-- Ep key preview -->
-  <div class="ep-preview">Episode key: <span id="ep-key-preview">stw:2026/M/D</span></div>
+  <!-- Episode key preview -->
+  <div class="ep-preview">Episode key: <span id="ep-key-preview">?:????/M/D</span></div>
 
   <!-- Model selector -->
   <div class="model-row">
     <label>Model</label>
-    <button class="mb active-claude" data-model="claude-haiku" id="mb-claude-haiku">Claude Haiku</button>
-    <button class="mb" data-model="claude-sonnet" id="mb-claude-sonnet">Sonnet</button>
+    <button class="mb active-claude" data-model="claude-haiku">Claude Haiku</button>
+    <button class="mb" data-model="claude-sonnet">Sonnet</button>
     <span class="mb-sep">|</span>
-    <button class="mb" data-model="gemini-flash" id="mb-gemini-flash">Gemini Flash</button>
-    <button class="mb" data-model="gemini-pro" id="mb-gemini-pro">Pro</button>
+    <button class="mb" data-model="gemini-flash">Gemini Flash</button>
+    <button class="mb" data-model="gemini-pro">Pro</button>
   </div>
 
-  <!-- Session cost tracker -->
+  <!-- Session cost -->
   <div class="cost-bar">
     <span class="cost-label">Session cost</span>
     <span class="cost-val" id="session-cost">$0.0000</span>
@@ -154,40 +167,44 @@
   <div class="btn-row">
     <button class="btn btn-send" id="send-btn">📨  Send to Streetwise</button>
   </div>
-  <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+  <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#64748b;cursor:pointer;user-select:none">
     <input type="checkbox" id="force-reextract"
            style="accent-color:#f59e0b;cursor:pointer;width:13px;height:13px">
-    <label for="force-reextract"
-           style="font-size:11px;color:#64748b;cursor:pointer;user-select:none">
-      Force re-extract (bypass duplicate check)
-    </label>
-  </div>
+    Force re-extract (bypass duplicate check)
+  </label>
 
   <div class="status" id="status-box"></div>
   <div id="progress-log"></div>
 
-  <!-- Delete episode section -->
+  <!-- Delete episode — collapsible -->
   <hr class="divider">
-  <div class="section-label">🗑 Delete episode from database</div>
-  <div class="del-row">
-    <div class="field">
-      <label>Episode key</label>
-      <input type="text" id="del-ep-key" placeholder="e.g. div:2026/3/15" style="font-family:monospace;font-size:11px">
-    </div>
-    <button class="btn btn-danger" id="del-btn">Delete</button>
+  <div class="section-toggle" id="del-toggle" onclick="toggleDelSection()">
+    <span>🗑 Delete episode from database</span>
+    <span class="toggle-icon" id="del-toggle-icon">▸</span>
   </div>
-  <label class="chk-row">
-    <input type="checkbox" id="del-rm-empty">
-    Remove tickers with no remaining episodes
-  </label>
-  <div id="del-status"></div>
+  <div id="del-section" style="display:none">
+    <div class="del-row">
+      <div class="field">
+        <label>Episode key</label>
+        <input type="text" id="del-ep-key" placeholder="e.g. div:2026/3/15"
+               style="font-family:monospace;font-size:11px">
+      </div>
+      <button class="btn btn-danger" id="del-btn">Delete</button>
+    </div>
+    <label class="chk-row">
+      <input type="checkbox" id="del-rm-empty">
+      Remove tickers with no remaining episodes
+    </label>
+    <div id="del-status"></div>
+  </div>
 
-</div>
+</div><!-- /.body -->
 
 <div class="server-row">
   <span class="dot" id="server-dot"></span>
   <input class="server-input" id="server-url" value="http://127.0.0.1:5000">
-  <input class="server-input" id="server-token" placeholder="token" style="flex:0.6;margin-left:4px">
+  <input class="server-input" id="server-token" placeholder="token"
+         style="flex:0.6;margin-left:4px">
   <span id="server-status-txt" style="white-space:nowrap">—</span>
 </div>
 
