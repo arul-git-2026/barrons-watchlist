@@ -4468,6 +4468,11 @@ def delete_tickers():
 
 
 if __name__ == "__main__":
+    # Force UTF-8 on Windows so the startup banner (─ ✓ ⚠ …) doesn't crash
+    import sys as _sys
+    if hasattr(_sys.stdout, "reconfigure"):
+        _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     sep = "─" * 54
     print(f"\n\033[1m\033[36m{sep}\033[0m")
     print(f"\033[1m  BARRONS WATCHLISTS  —  server.py\033[0m")
@@ -4535,8 +4540,8 @@ if __name__ == "__main__":
     except Exception:
         lan_ip = "unknown"
     print(f"  LAN/Tailscale:  http://{lan_ip}:5000")
-    print(f"[36m{sep}[0m\n")
+    print(sep)
 
-    # "::" binds dual-stack on Windows/Linux — covers both 127.0.0.1 (IPv4)
-    # and ::1 (IPv6) so "localhost" works regardless of OS DNS resolution order.
-    app.run(debug=False, host="::", port=5000, use_reloader=False)
+
+
+    app.run(debug=False, host="0.0.0.0", port=5000, use_reloader=False)
