@@ -2353,6 +2353,101 @@ def add_ticker():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/bulk-add-tickers", methods=["POST"])
+def bulk_add_tickers():
+    """
+    Bulk-import tickers from a CSV upload.
+    Body: { tickers: ["AAPL","TSLA",...], source: "Finviz Screen", tag: "Tech Watch" }
+
+    Each ticker is added as a new record (or updated if it already exists).
+    Returns: { ok, added, updated, skipped, errors }
+
+    The 'source' is stored in rec["src"] (list) and used for the episode key.
+    The 'tag'    is stored as the episode label inside rec["sum"] heading and in rec["tags"].
+    """
+    body    = request.get_json(force=True, silent=True) or {}
+    tickers = body.get("tickers", [])
+    source  = (body.get("source", "") or "csv-import").strip()
+    tag     = (body.get("tag",    "") or "").strip()
+
+    if not tickers or not isinstance(tickers, list):
+        return jsonify({"ok": False, "error": "tickers list required"}), 400
+
+    # Sanitise: uppercase, strip, deduplicate, max 10 chars, valid chars
+    import re
+    clean_pattern = re.compile(r'^[A-Z0-9.\-\^=]{1,10}$')
+    seen = set()
+    valid = []
+    for t in tickers:
+        t = str(t).strip().upper()
+        if t and t not in seen and clean_pattern.match(t):
+            seen.add(t)
+            valid.append(t)
+
+    if not valid:
+        return jsonify({"ok": False, "error": "no valid tickers after sanitisation"}), 400
+
+    _now     = datetime.now()
+    today    = _now.strftime("%Y-%m-%d")
+    prefix   = source[:3].lower()
+    ep_key   = f"{prefix}:{_now.year}/{_now.month}/{_now.day}"
+    label    = tag or today
+    heading  = f"=== {ep_key} | {source} · {label} ==="
+
+    db     = load_data()
+    lookup = {r["t"].upper(): r for r in db if r.get("t")}
+
+    added = updated = skipped = 0
+    errors = []
+
+    for ticker in valid:
+        try:
+            if ticker in lookup:
+                rec = lookup[ticker]
+                # Append source tag if not already present
+                if source not in rec.get("src", []):
+                    rec.setdefault("src", []).append(source)
+                # Append tag to tags list if provided
+                if tag and tag not in rec.get("tags", []):
+                    rec.setdefault("tags", []).append(tag)
+                # Add episode key reference
+                if ep_key not in rec.get("e", []):
+                    rec.setdefault("e", []).append(ep_key)
+                updated += 1
+            else:
+                new_rec = {
+                    "t":    ticker,
+                    "n":    ticker,          # name filled later by Yahoo on first quote fetch
+                    "y":    "Stock",
+                    "s":    "flat",
+                    "p":    "",
+                    "e":    [ep_key],
+                    "src":  [source],
+                    "tags": [tag] if tag else [],
+                    "sum":  heading,
+                    "base": "", "bear": "", "bull": "",
+                }
+                lookup[ticker] = new_rec
+                added += 1
+        except Exception as exc:
+            errors.append({"ticker": ticker, "error": str(exc)})
+            skipped += 1
+
+    try:
+        save_tickers(list(lookup.values()))
+        log.info(f"  bulk-add-tickers: +{added} new, ~{updated} updated, {skipped} skipped (source={source!r} tag={tag!r})")
+        return jsonify({
+            "ok":      True,
+            "added":   added,
+            "updated": updated,
+            "skipped": skipped,
+            "errors":  errors,
+        })
+    except Exception as e:
+        log.error(f"bulk-add-tickers save failed: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/edit-ticker", methods=["POST"])
 def edit_ticker():
     """
