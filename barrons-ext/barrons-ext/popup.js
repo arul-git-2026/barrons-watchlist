@@ -47,22 +47,22 @@ function clearStatus() {
   logClear();
 }
 
-// ── Server base URL ───────────────────────────────────────────────────────
-// EDIT: Update BASE_URL if the production server address changes.
-//   Token auth is handled server-side via /etc/streetwise.env — no token needed here.
-// DEBUG: If dot shows red "offline", open DevTools → Network and look for CORS or TLS errors.
-var BASE_URL = 'https://app.barrons-watchlist-research.com';
+// ── Server endpoints ──────────────────────────────────────────────────────
+// EDIT: Update BASE_URL / EXT_TOKEN if server address or token changes.
+//   api.barrons-watchlist-research.com bypasses Cloudflare Access (which protects
+//   app.barrons-watchlist-research.com for browser users). Flask's own _check_token
+//   validates EXT_TOKEN for every API call.
+// DEBUG: If dot shows red "offline", check EXT_TOKEN matches STREETWISE_TOKEN in /etc/streetwise.env
+var BASE_URL  = 'https://api.barrons-watchlist-research.com';
+var EXT_TOKEN = 'nGpv0o0HmvSt9pOa2I_jShAFC3MIQTUdtEhkggbGetE';
 
-// POST bodies — include Content-Type (triggers CORS preflight, handled by server)
-// DEBUG: If POST requests get 403, check _check_token in server.py allows OPTIONS through
+// POST bodies — include Content-Type + token header
 function authHeaders(extra) {
-  return Object.assign({'Content-Type': 'application/json'}, extra || {});
+  return Object.assign({'Content-Type': 'application/json', 'X-Streetwise-Token': EXT_TOKEN}, extra || {});
 }
-// GET requests — no Content-Type so requests stay "simple" (no CORS preflight)
-// WHY: Adding Content-Type to a GET makes it a non-simple request → triggers OPTIONS preflight
-// DEBUG: If ping/loadSources fails with CORS error, check no Content-Type header is being added
+// GET requests — token header only, no Content-Type (keeps request "simple", avoids CORS preflight)
 function authGetHeaders() {
-  return {};
+  return {'X-Streetwise-Token': EXT_TOKEN};
 }
 
 // ── Episode key preview ───────────────────────────────────────────────────
@@ -425,7 +425,7 @@ async function sendPage() {
       title:     title,
       model:     model,
       serverUrl: BASE_URL,
-      token:     '',
+      token:     EXT_TOKEN,
       force:     document.getElementById('force-reextract').checked,
     };
 

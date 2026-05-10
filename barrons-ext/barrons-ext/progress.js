@@ -74,17 +74,14 @@ async function runExtraction(job) {
 
   try {
     _controller = new AbortController();
+    // WHY: Use api.* subdomain (set in serverUrl) — it bypasses Cloudflare Access which
+    //      protects app.* for browser users. Flask _check_token validates job.token.
     var ingestHeaders = {'Content-Type':'application/json'};
     if (job.token) ingestHeaders['X-Streetwise-Token'] = job.token;
-    // credentials:'include' sends the browser's Cloudflare Access cookie so the
-    // request passes through CF Access without redirecting to the login page.
-    // WHY: CF Access protects POST endpoints; the browser session cookie (CF_Authorization)
-    //      is shared to the extension context, allowing API calls when user is logged in.
     var res = await fetch(job.serverUrl+'/api/ingest-page', {
-      method:      'POST',
-      headers:     ingestHeaders,
-      credentials: 'include',
-      signal:      _controller.signal,
+      method:  'POST',
+      headers: ingestHeaders,
+      signal:  _controller.signal,
       body: JSON.stringify({
         text:   job.text,
         date:   job.date,
