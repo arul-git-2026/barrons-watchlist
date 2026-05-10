@@ -26,6 +26,30 @@ import logging
 from datetime import datetime, date, timedelta
 from flask_cors import CORS
 
+# ── .env loader ───────────────────────────────────────────────────────────────
+# Reads KEY=VALUE pairs and injects them into os.environ (existing vars win).
+# Checks, in order: .env next to server.py, then /etc/streetwise.env (Linux).
+def _load_dotenv(*paths):
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if not _line or _line.startswith("#") or "=" not in _line:
+                        continue
+                    _k, _, _v = _line.partition("=")
+                    _k = _k.strip()
+                    _v = _v.strip().strip('"').strip("'")
+                    if _k and _k not in os.environ:
+                        os.environ[_k] = _v
+        except FileNotFoundError:
+            pass
+
+_load_dotenv(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+    "/etc/streetwise.env",
+)
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 import sys
 
