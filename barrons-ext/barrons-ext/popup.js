@@ -54,7 +54,7 @@ function clearStatus() {
 //   validates EXT_TOKEN for every API call.
 // DEBUG: If dot shows red "offline", check EXT_TOKEN matches STREETWISE_TOKEN in /etc/streetwise.env
 var BASE_URL  = 'https://api.barrons-watchlist-research.com';
-var EXT_TOKEN = 'nGpv0o0HmvSt9pOa2I_jShAFC3MIQTUdtEhkggbGetE';
+var EXT_TOKEN = 'EmlZ1AQIB_g2ku5pAHrRFm_M2VHXjihByQNPQTAc_s8';
 
 // POST bodies — include Content-Type + token header
 function authHeaders(extra) {
