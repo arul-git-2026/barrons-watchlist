@@ -8,7 +8,7 @@
 //   _activePrefix    — prefix of currently selected source (e.g. 'stw')
 //
 // Init order (DOMContentLoaded):
-//   1. Restore chrome.storage.local → fill URL/token/model/cost inputs
+//   1. Restore chrome.storage.local → restore model/cost
 //   2. Auto-detect tab title + date + source from current page (prefillFromPage)
 //   3. pingServer()   → update the status dot
 //   4. loadSources()  → build source dropdown, restore previous selection
@@ -47,50 +47,22 @@ function clearStatus() {
   logClear();
 }
 
-// ── URL helpers ───────────────────────────────────────────────────────────
-// DEBUG: If dot shows red "offline" despite server running:
-//   1. Open DevTools → Network — look for CORS errors or net::ERR_CONNECTION_REFUSED
-//   2. Check the URL shown in popup — must be http://127.0.0.1:5000 (not localhost, not https)
-//   3. fixUrl() corrects both; if still wrong, clear chrome.storage.local via DevTools > Application
-function fixUrl(raw) {
-  var url = (raw || 'https://app.barrons-watchlist-research.com').trim().replace(/\/$/,'');
-  // Fix stale https://localhost entries — local Flask always runs plain HTTP
-  url = url.replace(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/,
-    function(_, host, port) { return 'http://' + host + (port || ':5000'); });
-  // Normalise "localhost" → "127.0.0.1" (avoids IPv6 resolution on Windows)
-  // WHY: Chrome on Windows resolves "localhost" to ::1 (IPv6) but Flask binds 0.0.0.0 (IPv4 only)
-  url = url.replace(/^(https?:\/\/)localhost(:\d+)?/,
-    function(_, scheme, port) { return scheme + '127.0.0.1' + (port || ':5000'); });
-  return url;
-}
-function getServerUrl() {
-  var el  = document.getElementById('server-url');
-  var url = fixUrl(el.value);
-  if (el.value !== url) { el.value = url; chrome.storage.local.set({serverUrl: url}); }
-  return url;
-}
-function getToken() {
-  return (document.getElementById('server-token').value || '').trim();
-}
-function authUrl(path) { return getServerUrl() + path; }
+// ── Server base URL ───────────────────────────────────────────────────────
+// EDIT: Update BASE_URL if the production server address changes.
+//   Token auth is handled server-side via /etc/streetwise.env — no token needed here.
+// DEBUG: If dot shows red "offline", open DevTools → Network and look for CORS or TLS errors.
+var BASE_URL = 'https://app.barrons-watchlist-research.com';
 
 // POST bodies — include Content-Type (triggers CORS preflight, handled by server)
 // DEBUG: If POST requests get 403, check _check_token in server.py allows OPTIONS through
 function authHeaders(extra) {
-  var h = Object.assign({'Content-Type': 'application/json'}, extra || {});
-  var t = getToken();
-  if (t) h['X-Streetwise-Token'] = t;
-  return h;
+  return Object.assign({'Content-Type': 'application/json'}, extra || {});
 }
 // GET requests — no Content-Type so requests stay "simple" (no CORS preflight)
 // WHY: Adding Content-Type to a GET makes it a non-simple request → triggers OPTIONS preflight
-//      which requires server to respond correctly; authGetHeaders() avoids this entirely
 // DEBUG: If ping/loadSources fails with CORS error, check no Content-Type header is being added
 function authGetHeaders() {
-  var h = {};
-  var t = getToken();
-  if (t) h['X-Streetwise-Token'] = t;
-  return h;
+  return {};
 }
 
 // ── Episode key preview ───────────────────────────────────────────────────
@@ -188,7 +160,9 @@ function onSourceSelect(sel) {
 
   if (val === '__custom__') {
     custom.classList.remove('hidden');
-    // Clear hidden-state fields so user types fresh
+    // Clear inputs so user types fresh (not pre-filled with previous source values)
+    document.getElementById('inp-source').value = '';
+    document.getElementById('inp-prefix').value = '';
     _activePrefix = '';
     updatePreview();
     document.getElementById('inp-source').focus();
@@ -281,7 +255,7 @@ async function pingServer() {
   var dot = document.getElementById('server-dot');
   var txt = document.getElementById('server-status-txt');
   try {
-    var res = await fetch(authUrl('/api/status'), {headers:authGetHeaders(), signal:AbortSignal.timeout(2500)});
+    var res = await fetch(BASE_URL + '/api/status', {headers:authGetHeaders(), signal:AbortSignal.timeout(2500)});
     if (res.ok) {
       var d = await res.json();
       dot.className = 'dot ok';
@@ -302,7 +276,7 @@ async function pingServer() {
 //   can do fast key lookups and option.value = ep_key (not array index).
 async function loadSources() {
   try {
-    var res = await fetch(authUrl('/api/sources'), {headers:authGetHeaders(), signal:AbortSignal.timeout(3000)});
+    var res = await fetch(BASE_URL + '/api/sources', {headers:authGetHeaders(), signal:AbortSignal.timeout(3000)});
     if (!res.ok) throw new Error('HTTP '+res.status);
     var data    = await res.json();
     var sources = data.sources || [];
@@ -424,8 +398,8 @@ async function sendPage() {
   // Guard — server must be reachable
   if (document.getElementById('server-dot').classList.contains('err')) {
     setStatus('error',
-      '✗ Server is offline at <b>'+getServerUrl()+'</b><br>'+
-      '<small>Start server.py, or update the URL below.</small>');
+      '✗ Server is offline at <b>'+BASE_URL+'</b><br>'+
+      '<small>Check your internet connection or server status.</small>');
     return;
   }
 
@@ -450,8 +424,8 @@ async function sendPage() {
       prefix:    prefix,
       title:     title,
       model:     model,
-      serverUrl: getServerUrl(),
-      token:     getToken(),
+      serverUrl: BASE_URL,
+      token:     '',
       force:     document.getElementById('force-reextract').checked,
     };
 
@@ -478,13 +452,7 @@ async function sendPage() {
 document.addEventListener('DOMContentLoaded', async function() {
 
   // Restore saved settings
-  var stored = await chrome.storage.local.get(['serverUrl','serverToken','selectedModel','sessionCost']);
-  if (stored.serverUrl) {
-    var corrected = fixUrl(stored.serverUrl);
-    document.getElementById('server-url').value = corrected;
-    if (corrected !== stored.serverUrl) chrome.storage.local.set({serverUrl: corrected});
-  }
-  if (stored.serverToken)  document.getElementById('server-token').value = stored.serverToken;
+  var stored = await chrome.storage.local.get(['selectedModel','sessionCost']);
   if (stored.selectedModel) setActiveModel(stored.selectedModel);
   if (stored.sessionCost)  { _sessionCost = parseFloat(stored.sessionCost)||0; updateCostDisplay(); }
 
@@ -500,15 +468,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (pfxEl) pfxEl.addEventListener('input', function() {
     _activePrefix = this.value.trim().toLowerCase();
     updatePreview();
-  });
-
-  document.getElementById('server-url').addEventListener('change', function() {
-    chrome.storage.local.set({serverUrl: getServerUrl()});
-    loadSources(); pingServer();
-  });
-  document.getElementById('server-token').addEventListener('change', function() {
-    chrome.storage.local.set({serverToken: getToken()});
-    loadSources(); pingServer();
   });
 
   // Buttons

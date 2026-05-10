@@ -26,8 +26,8 @@
   #inp-source-sel option { background:#1e293b;color:#e2e8f0 }
 
   /* Custom source row — shown when "Custom…" is picked */
-  #custom-source-row { display:none;margin-top:6px;display:grid;grid-template-columns:2fr 1fr;gap:6px }
-  #custom-source-row.hidden { display:none !important }
+  #custom-source-row { display:grid;grid-template-columns:2fr 1fr;gap:6px;margin-top:6px }
+  #custom-source-row.hidden { display:none }
 
   #episode-row { display:none;margin-top:6px }
   #inp-episode { font-size:11px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:5px 8px;width:100%;outline:none }
@@ -57,8 +57,6 @@
   .btn:disabled { opacity:.45;cursor:not-allowed }
   .btn-send { background:#3b82f6;color:#fff }
   .btn-send:hover:not(:disabled) { background:#2563eb }
-  .btn-danger { background:#ef4444;color:#fff;flex:0 0 auto;padding:7px 12px;font-size:11px }
-  .btn-danger:hover:not(:disabled) { background:#dc2626 }
 
   .status { margin-top:10px;padding:9px 12px;border-radius:6px;font-size:12px;line-height:1.5;display:none }
   .status.info    { background:#0f2d4a;color:#7dd3fc;border:1px solid #1e4976 }
@@ -75,10 +73,6 @@
   #progress-log .tck  { color:#93c5fd;font-weight:600;margin-right:3px }
   #progress-log .cost { color:#34d399;font-weight:600 }
 
-  .divider { border:none;border-top:1px solid #1e293b;margin:12px 0 }
-
-  .server-row { padding:8px 16px;border-top:1px solid #1e293b;display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b }
-  .server-input { flex:1;padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#94a3b8;font-size:11px;outline:none }
   .dot { width:7px;height:7px;border-radius:50%;background:#475569;flex-shrink:0;transition:background .3s }
   .dot.ok  { background:#22c55e }
   .dot.err { background:#ef4444 }
@@ -87,7 +81,13 @@
 <body>
 
 <div class="header">
-  <h1><span class="logo">STW</span> Barrons → Streetwise</h1>
+  <h1>
+    <span class="logo">STW</span> Barrons → Streetwise
+    <span style="margin-left:auto;display:flex;align-items:center;gap:5px">
+      <span class="dot" id="server-dot"></span>
+      <span id="server-status-txt" style="font-size:10px;font-weight:400;color:#475569"></span>
+    </span>
+  </h1>
   <div class="page-info" id="page-title">—</div>
 </div>
 
@@ -161,14 +161,6 @@
   <div id="progress-log"></div>
 
 </div><!-- /.body -->
-
-<div class="server-row">
-  <span class="dot" id="server-dot"></span>
-  <input class="server-input" id="server-url" value="https://app.barrons-watchlist-research.com">
-  <input class="server-input" id="server-token" placeholder="token"
-         style="flex:0.6;margin-left:4px">
-  <span id="server-status-txt" style="white-space:nowrap">—</span>
-</div>
 
 <script src="popup.js"></script>
 </body>
