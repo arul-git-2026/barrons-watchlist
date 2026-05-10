@@ -38,8 +38,16 @@ function getToken() {
 function authUrl(path) {
   return getServerUrl() + path;
 }
+// POST bodies — Content-Type triggers CORS preflight, which is fine for writes
 function authHeaders(extra) {
   var h = Object.assign({'Content-Type': 'application/json'}, extra || {});
+  var t = getToken();
+  if (t) h['X-Streetwise-Token'] = t;
+  return h;
+}
+// GET requests — no Content-Type so the request stays "simple" (no preflight)
+function authGetHeaders() {
+  var h = {};
   var t = getToken();
   if (t) h['X-Streetwise-Token'] = t;
   return h;
@@ -118,7 +126,7 @@ async function pingServer() {
   var dot = document.getElementById('server-dot');
   var txt = document.getElementById('server-status-txt');
   try {
-    var res = await fetch(authUrl('/api/status'), {headers:authHeaders(),signal:AbortSignal.timeout(2500)});
+    var res = await fetch(authUrl('/api/status'), {headers:authGetHeaders(),signal:AbortSignal.timeout(2500)});
     if (res.ok) {
       var d = await res.json();
       dot.className = 'dot ok';
@@ -134,7 +142,7 @@ async function pingServer() {
 async function loadSources() {
   var container = document.getElementById('quick-btns');
   try {
-    var res = await fetch(authUrl('/api/sources'), {headers:authHeaders(),signal:AbortSignal.timeout(3000)});
+    var res = await fetch(authUrl('/api/sources'), {headers:authGetHeaders(),signal:AbortSignal.timeout(3000)});
     if (!res.ok) throw new Error('HTTP '+res.status);
     var data = await res.json();
     var sources = data.sources || [];
