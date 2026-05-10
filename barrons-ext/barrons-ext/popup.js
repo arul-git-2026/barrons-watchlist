@@ -53,7 +53,7 @@ function clearStatus() {
 //   2. Check the URL shown in popup — must be http://127.0.0.1:5000 (not localhost, not https)
 //   3. fixUrl() corrects both; if still wrong, clear chrome.storage.local via DevTools > Application
 function fixUrl(raw) {
-  var url = (raw || 'http://127.0.0.1:5000').trim().replace(/\/$/,'');
+  var url = (raw || 'https://app.barrons-watchlist-research.com').trim().replace(/\/$/,'');
   // Fix stale https://localhost entries — local Flask always runs plain HTTP
   url = url.replace(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/,
     function(_, host, port) { return 'http://' + host + (port || ':5000'); });
