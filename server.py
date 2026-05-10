@@ -11,6 +11,21 @@ Data sources
 Install
 -------
   pip install flask flask-cors yfinance
+
+Section index (grep for the ── marker to jump to any section)
+──────────────────────────────────────────────────────────────────────────────
+  ── .env loader          line ~47   reads .env and /etc/streetwise.env
+  ── Logging              line ~72   ColourFormatter + werkzeug silence
+  ── Token pricing        line ~138  _TOKEN_PRICES dict — update when rates change
+  ── Cost ledger          line ~156  log_cost() → costs_log.json
+  ── Token auth           line ~188  _check_token before_request hook
+  ── Config               line ~325  DATA_FILE, CACHE_TTL, RANGES, MIN_ROWS, YAHOO_MAP
+  ── In-memory cache      line ~370  cache_get / cache_set / cache_expire
+  ── Static data          line ~385  load_data / load_sources / save_sources / save_tickers
+  ── SQLite helpers       line ~445  get_db / db_get_history
+  ── /v2 route            line ~745  Jinja2 render_template with cache headers
+  ── /api/data            line ~774  quote refresh + static data endpoint
+  ── __main__             line ~4543 startup banner + Flask run
 """
 
 from __future__ import annotations
@@ -29,6 +44,13 @@ from flask_cors import CORS
 # ── .env loader ───────────────────────────────────────────────────────────────
 # Reads KEY=VALUE pairs and injects them into os.environ (existing vars win).
 # Checks, in order: .env next to server.py, then /etc/streetwise.env (Linux).
+# EDIT: To add a new search path, append it to the _load_dotenv() call below.
+# DEBUG: If "API key not set" on startup but key is in .env:
+#   1. Confirm .env is in the same folder as server.py (not the repo root)
+#   2. Check for trailing spaces or stray quotes around the value in .env
+#   3. Verify the shell environment doesn't already have a different value set
+#      (shell env always wins — unset it with: del os.environ['KEY'] for testing)
+# WHY PermissionError catch: on Linux the service user may lack read access to /etc/streetwise.env
 def _load_dotenv(*paths):
     for path in paths:
         try:
@@ -186,6 +208,14 @@ def _check_token():
       4. X-Streetwise-Token header matches     → Chrome extension
     Browser requests that fail redirect to /login.
     API/AJAX requests that fail return 403 JSON.
+
+    DEBUG: If the Chrome extension gets 403/CORS errors:
+      - OPTIONS preflight is allowed through unconditionally (see comment below)
+      - The extension sends X-Streetwise-Token on every request via authHeaders()
+      - If token is wrong/missing, check chrome.storage.local → serverToken
+    DEBUG: If browser sessions expire unexpectedly, check PERMANENT_SESSION_LIFETIME
+      and that app.secret_key is stable across restarts (it uses STREETWISE_TOKEN).
+    EDIT: To make a new endpoint public (no auth), add its path to _AUTH_EXEMPT above.
     """
     if not _AUTH_TOKEN:
         return
@@ -714,7 +744,26 @@ def home():
 
 @app.route("/v2")
 def home_v2():
-    """Jinja2 template — feature files live in templates/features/."""
+    """Jinja2 template — feature files live in templates/features/.
+
+    Template structure:
+      templates/widget_v2.html          ← shell: global CSS + JS in {% raw %} blocks
+      templates/features/table_view.html
+      templates/features/add_ticker.html
+      templates/features/csv_import.html
+      templates/features/watchlist.html
+      templates/features/episode_brief.html
+      templates/features/chart.html
+      templates/features/crisis_monitor.html
+      templates/features/heatmap.html
+
+    DEBUG: If you see Jinja2 TemplateSyntaxError on startup:
+      - CSS keyframes (e.g. @keyframes pulse{0%,100%{...}}) contain "}}" which Jinja2
+        interprets as a template expression. Wrap the style block in {% raw %}...{% endraw %}.
+      - Same applies to JS object literals containing "}},".
+    DEBUG: If /v2 serves a stale page, these headers force a full reload — check browser DevTools
+      → Network → Response Headers to confirm Cache-Control: no-store is present.
+    """
     resp = make_response(render_template("widget_v2.html"))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"]        = "no-cache"
@@ -1986,6 +2035,8 @@ def delete_episode():
     removed_tickers = []
     kept    = []
 
+    prefix = ep_key.split(":")[0]
+
     for rec in db:
         e_list = rec.get("e", [])
         if ep_key not in e_list:
@@ -2010,11 +2061,18 @@ def delete_episode():
                 new_sum  = (before + "\n\n" + after).strip() if after else before
                 rec["sum"] = new_sum
 
-        # Remove src tag if no more episodes from this source
-        prefix = ep_key.split(":")[0]
+        # Remove per-episode discussion narrative
+        if ep_key in rec.get("disc", {}):
+            del rec["disc"][ep_key]
+
+        # Remove src label if no remaining episodes from this prefix
         has_prefix = any(t.startswith(prefix + ":") for t in rec.get("e", []))
-        if not has_prefix and prefix in rec.get("src", []):
-            rec["src"] = [s for s in rec["src"] if s != prefix]
+        if not has_prefix:
+            # src stores the lowercased source label — find and remove any entry
+            # that belongs to this prefix (matched via the sources registry)
+            src_label = (load_sources().get(prefix) or {}).get("label", "")
+            if src_label:
+                rec["src"] = [s for s in rec.get("src", []) if s != src_label.lower()]
 
         touched += 1
 
@@ -2043,16 +2101,13 @@ def delete_episode():
         with open(ep_file, "w") as f:
             json.dump(registry, f, indent=2)
 
-    # Reset duplicate-check hash in sources.json so the episode can be re-extracted
-    prefix_key = ep_key.split(":")[0]
+    # Remove episode from sources registry so it disappears from the popup dropdown
     sources_reg = load_sources()
-    ep_src_entry = (sources_reg.get(prefix_key) or {}).get("episodes", {}).get(ep_key)
-    if ep_src_entry:
-        ep_src_entry.pop("text_hash", None)
-        ep_src_entry.pop("text",      None)
-        ep_src_entry.pop("tickers",   None)
+    prefix_eps  = (sources_reg.get(prefix) or {}).get("episodes", {})
+    if ep_key in prefix_eps:
+        del prefix_eps[ep_key]
         save_sources(sources_reg)
-        log.info(f"  delete-episode: cleared text_hash for {ep_key} in sources.json")
+        log.info(f"  delete-episode: removed {ep_key} from sources registry")
 
     log.info(f"  delete-episode: {ep_key}  touched={touched}  removed_tickers={len(removed_tickers)}")
     return jsonify({
@@ -4493,6 +4548,11 @@ def delete_tickers():
 
 if __name__ == "__main__":
     # Force UTF-8 on Windows so the startup banner (─ ✓ ⚠ …) doesn't crash
+    # WHY: Windows defaults to cp1252; Unicode chars in banner cause UnicodeEncodeError on startup
+    # DEBUG: If you see "UnicodeEncodeError: 'charmap' codec can't encode character" on launch,
+    #   this reconfigure call is missing or failed. Check Python version >= 3.7 (reconfigure added 3.7)
+    # NOTE: The banner ticker count includes the __sources__ meta-record, so it may read "N tickers"
+    #   where N = actual tickers + 1. This is cosmetic only; load_data() correctly excludes meta records.
     import sys as _sys
     if hasattr(_sys.stdout, "reconfigure"):
         _sys.stdout.reconfigure(encoding="utf-8", errors="replace")

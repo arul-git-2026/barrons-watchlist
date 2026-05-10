@@ -1379,6 +1379,34 @@ async function regenEpBrief() {
   btn.disabled = false;
   btn.textContent = '↺ Regen';
 }
+
+async function deleteEpBrief() {
+  const epKey = _epBriefCurrentKey;
+  if (!epKey) return;
+  if (!confirm(`Delete episode "${epKey}"?\n\nThis removes the episode tag and summary section from every associated ticker.\nThis cannot be undone.`)) return;
+
+  const btn  = document.getElementById('ep-brief-delete-btn');
+  const body = document.getElementById('ep-brief-body');
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const res  = await fetch('/api/delete-episode', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ep_key: epKey, remove_empty: false}),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'server error');
+
+    // Close the card and refresh everything so the episode disappears from dropdown
+    document.getElementById('ep-brief-card').style.display = 'none';
+    await Promise.all([loadData(), loadSourceLabels()]);
+  } catch(e) {
+    body.innerHTML = `<p style="color:var(--down);font-size:12px;padding:8px 0">✗ ${e.message}</p>`;
+    btn.disabled = false;
+    btn.textContent = '🗑 Delete';
+  }
+}
 // ═══ FEATURE: EPISODE BRIEF — END ══════════════════════════════════════════
 
 // Cache of prefix → label from /api/sources (loaded once on startup)

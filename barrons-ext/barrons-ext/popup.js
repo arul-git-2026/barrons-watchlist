@@ -1,4 +1,24 @@
 // popup.js — Barrons → Streetwise
+//
+// ── Architecture overview ─────────────────────────────────────────────────
+// State variables (module-level):
+//   _selectedModel   — active AI model ID (saved to chrome.storage.local)
+//   _sessionCost     — running API cost total (saved to chrome.storage.local)
+//   _sourcesRegistry — {prefix → source object} fetched from /api/sources
+//   _activePrefix    — prefix of currently selected source (e.g. 'stw')
+//
+// Init order (DOMContentLoaded):
+//   1. Restore chrome.storage.local → fill URL/token/model/cost inputs
+//   2. Auto-detect tab title + date + source from current page (prefillFromPage)
+//   3. pingServer()   → update the status dot
+//   4. loadSources()  → build source dropdown, restore previous selection
+//
+// Flow when user clicks "Send to Streetwise":
+//   sendPage() → getPageText() → chrome.storage.local.set(pendingJob) → open progress.html
+//   progress.html reads pendingJob and posts to /api/extract-tickers
+//
+// DEBUG: To inspect extension state, open DevTools on the popup:
+//   Right-click popup → Inspect → Console, then: chrome.storage.local.get(null, console.log)
 
 // ── Progress log ───────────────────────────────────────────────────────────
 function logClear() {
@@ -28,12 +48,17 @@ function clearStatus() {
 }
 
 // ── URL helpers ───────────────────────────────────────────────────────────
+// DEBUG: If dot shows red "offline" despite server running:
+//   1. Open DevTools → Network — look for CORS errors or net::ERR_CONNECTION_REFUSED
+//   2. Check the URL shown in popup — must be http://127.0.0.1:5000 (not localhost, not https)
+//   3. fixUrl() corrects both; if still wrong, clear chrome.storage.local via DevTools > Application
 function fixUrl(raw) {
   var url = (raw || 'http://127.0.0.1:5000').trim().replace(/\/$/,'');
   // Fix stale https://localhost entries — local Flask always runs plain HTTP
   url = url.replace(/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?/,
     function(_, host, port) { return 'http://' + host + (port || ':5000'); });
   // Normalise "localhost" → "127.0.0.1" (avoids IPv6 resolution on Windows)
+  // WHY: Chrome on Windows resolves "localhost" to ::1 (IPv6) but Flask binds 0.0.0.0 (IPv4 only)
   url = url.replace(/^(https?:\/\/)localhost(:\d+)?/,
     function(_, scheme, port) { return scheme + '127.0.0.1' + (port || ':5000'); });
   return url;
@@ -50,13 +75,17 @@ function getToken() {
 function authUrl(path) { return getServerUrl() + path; }
 
 // POST bodies — include Content-Type (triggers CORS preflight, handled by server)
+// DEBUG: If POST requests get 403, check _check_token in server.py allows OPTIONS through
 function authHeaders(extra) {
   var h = Object.assign({'Content-Type': 'application/json'}, extra || {});
   var t = getToken();
   if (t) h['X-Streetwise-Token'] = t;
   return h;
 }
-// GET requests — no Content-Type so requests stay "simple" (no preflight)
+// GET requests — no Content-Type so requests stay "simple" (no CORS preflight)
+// WHY: Adding Content-Type to a GET makes it a non-simple request → triggers OPTIONS preflight
+//      which requires server to respond correctly; authGetHeaders() avoids this entirely
+// DEBUG: If ping/loadSources fails with CORS error, check no Content-Type header is being added
 function authGetHeaders() {
   var h = {};
   var t = getToken();
@@ -117,10 +146,17 @@ function resetCost() {
 }
 
 // ── Sources registry ──────────────────────────────────────────────────────
+// _sourcesRegistry: { prefix → {prefix, label, color, episodes: {key → {date,title}}} }
+//   Populated from /api/sources on load; falls back to _FALLBACK_SOURCES if server offline
+// _activePrefix: the currently selected source prefix (e.g. 'stw', 'ian')
+//   Used by sendPage(), updatePreview(), and populateEpisodeDropdown()
+// DEBUG: If episodes dropdown is empty, check _sourcesRegistry[prefix].episodes in DevTools console
 var _sourcesRegistry = {};
 var _activePrefix    = '';
 
 // ── Source dropdown ───────────────────────────────────────────────────────
+// WHY: Replaced quick-button pills with <select> — cleaner when sources list grows
+// EDIT: To add a default source, append to _FALLBACK_SOURCES (used when server is offline)
 var _FALLBACK_SOURCES = [
   {prefix:'stw', label:"Barron's Streetwise",    color:'#3b82f6'},
   {prefix:'ian', label:"Barron's Ian Salisbury",  color:'#8b5cf6'},
@@ -198,6 +234,10 @@ function _syncDropdown(prefix) {
 }
 
 // ── Episode dropdown ──────────────────────────────────────────────────────
+// Shows existing episodes for the selected source so user can append tickers to them.
+// Key format expected: "prefix:YYYY/M/D" — e.g. "stw:2025/3/15"
+// DEBUG: If episodes never appear, check that /api/sources returns episodes dict per source
+// DEBUG: If selecting an episode doesn't fill date/year, check key format matches "prefix:YYYY/M/D"
 function populateEpisodeDropdown(prefix) {
   var epRow = document.getElementById('episode-row');
   var epSel = document.getElementById('inp-episode');
@@ -224,7 +264,9 @@ function populateEpisodeDropdown(prefix) {
   epSel.onchange = function() {
     var key  = this.value; if (!key) return;
     var info = src.episodes[key]; if (!info) return;
-    var parts = key.split(':')[1].split('/');
+    // BUG-GUARD: key format is "prefix:YYYY/M/D" — split(':')[1] is undefined for legacy keys
+    var seg   = key.split(':')[1] || '';
+    var parts = seg.split('/');
     if (parts.length === 3) {
       document.getElementById('inp-date').value = parts[1]+'/'+parts[2];
       document.getElementById('inp-year').value = parts[0];
@@ -252,6 +294,12 @@ async function pingServer() {
 }
 
 // ── Load sources ──────────────────────────────────────────────────────────
+// Called on init and after deleteEpisode(). Fetches /api/sources, rebuilds the dropdown,
+// then re-syncs the currently selected prefix so the UI state is consistent.
+// DEBUG: If dropdown shows wrong sources, inspect /api/sources in browser or curl it
+// NOTE: /api/sources returns episodes as an array [{key,date,title}...].
+//   We convert to a dict {ep_key → {key,date,title}} so populateEpisodeDropdown
+//   can do fast key lookups and option.value = ep_key (not array index).
 async function loadSources() {
   try {
     var res = await fetch(authUrl('/api/sources'), {headers:authGetHeaders(), signal:AbortSignal.timeout(3000)});
@@ -259,7 +307,13 @@ async function loadSources() {
     var data    = await res.json();
     var sources = data.sources || [];
     _sourcesRegistry = {};
-    sources.forEach(function(s) { _sourcesRegistry[s.prefix] = s; });
+    sources.forEach(function(s) {
+      // Convert episodes array → dict keyed by ep_key for fast lookup
+      var epMap = {};
+      (s.episodes || []).forEach(function(ep) { if (ep.key) epMap[ep.key] = ep; });
+      s.episodes = epMap;
+      _sourcesRegistry[s.prefix] = s;
+    });
     _buildSourceOptions(sources);
   } catch(e) {
     // Server offline or error — fall back to built-in list
@@ -337,15 +391,6 @@ async function prefillFromPage(tab) {
     else            selectSource('ian', "Barron's Ian Salisbury");
   }
   updatePreview();
-}
-
-// ── Collapsible delete section ────────────────────────────────────────────
-function toggleDelSection() {
-  var section = document.getElementById('del-section');
-  var icon    = document.getElementById('del-toggle-icon');
-  var open    = section.style.display !== 'none';
-  section.style.display = open ? 'none' : '';
-  icon.textContent      = open ? '▸' : '▾';
 }
 
 // ── Send page ─────────────────────────────────────────────────────────────
@@ -429,38 +474,6 @@ async function sendPage() {
   }
 }
 
-// ── Delete episode ────────────────────────────────────────────────────────
-async function deleteEpisode() {
-  var epKey    = document.getElementById('del-ep-key').value.trim();
-  var rmEmpty  = document.getElementById('del-rm-empty').checked;
-  var statusEl = document.getElementById('del-status');
-  var btn      = document.getElementById('del-btn');
-  statusEl.style.display = 'none';
-  if (!epKey) {
-    statusEl.className = 'err'; statusEl.textContent = '⚠ Enter an episode key';
-    statusEl.style.display = 'block'; return;
-  }
-  if (!confirm('Delete episode "'+epKey+'"?\n\nThis cannot be undone.')) return;
-  btn.disabled = true; btn.textContent = '⏳…';
-  try {
-    var res  = await fetch(authUrl('/api/delete-episode'), {
-      method: 'POST', headers: authHeaders(),
-      body:   JSON.stringify({ep_key: epKey, remove_empty: rmEmpty})
-    });
-    var data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || 'server error');
-    var msg = '✓ Deleted "'+epKey+'"  ·  '+data.tickers_touched+' tickers updated';
-    if (data.tickers_removed && data.tickers_removed.length)
-      msg += '  ·  '+data.tickers_removed.length+' removed';
-    statusEl.className = 'ok'; statusEl.textContent = msg; statusEl.style.display = 'block';
-    document.getElementById('del-ep-key').value = '';
-    await loadSources(); pingServer();
-  } catch(e) {
-    statusEl.className = 'err'; statusEl.textContent = '✗ '+e.message;
-    statusEl.style.display = 'block';
-  } finally { btn.disabled = false; btn.textContent = 'Delete'; }
-}
-
 // ── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function() {
 
@@ -500,7 +513,6 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Buttons
   document.getElementById('send-btn').addEventListener('click', sendPage);
-  document.getElementById('del-btn').addEventListener('click', deleteEpisode);
   document.getElementById('cost-reset-btn').addEventListener('click', resetCost);
   initModelButtons();
 

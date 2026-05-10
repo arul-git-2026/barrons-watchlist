@@ -77,22 +77,6 @@
 
   .divider { border:none;border-top:1px solid #1e293b;margin:12px 0 }
 
-  /* Collapsible delete section */
-  .section-toggle {
-    display:flex;align-items:center;justify-content:space-between;
-    font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.06em;
-    cursor:pointer;padding:2px 0;user-select:none
-  }
-  .section-toggle:hover { color:#94a3b8 }
-  .toggle-icon { font-size:10px;transition:transform .15s }
-
-  .del-row { display:flex;gap:6px;align-items:flex-end;margin-top:8px }
-  .del-row .field { flex:1;margin-bottom:0 }
-  .chk-row { display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:#64748b;cursor:pointer }
-  #del-status { display:none;margin-top:8px;padding:8px 10px;border-radius:5px;font-size:11px }
-  #del-status.ok  { background:#052e16;color:#86efac;border:1px solid #14532d }
-  #del-status.err { background:#2d0f0f;color:#fca5a5;border:1px solid #7f1d1d }
-
   .server-row { padding:8px 16px;border-top:1px solid #1e293b;display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b }
   .server-input { flex:1;padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#94a3b8;font-size:11px;outline:none }
   .dot { width:7px;height:7px;border-radius:50%;background:#475569;flex-shrink:0;transition:background .3s }
@@ -175,28 +159,6 @@
 
   <div class="status" id="status-box"></div>
   <div id="progress-log"></div>
-
-  <!-- Delete episode — collapsible -->
-  <hr class="divider">
-  <div class="section-toggle" id="del-toggle" onclick="toggleDelSection()">
-    <span>🗑 Delete episode from database</span>
-    <span class="toggle-icon" id="del-toggle-icon">▸</span>
-  </div>
-  <div id="del-section" style="display:none">
-    <div class="del-row">
-      <div class="field">
-        <label>Episode key</label>
-        <input type="text" id="del-ep-key" placeholder="e.g. div:2026/3/15"
-               style="font-family:monospace;font-size:11px">
-      </div>
-      <button class="btn btn-danger" id="del-btn">Delete</button>
-    </div>
-    <label class="chk-row">
-      <input type="checkbox" id="del-rm-empty">
-      Remove tickers with no remaining episodes
-    </label>
-    <div id="del-status"></div>
-  </div>
 
 </div><!-- /.body -->
 
