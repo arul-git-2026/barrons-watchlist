@@ -2038,9 +2038,9 @@ def heatmap_data():
         out.append({
             "t":  t,
             "n":  rec.get("n", t),
-            "s":  rec.get("s") or "Other",
-            "p":  rec.get("p") or 0,
-            "ch": rec.get("ch") or 0,   # 1D % change
+            "s":  rec.get("sector") or "Other",   # market sector (Technology, Healthcare…)
+            "p":  rec.get("price_raw") or 0,       # numeric price (not the "p" status string)
+            "ch": rec.get("pct_raw") or 0,         # 1D % change
         })
     return jsonify({"ok": True, "tickers": out})
 
