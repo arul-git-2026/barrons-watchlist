@@ -1,4 +1,347 @@
-<!-- ═══ FEATURE: HEATMAP — STUB ══════════════════════════════════
- *  HTML, CSS and JS for the heatmap view will be added here.
- *  JS should be loaded via a separate <script> block below.
- * ═══════════════════════════════════════════════════════════════ -->
+<!-- ═══ FEATURE: HEATMAP — START ═══════════════════════════════════
+ * HTML  →  #heatmap-view  (below)
+ * JS    →  renderHeatmap(), hmDrillInto(), hmGoRoot()
+ * API   →  GET /api/heatmap-data  →  {tickers:[{t,n,s,p,ch}]}
+ * ════════════════════════════════════════════════════════════════ -->
+<style>
+#heatmap-view {
+  display: none; flex: 1; flex-direction: column;
+  min-height: 0; overflow: hidden; background: var(--bg);
+}
+
+/* ── Heatmap toolbar ── */
+#hm-toolbar {
+  flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+  padding: 6px 14px; border-bottom: 1px solid var(--border);
+  background: var(--card); flex-wrap: wrap;
+}
+#hm-breadcrumb { font-size: 12px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 5px }
+#hm-back {
+  display: none; align-items: center; gap: 4px;
+  background: none; border: 1px solid var(--border); border-radius: 5px;
+  color: var(--muted); font-size: 11px; font-weight: 600;
+  padding: 3px 9px; cursor: pointer; transition: all .12s;
+}
+#hm-back:hover { border-color: var(--accent); color: var(--accent) }
+.hm-pill {
+  padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); color: var(--muted);
+  background: transparent; transition: all .12s;
+}
+.hm-pill:hover  { border-color: var(--accent); color: var(--accent) }
+.hm-pill.hm-on  { background: var(--accent-faint, #1d3d5c); border-color: var(--accent); color: var(--accent) }
+#hm-summary { display: flex; gap: 7px; margin-left: 4px }
+.hm-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9px }
+.hm-up   { color: #4ade80; background: #052e16 }
+.hm-dn   { color: #f87171; background: #2d0f0f }
+#hm-load-status { font-size: 10px; color: var(--muted); margin-left: auto }
+
+/* ── Canvas ── */
+#hm-canvas { flex: 1; position: relative; overflow: hidden; cursor: default }
+
+/* ── Sector blocks ── */
+.hm-sec {
+  position: absolute; cursor: pointer; overflow: hidden;
+  border: 2px solid var(--bg);
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  transition: filter .15s;
+}
+.hm-sec:hover { filter: brightness(1.15); z-index: 5 }
+.hm-sec-name { font-weight: 800; color: #fff; text-align: center; padding: 0 6px; line-height: 1.2; pointer-events: none }
+.hm-sec-ch   { font-weight: 700; color: rgba(255,255,255,.88); margin-top: 3px; pointer-events: none }
+.hm-sec-cnt  { color: rgba(255,255,255,.4); margin-top: 2px; pointer-events: none }
+
+/* ── Ticker tiles ── */
+.hm-tile {
+  position: absolute; overflow: hidden;
+  border: 2px solid var(--bg);
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  transition: filter .12s;
+}
+.hm-tile:hover { filter: brightness(1.2); z-index: 5 }
+.hm-tile-sym { font-weight: 800; color: #fff; line-height: 1.2; pointer-events: none }
+.hm-tile-ch  { font-weight: 600; color: rgba(255,255,255,.85); line-height: 1.2; pointer-events: none }
+.hm-tile-p   { color: rgba(255,255,255,.42); line-height: 1.2; pointer-events: none }
+
+/* ── Tooltip ── */
+#hm-tip {
+  position: fixed; z-index: 9999; display: none;
+  background: var(--card); border: 1px solid var(--border); border-radius: 7px;
+  padding: 10px 13px; pointer-events: none; min-width: 165px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 12px;
+}
+#hm-tip .ht-sym  { font-size: 14px; font-weight: 700; color: var(--text) }
+#hm-tip .ht-name { font-size: 10px; color: var(--muted); margin-bottom: 7px }
+#hm-tip .ht-row  { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); margin-top: 3px; font-size: 11px }
+#hm-tip .ht-val  { font-weight: 600; color: var(--text) }
+</style>
+
+<!-- ── View container ── -->
+<div id="heatmap-view">
+
+  <div id="hm-toolbar">
+    <div id="hm-breadcrumb">
+      <span style="cursor:pointer" onclick="hmGoRoot()">Heatmap</span>
+      <span id="hm-bc-sep" style="display:none;color:var(--border)"> › </span>
+      <span id="hm-bc-sec" style="display:none;color:var(--accent)"></span>
+    </div>
+    <button id="hm-back" onclick="hmGoRoot()">← All Sectors</button>
+
+    <div style="display:flex;gap:4px" id="hm-pills">
+      <button class="hm-pill hm-on" data-hmp="D">1D</button>
+      <button class="hm-pill"       data-hmp="W">1W</button>
+      <button class="hm-pill"       data-hmp="M">1M</button>
+      <button class="hm-pill"       data-hmp="Q">3M</button>
+    </div>
+
+    <div id="hm-summary">
+      <span class="hm-chip hm-up" id="hm-cnt-up">—</span>
+      <span class="hm-chip hm-dn" id="hm-cnt-dn">—</span>
+    </div>
+    <span id="hm-load-status"></span>
+  </div>
+
+  <div id="hm-canvas"></div>
+</div>
+
+<div id="hm-tip"></div>
+
+<script>
+// ═══ FEATURE: HEATMAP ════════════════════════════════════════════
+// State
+var _hmPeriod  = 'D';
+var _hmView    = 'sectors';   // 'sectors' | 'sector'
+var _hmSector  = null;
+var _hmData    = null;        // cached from /api/heatmap-data
+var _hmLoaded  = false;
+
+// ── Period pills ──────────────────────────────────────────────────
+document.querySelectorAll('[data-hmp]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    _hmPeriod = this.dataset.hmp;
+    document.querySelectorAll('[data-hmp]').forEach(function(b){ b.classList.remove('hm-on'); });
+    this.classList.add('hm-on');
+    renderHeatmap();
+  });
+});
+
+// ── Load data ─────────────────────────────────────────────────────
+async function hmLoadData() {
+  if (_hmLoaded) return;
+  document.getElementById('hm-load-status').textContent = 'Loading…';
+  try {
+    const res  = await fetch('/api/heatmap-data');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'server error');
+    _hmData   = json.tickers;
+    _hmLoaded = true;
+    document.getElementById('hm-load-status').textContent = _hmData.length + ' tickers';
+  } catch(e) {
+    document.getElementById('hm-load-status').textContent = '✗ ' + e.message;
+  }
+}
+
+// ── Navigation ─────────────────────────────────────────────────────
+function hmDrillInto(sector) {
+  _hmView   = 'sector';
+  _hmSector = sector;
+  document.getElementById('hm-bc-sep').style.display = '';
+  document.getElementById('hm-bc-sec').style.display = '';
+  document.getElementById('hm-bc-sec').textContent   = sector;
+  document.getElementById('hm-back').style.display   = 'flex';
+  renderHeatmap();
+}
+function hmGoRoot() {
+  _hmView   = 'sectors';
+  _hmSector = null;
+  document.getElementById('hm-bc-sep').style.display  = 'none';
+  document.getElementById('hm-bc-sec').style.display  = 'none';
+  document.getElementById('hm-back').style.display    = 'none';
+  renderHeatmap();
+}
+
+// ── Color scale ────────────────────────────────────────────────────
+function hmColor(pct) {
+  const S = [
+    [-5,[127,29,29]], [-3,[153,27,27]], [-1.5,[220,38,38]],
+    [-0.25,[55,65,81]], [0.25,[55,65,81]],
+    [1.5,[22,163,74]], [3,[21,128,61]], [5,[22,101,52]]
+  ];
+  const c = Math.max(-5, Math.min(5, pct));
+  for (let i = 0; i < S.length-1; i++) {
+    if (c <= S[i+1][0]) {
+      const t = S[i+1][0] === S[i][0] ? 0 : (c-S[i][0])/(S[i+1][0]-S[i][0]);
+      const [a,b] = [S[i][1], S[i+1][1]];
+      return `rgb(${Math.round(a[0]+(b[0]-a[0])*t)},${Math.round(a[1]+(b[1]-a[1])*t)},${Math.round(a[2]+(b[2]-a[2])*t)})`;
+    }
+  }
+  return 'rgb(22,101,52)';
+}
+
+// ── Treemap (binary split) ─────────────────────────────────────────
+function hmTreemap(items, x, y, w, h) {
+  if (!items.length) return;
+  const sorted = items.slice().sort((a,b) => b.weight - a.weight);
+  hmSplit(sorted, x, y, w, h, sorted.reduce((s,d) => s+d.weight, 0));
+}
+function hmSplit(items, x, y, w, h, total) {
+  if (!items.length) return;
+  if (items.length === 1) { items[0].rect = {x,y,w,h}; return; }
+  let sum = 0, sp = 1;
+  const half = total / 2;
+  for (let i = 0; i < items.length-1; i++) { sum += items[i].weight; sp = i+1; if (sum >= half) break; }
+  const fs = items.slice(0,sp).reduce((s,d) => s+d.weight, 0);
+  const r  = fs / total;
+  if (w >= h) {
+    hmSplit(items.slice(0,sp), x,     y, w*r,     h, fs);
+    hmSplit(items.slice(sp),   x+w*r, y, w*(1-r), h, total-fs);
+  } else {
+    hmSplit(items.slice(0,sp), x, y,     w, h*r,     fs);
+    hmSplit(items.slice(sp),   x, y+h*r, w, h*(1-r), total-fs);
+  }
+}
+
+// ── Main render ─────────────────────────────────────────────────────
+function renderHeatmap() {
+  const canvas = document.getElementById('hm-canvas');
+  canvas.innerHTML = '';
+  if (!_hmData) return;
+
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  if (!cw || !ch) return;
+
+  if (_hmView === 'sectors') hmRenderSectors(canvas, cw, ch);
+  else                       hmRenderTickers(canvas, cw, ch);
+}
+
+// ── View 1: sector blocks ──────────────────────────────────────────
+function hmRenderSectors(canvas, cw, ch) {
+  // Group by sector
+  const map = {};
+  _hmData.forEach(d => {
+    const s = d.s || 'Other';
+    if (!map[s]) map[s] = [];
+    map[s].push(d);
+  });
+
+  let up = 0, dn = 0;
+  const sectors = Object.keys(map).map(name => {
+    const tickers = map[name];
+    const avgCh   = tickers.reduce((s,d) => s + (d['ch'+_hmPeriod] ?? d.ch ?? 0), 0) / tickers.length;
+    if (avgCh >  0.2) up++;
+    else if (avgCh < -0.2) dn++;
+    // Larger positive sectors get more space; negative sectors shrink (min 45%)
+    const pf = 1 + Math.max(avgCh / 6, -0.55);
+    return { name, tickers, avgCh, weight: Math.max(tickers.length * pf, 0.8) };
+  });
+
+  document.getElementById('hm-cnt-up').textContent = up + ' ▲';
+  document.getElementById('hm-cnt-dn').textContent = dn + ' ▼';
+
+  hmTreemap(sectors, 0, 0, cw, ch);
+
+  sectors.forEach(sec => {
+    const r = sec.rect;
+    if (!r || r.w < 12 || r.h < 12) return;
+    const sign  = sec.avgCh >= 0 ? '+' : '';
+    const minD  = Math.min(r.w, r.h);
+    const nFs   = Math.max(10, Math.min(26, minD * 0.12));
+    const cFs   = Math.max(10, Math.min(22, minD * 0.15));
+    const ctFs  = Math.max(8,  Math.min(13, minD * 0.065));
+
+    const div = document.createElement('div');
+    div.className = 'hm-sec';
+    div.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;background:${hmColor(sec.avgCh)}`;
+    div.innerHTML =
+      `<div class="hm-sec-name" style="font-size:${nFs}px">${sec.name}</div>` +
+      `<div class="hm-sec-ch"   style="font-size:${cFs}px">${sign}${sec.avgCh.toFixed(2)}%</div>` +
+      (minD > 60 ? `<div class="hm-sec-cnt" style="font-size:${ctFs}px">${sec.tickers.length} stocks</div>` : '');
+
+    div.addEventListener('click',       () => hmDrillInto(sec.name));
+    div.addEventListener('mouseenter',  e  => hmShowSecTip(e, sec));
+    div.addEventListener('mousemove',   hmMoveTip);
+    div.addEventListener('mouseleave',  hmHideTip);
+    canvas.appendChild(div);
+  });
+}
+
+// ── View 2: individual tickers ─────────────────────────────────────
+function hmRenderTickers(canvas, cw, ch) {
+  const tickers = _hmData.filter(d => (d.s || 'Other') === _hmSector);
+  if (!tickers.length) return;
+
+  let up = 0, dn = 0;
+  const items = tickers.map(d => {
+    const ch = d['ch'+_hmPeriod] ?? d.ch ?? 0;
+    if (ch >  0.2) up++;
+    else if (ch < -0.2) dn++;
+    return { ...d, _ch: ch, weight: 1 };
+  });
+
+  document.getElementById('hm-cnt-up').textContent = up + ' ▲';
+  document.getElementById('hm-cnt-dn').textContent = dn + ' ▼';
+
+  hmTreemap(items, 0, 0, cw, ch);
+
+  items.forEach(d => {
+    const r    = d.rect;
+    if (!r || r.w < 10 || r.h < 10) return;
+    const sign = d._ch >= 0 ? '+' : '';
+    const minD = Math.min(r.w, r.h);
+    const sFs  = Math.max(9,  Math.min(28, minD * 0.20));
+    const cFs  = Math.max(8,  Math.min(20, minD * 0.15));
+    const pFs  = Math.max(7,  Math.min(13, minD * 0.09));
+
+    const div = document.createElement('div');
+    div.className = 'hm-tile';
+    div.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;background:${hmColor(d._ch)}`;
+    div.innerHTML =
+      `<div class="hm-tile-sym" style="font-size:${sFs}px">${d.t}</div>` +
+      `<div class="hm-tile-ch"  style="font-size:${cFs}px">${sign}${d._ch.toFixed(2)}%</div>` +
+      (minD > 48 ? `<div class="hm-tile-p" style="font-size:${pFs}px">$${(d.p||0).toFixed(2)}</div>` : '');
+
+    div.addEventListener('mouseenter',  e  => hmShowTickTip(e, d));
+    div.addEventListener('mousemove',   hmMoveTip);
+    div.addEventListener('mouseleave',  hmHideTip);
+    // Click ticker → switch to Dashboard and select it
+    div.addEventListener('click', () => { switchMainTab('dash'); selectRow(d.t); });
+    canvas.appendChild(div);
+  });
+}
+
+// ── Tooltip ────────────────────────────────────────────────────────
+const _hmTip = document.getElementById('hm-tip');
+const _hmPLabels = {D:'1 Day', W:'1 Week', M:'1 Month', Q:'3 Months'};
+function hmShowSecTip(e, sec) {
+  const sign = sec.avgCh >= 0 ? '+' : '';
+  const col  = sec.avgCh > 0 ? '#4ade80' : sec.avgCh < 0 ? '#f87171' : 'var(--muted)';
+  _hmTip.innerHTML =
+    `<div class="ht-sym">${sec.name}</div>` +
+    `<div class="ht-name">Click to see individual stocks</div>` +
+    `<div class="ht-row"><span>Avg (${_hmPLabels[_hmPeriod]})</span><span class="ht-val" style="color:${col}">${sign}${sec.avgCh.toFixed(2)}%</span></div>` +
+    `<div class="ht-row"><span>Stocks</span><span class="ht-val">${sec.tickers.length}</span></div>`;
+  hmMoveTip(e); _hmTip.style.display = 'block';
+}
+function hmShowTickTip(e, d) {
+  const ch   = d._ch;
+  const sign = ch >= 0 ? '+' : '';
+  const col  = ch > 0 ? '#4ade80' : ch < 0 ? '#f87171' : 'var(--muted)';
+  _hmTip.innerHTML =
+    `<div class="ht-sym">${d.t}</div>` +
+    `<div class="ht-name">${d.n || ''}</div>` +
+    `<div class="ht-row"><span>Price</span><span class="ht-val">$${(d.p||0).toFixed(2)}</span></div>` +
+    `<div class="ht-row"><span>${_hmPLabels[_hmPeriod]}</span><span class="ht-val" style="color:${col}">${sign}${ch.toFixed(2)}%</span></div>` +
+    `<div class="ht-row"><span>Sector</span><span class="ht-val">${d.s||'—'}</span></div>`;
+  hmMoveTip(e); _hmTip.style.display = 'block';
+}
+function hmMoveTip(e) {
+  let x = e.clientX+15, y = e.clientY+15;
+  if (x+190 > window.innerWidth)  x = e.clientX-190;
+  if (y+140 > window.innerHeight) y = e.clientY-140;
+  _hmTip.style.left = x+'px'; _hmTip.style.top = y+'px';
+}
+function hmHideTip() { _hmTip.style.display = 'none'; }
+// ═══ FEATURE: HEATMAP — END ══════════════════════════════════════
+</script>

@@ -712,9 +712,10 @@ input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:14px;height
 <!-- ═══ FEATURE: TABLE VIEW — START ══════════════════════════════ -->
 <!-- Tab bar — sits above the split layout -->
 <div id="tv-tab-bar">
-  <button class="tv-tab on"  id="tv-tab-dash"   onclick="switchMainTab('dash')">📋 Dashboard</button>
-  <button class="tv-tab"     id="tv-tab-table"  onclick="switchMainTab('table')">📊 Table View</button>
-  <button class="tv-tab"     id="tv-tab-crisis" onclick="switchMainTab('crisis')">🌍 Crisis Monitor</button>
+  <button class="tv-tab on"  id="tv-tab-dash"    onclick="switchMainTab('dash')">📋 Dashboard</button>
+  <button class="tv-tab"     id="tv-tab-table"   onclick="switchMainTab('table')">📊 Table View</button>
+  <button class="tv-tab"     id="tv-tab-heatmap" onclick="switchMainTab('heatmap')">🟩 Heatmap</button>
+  <button class="tv-tab"     id="tv-tab-crisis"  onclick="switchMainTab('crisis')">🌍 Crisis Monitor</button>
 </div>
 
 <!-- Shared filter bar — visible on both tabs -->
@@ -4203,15 +4204,18 @@ async function switchMainTab(tab) {
   const dash   = document.getElementById('main-layout');
   const tview  = document.getElementById('table-view');
   const cview  = document.getElementById('crisis-view');
+  const hview  = document.getElementById('heatmap-view');
   const fbar   = document.getElementById('shared-filter-bar');
   const tabD   = document.getElementById('tv-tab-dash');
   const tabT   = document.getElementById('tv-tab-table');
   const tabC   = document.getElementById('tv-tab-crisis');
+  const tabH   = document.getElementById('tv-tab-heatmap');
   // hide everything
   if (dash)  dash.style.display  = 'none';
   if (tview) tview.style.display = 'none';
   if (cview) cview.style.display = 'none';
-  [tabD, tabT, tabC].forEach(b => b && b.classList.remove('on'));
+  if (hview) hview.style.display = 'none';
+  [tabD, tabT, tabC, tabH].forEach(b => b && b.classList.remove('on'));
   if (tab === 'table') {
     if (fbar)  fbar.style.display  = '';
     if (tview) { tview.style.display = 'flex'; tview.style.flexDirection = 'column'; }
@@ -4219,10 +4223,21 @@ async function switchMainTab(tab) {
     if (!_tvLoaded) await tvLoad();
     else tvRender();
   } else if (tab === 'crisis') {
-    if (fbar)  fbar.style.display  = 'none';          // no filters needed
+    if (fbar)  fbar.style.display  = 'none';
     if (cview) { cview.style.display = 'flex'; cview.style.flexDirection = 'column'; }
     tabC.classList.add('on');
     renderCrisisTab();
+  } else if (tab === 'heatmap') {
+    if (fbar)  fbar.style.display  = 'none';
+    if (hview) { hview.style.display = 'flex'; hview.style.flexDirection = 'column'; }
+    tabH.classList.add('on');
+    await hmLoadData();
+    renderHeatmap();
+    // Re-render on resize while tab is active
+    if (!window._hmResizeWired) {
+      window.addEventListener('resize', () => { if (_hmView) renderHeatmap(); });
+      window._hmResizeWired = true;
+    }
   } else {
     if (fbar)  fbar.style.display  = '';
     if (dash)  dash.style.display  = '';
@@ -4242,17 +4257,20 @@ async function switchMainTab(tab) {
     const dash  = document.getElementById('main-layout');
     const tview = document.getElementById('table-view');
     const cview = document.getElementById('crisis-view');
+    const hview = document.getElementById('heatmap-view');
     const fbar  = document.getElementById('shared-filter-bar');
     const tabD  = document.getElementById('tv-tab-dash');
     const tabT  = document.getElementById('tv-tab-table');
     const tabC  = document.getElementById('tv-tab-crisis');
+    const tabH  = document.getElementById('tv-tab-heatmap');
 
     if (dash)  dash.style.display  = '';     // falls back to CSS display:grid
     if (tview) tview.style.display = 'none';
     if (cview) cview.style.display = 'none';
+    if (hview) hview.style.display = 'none';
     if (fbar)  fbar.style.display  = '';
 
-    [tabD, tabT, tabC].forEach(b => b && b.classList.remove('on'));
+    [tabD, tabT, tabC, tabH].forEach(b => b && b.classList.remove('on'));
     if (tabD) tabD.classList.add('on');
   }
 

@@ -1951,6 +1951,30 @@ Respond ONLY in this exact JSON format, nothing else:
     })
 
 
+@app.route("/api/heatmap-data")
+def heatmap_data():
+    """
+    Return all tickers with sector, price, and 1D % change for the heatmap view.
+    Response: { ok, tickers: [{t, n, s, p, ch}] }
+    NOTE: Only 1D change (ch) is available directly from the JSON.
+          Multi-period changes (1W/1M/3M) can be added later via price_history.db.
+    """
+    db = load_data()
+    out = []
+    for rec in db:
+        t = rec.get("t", "")
+        if not t or t.startswith("__"):
+            continue
+        out.append({
+            "t":  t,
+            "n":  rec.get("n", t),
+            "s":  rec.get("s") or "Other",
+            "p":  rec.get("p") or 0,
+            "ch": rec.get("ch") or 0,   # 1D % change
+        })
+    return jsonify({"ok": True, "tickers": out})
+
+
 @app.route("/api/sources")
 def get_sources():
     """
