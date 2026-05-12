@@ -4325,81 +4325,65 @@ async function tvLoad() {
   }
 }
 
-async function tvRefresh() {
-  // Refresh ONLY the currently visible/filtered tickers — never all 215 at once.
-  // Steps: 1) get visible ticker list from current filters
-  //        2) POST to /api/refresh-table with that scoped list
-  //        3) merge returned rows back into _tvData, then re-render
+// tvRefresh() kept for backward compat — delegates to the combined refresh
+async function tvRefresh() { return tvRefreshAll(); }
+
+async function tvRefreshAll() {
+  // Single combined refresh: prices/history first, then market caps.
+  // Steps: 1) POST /api/refresh-table  (quotes + 1Y history → re-renders table)
+  //        2) POST /api/refresh-market-caps  (mktcap → saves cap_cat)
+  //        3) tvLoad() to pull fresh cap_cat into the already-rendered table
   const btn     = document.getElementById('tv-refresh-btn');
   const asof    = document.getElementById('tv-asof');
   const loading = document.getElementById('tv-loading');
   const table   = document.getElementById('tv-table');
 
-  // Get currently visible tickers (respects ALL active filters)
   const visibleRows = tvFilteredRows();
-  if (!visibleRows.length) { toast('No visible tickers to refresh'); return; }
+  if (!visibleRows.length && _tvLoaded) { toast('No visible tickers to refresh'); return; }
   const tickers = visibleRows.map(r => r.t);
 
-  if (btn)    { btn.disabled = true; btn.textContent = `↺ Refreshing ${tickers.length}…`; }
-  if (asof)   asof.textContent = `fetching ${tickers.length} tickers from Yahoo…`;
+  if (btn)  { btn.disabled = true; btn.textContent = `↺ Refreshing…`; }
+  if (asof) asof.textContent = `step 1/2 — fetching ${tickers.length} prices…`;
 
   try {
-    const res = await fetch('/api/refresh-table', {
-      method:  'POST',
-      headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({ tickers }),
+    // ── Step 1: prices + history ─────────────────────────────────────
+    const r1 = await fetch('/api/refresh-table', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ tickers }),
     });
+    const ct1 = r1.headers.get('content-type') || '';
+    if (!ct1.includes('application/json'))
+      throw new Error(`Server error ${r1.status} — try refreshing fewer tickers`);
+    const d1 = await r1.json();
+    if (!d1.ok) throw new Error(d1.error || 'price refresh failed');
 
-    // Guard against non-JSON (504/524 HTML timeout pages)
-    const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) {
-      throw new Error(`Server error ${res.status} — try refreshing fewer tickers`);
-    }
-
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Refresh failed');
-
-    // Merge returned rows back into _tvData (keep non-refreshed rows intact)
-    const byTicker = Object.fromEntries((data.rows || []).map(r => [r.t, r]));
+    // Merge prices back into _tvData and re-render
+    const byTicker = Object.fromEntries((d1.rows || []).map(r => [r.t, r]));
     _tvData = (_tvData || []).map(r => byTicker[r.t] || r);
-
-    if (data.as_of && asof) asof.textContent = `as of ${data.as_of} · ${tickers.length} refreshed`;
     if (loading) loading.style.display = 'none';
     if (table)   table.style.display   = 'table';
-
     tvRender();
-    toast(`Refreshed: ${tickers.length} ticker${tickers.length !== 1 ? 's' : ''}`);
+
+    // ── Step 2: market caps ──────────────────────────────────────────
+    if (asof) asof.textContent = 'step 2/2 — fetching market caps…';
+    const r2   = await fetch('/api/refresh-market-caps', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+    });
+    const d2 = await r2.json();
+    if (!d2.ok) throw new Error(d2.error || 'cap refresh failed');
+
+    // Reload table so fresh cap_cat values show
+    _tvLoaded = false;
+    await tvLoad();
+
+    if (asof) asof.textContent = `as of ${d1.as_of} · ${tickers.length} refreshed`;
+    toast(`Refreshed: ${tickers.length} prices · ${d2.updated} market caps`);
   } catch(e) {
     if (asof) asof.textContent = 'Refresh failed';
     toast('Refresh error: ' + e.message);
-    console.error('tvRefresh error', e);
+    console.error('tvRefreshAll error', e);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
-  }
-}
-
-async function tvRefreshCaps() {
-  // POST /api/refresh-market-caps — fetches mktcap from Yahoo for all non-ETF tickers,
-  // stores cap_cat in streetwise_data.json, then reloads table data so new column shows.
-  const btn  = document.getElementById('tv-caps-btn');
-  const asof = document.getElementById('tv-asof');
-  if (btn) { btn.disabled = true; btn.textContent = '💰 Fetching…'; }
-  if (asof) asof.textContent = 'fetching market caps from Yahoo…';
-  try {
-    const res  = await fetch('/api/refresh-market-caps', { method: 'POST',
-      headers: {'Content-Type': 'application/json'} });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'refresh-market-caps failed');
-    toast(`Market caps updated: ${data.updated} tickers, ${data.skipped} ETFs/funds skipped${data.errors ? ', ' + data.errors + ' errors' : ''}`);
-    // Reload table so cap_cat column shows fresh values
-    _tvLoaded = false;
-    await tvLoad();
-  } catch(e) {
-    toast('Cap refresh error: ' + e.message);
-    console.error('tvRefreshCaps error', e);
-    if (asof) asof.textContent = 'Cap refresh failed';
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '💰 Refresh Caps'; }
   }
 }
 

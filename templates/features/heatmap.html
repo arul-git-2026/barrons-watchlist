@@ -135,11 +135,14 @@ async function hmLoadData() {
     const res  = await fetch('/api/heatmap-data');
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'server error');
-    // Coerce p and ch to numbers — JSON may deliver them as strings
+    // Coerce all numeric fields — JSON may deliver them as strings or null
     _hmData = json.tickers.map(d => ({
       ...d,
-      p:  parseFloat(d.p)  || 0,
-      ch: parseFloat(d.ch) || 0,
+      p:   parseFloat(d.p)   || 0,
+      ch:  parseFloat(d.ch)  || 0,
+      chW: d.chW != null ? parseFloat(d.chW) : null,
+      chM: d.chM != null ? parseFloat(d.chM) : null,
+      chQ: d.chQ != null ? parseFloat(d.chQ) : null,
     }));
     _hmLoaded = true;
     document.getElementById('hm-load-status').textContent = _hmData.length + ' tickers';
@@ -234,7 +237,10 @@ function hmRenderSectors(canvas, cw, ch) {
   let up = 0, dn = 0;
   const sectors = Object.keys(map).map(name => {
     const tickers = map[name];
-    const avgCh   = tickers.reduce((s,d) => s + (parseFloat(d['ch'+_hmPeriod] ?? d.ch ?? 0) || 0), 0) / tickers.length;
+    const avgCh   = tickers.reduce((s,d) => {
+      const raw = _hmPeriod === 'D' ? d.ch : d['ch'+_hmPeriod];
+      return s + (parseFloat(raw ?? d.ch ?? 0) || 0);
+    }, 0) / tickers.length;
     if (avgCh >  0.2) up++;
     else if (avgCh < -0.2) dn++;
     // Larger positive sectors get more space; negative sectors shrink (min 45%)
@@ -279,7 +285,9 @@ function hmRenderTickers(canvas, cw, ch) {
 
   let up = 0, dn = 0;
   const items = tickers.map(d => {
-    const ch = parseFloat(d['ch'+_hmPeriod] ?? d.ch ?? 0) || 0;
+    // Period key: 'D'→ch, 'W'→chW, 'M'→chM, 'Q'→chQ
+    const raw = _hmPeriod === 'D' ? d.ch : d['ch'+_hmPeriod];
+    const ch  = parseFloat(raw ?? d.ch ?? 0) || 0;
     if (ch >  0.2) up++;
     else if (ch < -0.2) dn++;
     return { ...d, _ch: ch };

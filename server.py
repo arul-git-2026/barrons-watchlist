@@ -2024,23 +2024,70 @@ def refresh_market_caps():
 @app.route("/api/heatmap-data")
 def heatmap_data():
     """
-    Return all tickers with sector, price, and 1D % change for the heatmap view.
-    Response: { ok, tickers: [{t, n, s, p, ch}] }
-    NOTE: Only 1D change (ch) is available directly from the JSON.
-          Multi-period changes (1W/1M/3M) can be added later via price_history.db.
+    Return all tickers with sector, price, and multi-period % changes for the heatmap.
+    Queries price_history.db for 1W / 1M / 3M anchor prices.
+    Response: { ok, tickers: [{t, n, s, p, ch, chW, chM, chQ}] }
+      ch  = 1D  % change  (from cached pct_raw in JSON)
+      chW = 1W  % change  (price_history.db — last close vs close 7 days ago)
+      chM = 1M  % change  (30 days)
+      chQ = 3M  % change  (91 days)
+    Falls back gracefully to None when DB is missing or history is sparse.
     """
-    db = load_data()
+    import sqlite3 as _sq
+    from datetime import date as _date, timedelta as _td
+
+    db   = load_data()
+    today = _date.today()
+    d_1w  = (today - _td(days=7)).isoformat()
+    d_1m  = (today - _td(days=30)).isoformat()
+    d_3m  = (today - _td(days=91)).isoformat()
+
+    # Build anchor-price map from price_history.db (one pass each period)
+    anchors = {}   # { ticker: {W: price|None, M: price|None, Q: price|None} }
+    has_db  = os.path.exists("price_history.db")
+    if has_db:
+        try:
+            conn = _sq.connect("price_history.db")
+            cur  = conn.cursor()
+            tickers_in_db = [r[0] for r in cur.execute(
+                "SELECT DISTINCT ticker FROM prices").fetchall()]
+            for t in tickers_in_db:
+                def _anch(dt):
+                    r = cur.execute(
+                        "SELECT close FROM prices WHERE ticker=? AND date<=? ORDER BY date DESC LIMIT 1",
+                        (t, dt)
+                    ).fetchone()
+                    return r[0] if r else None
+                anchors[t] = {
+                    "W": _anch(d_1w),
+                    "M": _anch(d_1m),
+                    "Q": _anch(d_3m),
+                }
+            conn.close()
+        except Exception as e:
+            log.warning(f"heatmap-data: DB read failed — {e}")
+
+    def pct_chg(cur_p, anch_p):
+        if not cur_p or not anch_p or anch_p == 0:
+            return None
+        return round((cur_p - anch_p) / anch_p * 100, 2)
+
     out = []
     for rec in db:
         t = rec.get("t", "")
         if not t or t.startswith("__"):
             continue
+        cur_p = rec.get("price_raw") or 0
+        a     = anchors.get(t, {})
         out.append({
-            "t":  t,
-            "n":  rec.get("n", t),
-            "s":  rec.get("sector") or "Other",   # market sector (Technology, Healthcare…)
-            "p":  rec.get("price_raw") or 0,       # numeric price (not the "p" status string)
-            "ch": rec.get("pct_raw") or 0,         # 1D % change
+            "t":   t,
+            "n":   rec.get("n", t),
+            "s":   rec.get("sector") or "Other",
+            "p":   cur_p,
+            "ch":  rec.get("pct_raw") or 0,          # 1D from live cache
+            "chW": pct_chg(cur_p, a.get("W")),        # 1W from DB
+            "chM": pct_chg(cur_p, a.get("M")),        # 1M from DB
+            "chQ": pct_chg(cur_p, a.get("Q")),        # 3M from DB
         })
     return jsonify({"ok": True, "tickers": out})
 
