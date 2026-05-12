@@ -282,7 +282,17 @@ function hmRenderTickers(canvas, cw, ch) {
     const ch = parseFloat(d['ch'+_hmPeriod] ?? d.ch ?? 0) || 0;
     if (ch >  0.2) up++;
     else if (ch < -0.2) dn++;
-    return { ...d, _ch: ch, weight: 1 };
+    return { ...d, _ch: ch };
+  });
+
+  // Size tiles by performance: best gainer → most space, worst → least space.
+  // Normalize [minCh, maxCh] → [0.15, 1.0] so even the worst is still visible.
+  const chVals = items.map(d => d._ch);
+  const minCh  = Math.min(...chVals);
+  const maxCh  = Math.max(...chVals);
+  const chRange = maxCh - minCh || 1;
+  items.forEach(d => {
+    d.weight = 0.15 + 0.85 * (d._ch - minCh) / chRange;
   });
 
   document.getElementById('hm-cnt-up').textContent = up + ' ▲';
