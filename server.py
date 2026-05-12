@@ -1951,6 +1951,76 @@ Respond ONLY in this exact JSON format, nothing else:
     })
 
 
+def cap_category(mktcap):
+    """
+    Classify a market cap (USD) into a tier string.
+    Returns None for ETFs/funds (caller's responsibility to skip those).
+    Thresholds: Mega >$200B, Large $10B–$200B, Mid $2B–$10B, Small $300M–$2B
+    Below $300M → None (micro/nano — not shown)
+    """
+    if not mktcap or mktcap <= 0:
+        return None
+    if mktcap >= 200_000_000_000:
+        return "Mega"
+    if mktcap >= 10_000_000_000:
+        return "Large"
+    if mktcap >= 2_000_000_000:
+        return "Mid"
+    if mktcap >= 300_000_000:
+        return "Small"
+    return None
+
+
+@app.route("/api/refresh-market-caps", methods=["POST"])
+def refresh_market_caps():
+    """
+    Fetch market cap from Yahoo Finance for all non-ETF/non-Fund tickers
+    and persist cap_cat + mktcap_raw back into streetwise_data.json.
+
+    Skips tickers whose type field is 'ETF' or 'Fund'.
+    Uses yfinance fast_info.market_cap (fast, no full info() call needed).
+
+    Response: { ok, updated, skipped, errors }
+    """
+    db      = load_data()
+    updated = 0
+    skipped = 0
+    errors  = 0
+    changed = False
+
+    for item in db:
+        t = item.get("t", "")
+        if not t or t.startswith("__"):
+            continue
+        # Skip ETFs and funds — market cap doesn't apply
+        typ = (item.get("y") or item.get("type") or "Stock").strip()
+        if typ.lower() in ("etf", "fund", "etf/etn"):
+            item["cap_cat"] = None
+            item["mktcap_raw"] = None
+            skipped += 1
+            continue
+        try:
+            tk  = yf.Ticker(t)
+            mc  = tk.fast_info.market_cap   # fast_info avoids heavy info() call
+            cat = cap_category(mc)
+            item["cap_cat"]    = cat
+            item["mktcap_raw"] = int(mc) if mc else None
+            changed = True
+            updated += 1
+            log.info(f"refresh-market-caps: {t} → {cat} ({mc})")
+        except Exception as e:
+            log.warning(f"refresh-market-caps: {t} failed — {e}")
+            errors += 1
+
+    if changed:
+        try:
+            save_tickers(db)
+        except Exception as e:
+            log.warning(f"refresh-market-caps: could not persist — {e}")
+
+    return jsonify({"ok": True, "updated": updated, "skipped": skipped, "errors": errors})
+
+
 @app.route("/api/heatmap-data")
 def heatmap_data():
     """
@@ -4353,6 +4423,7 @@ def table_data():
             "s1y": spark_1y,
             "sytd": spark_ytd,
             "s1m": spark_1m,
+            "cap_cat": d.get("cap_cat"),
         })
 
     conn.close()
@@ -4515,6 +4586,7 @@ def refresh_table():
             "s1y": spark_1y,
             "sytd": spark_ytd,
             "s1m": spark_1m,
+            "cap_cat": d.get("cap_cat"),
         })
 
     conn.close()

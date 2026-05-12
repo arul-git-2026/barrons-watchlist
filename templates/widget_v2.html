@@ -4154,6 +4154,17 @@ const TV_COLS = [
   {k:'_chk', label:'<input type="checkbox" id="tv-chk-all" onclick="tvToggleAll(this)" style="width:14px;height:14px;cursor:pointer;accent-color:#c5221f">', left:true, fmt: (v,r) => r.t ? `<input type="checkbox" class="tv-chk" value="${r.t}" onclick="tvChkChange(event)">` : ''},
   {k:'sec', label:'Sector',    left:true,  fmt: v => v||'—'},
   {k:'ind', label:'Industry',  left:true,  fmt: v => v||'—'},
+  {k:'cap_cat', label:'Cap', left:true, fmt: v => {
+    if (!v) return '<span style="color:var(--muted);font-size:10px">—</span>';
+    const map = {
+      Mega:  {bg:'#ede7f6',color:'#5e35b1',border:'#b39ddb'},
+      Large: {bg:'#e3f2fd',color:'#1565c0',border:'#90caf9'},
+      Mid:   {bg:'#e0f2f1',color:'#00695c',border:'#80cbc4'},
+      Small: {bg:'#fff3e0',color:'#e65100',border:'#ffcc80'},
+    };
+    const s = map[v] || {bg:'#f5f5f5',color:'#555',border:'#ccc'};
+    return `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;background:${s.bg};color:${s.color};border:1px solid ${s.border}">${v}</span>`;
+  }},
   {k:'t',   label:'Ticker',    left:true,  cls:'ticker-cell', fmt: v => v},
   {k:'n',   label:'Name',      left:true,  fmt: v => `<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;display:inline-block">${v}</span>`},
   {k:'px',  label:'Price',     fmt: (v,r) => {
@@ -4364,6 +4375,31 @@ async function tvRefresh() {
     console.error('tvRefresh error', e);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
+  }
+}
+
+async function tvRefreshCaps() {
+  // POST /api/refresh-market-caps — fetches mktcap from Yahoo for all non-ETF tickers,
+  // stores cap_cat in streetwise_data.json, then reloads table data so new column shows.
+  const btn  = document.getElementById('tv-caps-btn');
+  const asof = document.getElementById('tv-asof');
+  if (btn) { btn.disabled = true; btn.textContent = '💰 Fetching…'; }
+  if (asof) asof.textContent = 'fetching market caps from Yahoo…';
+  try {
+    const res  = await fetch('/api/refresh-market-caps', { method: 'POST',
+      headers: {'Content-Type': 'application/json'} });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'refresh-market-caps failed');
+    toast(`Market caps updated: ${data.updated} tickers, ${data.skipped} ETFs/funds skipped${data.errors ? ', ' + data.errors + ' errors' : ''}`);
+    // Reload table so cap_cat column shows fresh values
+    _tvLoaded = false;
+    await tvLoad();
+  } catch(e) {
+    toast('Cap refresh error: ' + e.message);
+    console.error('tvRefreshCaps error', e);
+    if (asof) asof.textContent = 'Cap refresh failed';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💰 Refresh Caps'; }
   }
 }
 
